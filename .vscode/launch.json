@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug LocalLLM (gdb)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/LocalLLM",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "stopAtEntry": false,
+            // ログ (SDL_Log) は統合ターミナルに出力
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "CMake: build (Debug)"
+        }
+    ]
+}

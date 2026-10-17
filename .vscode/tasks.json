@@ -1,0 +1,66 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake: configure (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build",
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Debug",
+                "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: configure (Release)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build",
+                "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: build",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "${workspaceFolder}/build"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "CMake: build (Debug)",
+            "dependsOrder": "sequence",
+            "dependsOn": ["CMake: configure (Debug)", "CMake: build"],
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: clean",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "${workspaceFolder}/build", "--target", "clean"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Run LocalLLM",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/LocalLLM",
+            "dependsOn": "CMake: build",
+            "presentation": {
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
