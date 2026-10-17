@@ -97,3 +97,9 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `main.cpp` | SDL3 + Dear ImGui のチャット画面 |
 | `llm_client.cpp` / `llm_client.h` | API へのストリーミング送信と SSE の解析 |
 | `CMakeLists.txt` | ビルド設定 |
+
+## ライセンス
+
+[MIT License](LICENSE)
+
+Dear ImGui は MIT License、SDL3 は zlib License、nlohmann/json は MIT License、libcurl は curl License です。
