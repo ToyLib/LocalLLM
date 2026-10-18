@@ -17,6 +17,8 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 
 ## 必要なもの
 
+詳しい環境構築手順 (llama.cpp の Vulkan ビルドやモデル別の起動方法を含む) は [SETUP.md](SETUP.md) を参照してください。
+
 Ubuntu の場合は次のパッケージで動作を確認しています。
 
 ```bash
@@ -97,6 +99,7 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `main.cpp` | SDL3 + Dear ImGui のチャット画面 |
 | `llm_client.cpp` / `llm_client.h` | API へのストリーミング送信と SSE の解析 |
 | `CMakeLists.txt` | ビルド設定 |
+| `SETUP.md` | 環境構築手順 |
 
 ## ライセンス
 
