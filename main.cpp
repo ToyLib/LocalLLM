@@ -37,7 +37,14 @@ constexpr const char* SYSTEM_FONT_PATHS[] = {
 constexpr float FONT_SIZE = 18.0f;
 
 // チャット画面の背景の不透明度 (文字は不透明のまま)
+// macOS では透明ウィンドウにするとタイトルバーまで透けるため不透明にする
+#if defined(__APPLE__)
+constexpr float WINDOW_OPACITY = 1.0f;
+constexpr SDL_WindowFlags TRANSPARENT_FLAG = 0;
+#else
 constexpr float WINDOW_OPACITY = 0.85f;
+constexpr SDL_WindowFlags TRANSPARENT_FLAG = SDL_WINDOW_TRANSPARENT;
+#endif
 
 struct Message {
     std::string role;
@@ -356,7 +363,7 @@ int main(int, char**)
         static_cast<int>(700 * scale),
         SDL_WINDOW_RESIZABLE |
         SDL_WINDOW_HIDDEN |
-        SDL_WINDOW_TRANSPARENT |
+        TRANSPARENT_FLAG |
         SDL_WINDOW_HIGH_PIXEL_DENSITY);
 
     if (!window) {
