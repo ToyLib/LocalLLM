@@ -55,6 +55,9 @@
             "label": "Run LocalLLM",
             "type": "shell",
             "command": "${workspaceFolder}/build/LocalLLM",
+            "windows": {
+                "command": "${workspaceFolder}/build/LocalLLM.exe"
+            },
             "dependsOn": "CMake: build",
             "presentation": {
                 "focus": true,

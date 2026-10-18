@@ -11,13 +11,21 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 回答をストリーミングで逐次表示
 - セッション中の会話履歴を保持し、毎回まとめて送信
 - 受信中の中断
-- 日本語の表示・入力 (Noto Sans CJK を使用)
+- 日本語の表示・入力 (同梱のフリーフォント Rounded M+ 1c Bold を使用し、足りない文字は OS の日本語フォントで補完)
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
 
 ## 必要なもの
 
-詳しい環境構築手順 (llama.cpp の Vulkan ビルドやモデル別の起動方法を含む) は [SETUP.md](SETUP.md) を参照してください。
+Linux (Ubuntu)、macOS、Windows でビルドできます。詳しい環境構築手順 (llama.cpp のビルドやモデル別の起動方法を含む) は OS ごとの手順書を参照してください。
+
+| OS | 手順書 | パッケージ管理 |
+| --- | --- | --- |
+| Ubuntu | [SETUP.md](SETUP.md) | APT |
+| macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew |
+| Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (`C:\tools\vcpkg`) |
+
+macOS と Windows は、実機でのビルド・動作をまだ確認していません。
 
 Ubuntu の場合は次のパッケージで動作を確認しています。
 
@@ -77,7 +85,7 @@ cmake --build build
 | 最大トークン数 | `llm_client.cpp` の `max_tokens` |
 | フォントサイズ | `main.cpp` の `FONT_SIZE` |
 | 背景の不透明度 | `main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
-| フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は Noto Sans CJK) |
+| フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/rounded-mplus-1c-bold.ttf`) |
 
 ```bash
 LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
@@ -99,10 +107,14 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `main.cpp` | SDL3 + Dear ImGui のチャット画面 |
 | `llm_client.cpp` / `llm_client.h` | API へのストリーミング送信と SSE の解析 |
 | `CMakeLists.txt` | ビルド設定 |
-| `SETUP.md` | 環境構築手順 |
+| `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
+| `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
+| `Asset/` | 同梱フォント (ビルド時に実行ファイルの隣へコピー) |
 
 ## ライセンス
 
 [MIT License](LICENSE)
+
+同梱フォント `Asset/rounded-mplus-1c-bold.ttf` (Rounded M+ 1c、Copyright (c) 2015 M+ FONTS PROJECT) は、本プロジェクトの MIT License の対象外で、配布元のライセンスに従います。
 
 Dear ImGui は MIT License、SDL3 は zlib License、nlohmann/json は MIT License、libcurl は curl License です。

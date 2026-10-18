@@ -1,4 +1,6 @@
-# LocalLLM GUI — 環境構築手順
+# LocalLLM GUI — 環境構築手順 (Ubuntu)
+
+macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
 
 ## 1. 概要
 
@@ -74,8 +76,13 @@ g++ --version
 LocalLLM/
 ├── CMakeLists.txt
 ├── README.md
-├── SETUP.md
+├── SETUP.md            (Ubuntu)
+├── SETUP-macOS.md
+├── SETUP-Windows.md
 ├── LICENSE
+├── vcpkg.json          (Windows 用の依存ライブラリ)
+├── Asset/
+│   └── rounded-mplus-1c-bold.ttf   (同梱フォント)
 ├── main.cpp
 ├── llm_client.h
 ├── llm_client.cpp
@@ -92,7 +99,9 @@ LocalLLM/
 |---|---|
 | main.cpp | SDL3 + ImGui の初期化、イベント処理、チャット画面、ワーカースレッド管理 |
 | llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
-| .vscode/ | CMake Tools、ビルドタスク、gdb デバッグの設定 |
+| vcpkg.json | vcpkg のマニフェスト (Windows でのみ使用) |
+| Asset/ | 同梱フォント (ビルド時に実行ファイルの隣へコピー) |
+| .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
 
 GUI と LLM 通信は別のファイルに分けている。会話履歴は GUI 側 (`main.cpp`) で保持し、送信のたびに `llm_client` へ渡す。
 
@@ -153,21 +162,29 @@ VS Code では Ctrl+Shift+B でビルド、F5 で Debug ビルドして gdb で�
 
 ## 6. 日本語フォントと入力
 
-日本語の表示には Noto Sans CJK を使用する。
+日本語の表示には、プロジェクトに同梱したフリーフォント **Rounded M+ 1c Bold** (`Asset/rounded-mplus-1c-bold.ttf`) を使う。
 
-フォントの確認：
+ビルドすると `Asset/` が実行ファイルの隣 (`build/Asset/`) にコピーされ、アプリは実行ファイルの場所を基準にフォントを読み込む。そのため、どのフォルダーから起動しても同じフォントが使われる。
 
-```bash
-fc-match "Noto Sans CJK JP"
-```
+アプリは次の順にフォントを探す。
 
-フォントファイルの場所を確認：
+1. 環境変数 `LOCALLLM_FONT` で指定したファイル
+2. 実行ファイルの隣の `Asset/rounded-mplus-1c-bold.ttf`
+3. OS の日本語フォント (下記)
+
+Rounded M+ に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、Rounded M+ に無い文字は表示されない。
+
+Ubuntu で補完に使う OS のフォント (`fonts-noto-cjk`)：
+
+- `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`
+- `/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc`
+
+OS のフォントの確認：
 
 ```bash
 fc-match -f '%{file}\n' "Noto Sans CJK JP"
 ```
 
-アプリケーションは既定で `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` を ImGui の `AddFontFromFileTTF()` で読み込む。
 別のフォントを使う場合は環境変数 `LOCALLLM_FONT` で指定する。
 
 ```bash

@@ -2,7 +2,8 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug LocalLLM (gdb)",
+            // Linux (gdb) / macOS (lldb)
+            "name": "Debug LocalLLM",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/LocalLLM",
@@ -12,15 +13,33 @@
             "stopAtEntry": false,
             // ログ (SDL_Log) は統合ターミナルに出力
             "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
+            "linux": {
+                "MIMode": "gdb",
+                "miDebuggerPath": "/usr/bin/gdb",
+                "setupCommands": [
+                    {
+                        "description": "Enable pretty-printing for gdb",
+                        "text": "-enable-pretty-printing",
+                        "ignoreFailures": true
+                    }
+                ]
+            },
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "preLaunchTask": "CMake: build (Debug)"
+        },
+        {
+            // Windows (Visual Studio デバッガー)
+            "name": "Debug LocalLLM (Windows)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/LocalLLM.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
             "preLaunchTask": "CMake: build (Debug)"
         }
     ]

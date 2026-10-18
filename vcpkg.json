@@ -1,0 +1,10 @@
+{
+    "name": "localllm",
+    "version-string": "0.1.0",
+    "description": "Local LLM chat client (C++20, SDL3 + Dear ImGui)",
+    "dependencies": [
+        "curl",
+        "nlohmann-json",
+        "sdl3"
+    ]
+}
