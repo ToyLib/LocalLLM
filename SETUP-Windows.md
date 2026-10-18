@@ -210,6 +210,25 @@ AMD Radeon などの GPU が Vulkan デバイスとして表示されること�
 
 ソースからビルドしない場合は、[llama.cpp の Releases](https://github.com/ggml-org/llama.cpp/releases) から Windows の Vulkan 版 (`llama-<バージョン>-bin-win-vulkan-x64.zip`) をダウンロードして展開しても使える。この場合、vcpkg のライブラリは不要。
 
+### 起動スクリプト
+
+モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) に置いてある。
+
+Windows の既定の設定では PowerShell スクリプトの実行が禁止されているため、そのときだけ実行を許可して起動する (システムの設定は変わらない)。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+```
+
+メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
+
+llama-server.exe は既定で `%USERPROFILE%\Repos\llama.cpp\build\bin\Release\llama-server.exe` を使う。場所が違う場合 (ビルド済みのバイナリを使う場合など) は環境変数で指定する。
+
+```powershell
+$env:LLAMA_SERVER = "C:\path\to\llama-server.exe"
+powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+```
+
 ### モデル別の起動
 
 `build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う。

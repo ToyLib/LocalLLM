@@ -82,6 +82,10 @@ LocalLLM/
 ├── SETUP-Windows.md
 ├── LICENSE
 ├── vcpkg.json          (Windows 用の依存ライブラリ)
+├── scripts/
+│   ├── llama-server-linux.sh
+│   ├── llama-server-macos.sh
+│   └── llama-server-windows.ps1
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)
@@ -103,6 +107,7 @@ LocalLLM/
 | llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | vcpkg.json | vcpkg のマニフェスト (Windows でのみ使用) |
+| scripts/ | llama-server の起動スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
 
@@ -246,6 +251,26 @@ GPU 認識確認：
 ```
 
 AMD Radeon 760M が Vulkan デバイスとして認識されることを確認する。
+
+### 起動スクリプト
+
+モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-linux.sh](scripts/llama-server-linux.sh) に置いてある。
+
+```bash
+./scripts/llama-server-linux.sh
+```
+
+メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
+
+llama-server は既定で `~/Repos/llama.cpp/build/bin/llama-server` を使う。場所が違う場合は環境変数で指定する。
+
+```bash
+LLAMA_DIR=/path/to/llama.cpp ./scripts/llama-server-linux.sh
+```
+
+```bash
+LLAMA_SERVER=/path/to/llama-server ./scripts/llama-server-linux.sh
+```
 
 ### モデル別の起動
 

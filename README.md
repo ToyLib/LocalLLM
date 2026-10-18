@@ -58,6 +58,16 @@ cmake --build build
    llama-server -m /path/to/model.gguf --port 8080
    ```
 
+   モデルをメニューから選んで起動するサンプルスクリプトもあります (Qwen3 4B / Gemma 3 4B / Phi-4 mini)。
+
+   | OS | スクリプト |
+   | --- | --- |
+   | Linux | [scripts/llama-server-linux.sh](scripts/llama-server-linux.sh) |
+   | macOS | [scripts/llama-server-macos.sh](scripts/llama-server-macos.sh) |
+   | Windows | [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) |
+
+   使い方は OS ごとの手順書を参照してください。
+
 2. アプリを起動します。
 
    ```bash
@@ -110,6 +120,7 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
+| `scripts/` | llama-server の起動スクリプト (Linux / macOS / Windows) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 
 ## ライセンス

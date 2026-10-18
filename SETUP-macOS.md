@@ -172,6 +172,24 @@ llama-cli --list-devices
 
 Metal のデバイスが表示されることを確認する。
 
+### 起動スクリプト
+
+モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-macos.sh](scripts/llama-server-macos.sh) に置いてある。
+
+```bash
+./scripts/llama-server-macos.sh
+```
+
+メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
+
+llama-server は次の順に探す。
+
+1. 環境変数 `LLAMA_SERVER` で指定したファイル
+2. `$LLAMA_DIR/build/bin/llama-server` (ソースからビルドしたもの。`LLAMA_DIR` の既定は `~/Repos/llama.cpp`)
+3. PATH 上の `llama-server` (Homebrew で入れたもの)
+
+macOS 標準の bash (3.2) で動く。
+
 ### モデル別の起動
 
 Qwen3 4B：
