@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Windows では vcpkg のツールチェーンを使う
-# (VCPKG_ROOT が未設定なら C:/tools/vcpkg を想定)
+# C:/tools/vcpkg を優先する (VS の開発環境は VCPKG_ROOT を
+# Visual Studio 付属の vcpkg に書き換えるため)
 if(CMAKE_HOST_WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    if(DEFINED ENV{VCPKG_ROOT})
+    if(EXISTS "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake")
+        set(VCPKG_ROOT "C:/tools/vcpkg")
+    elseif(DEFINED ENV{VCPKG_ROOT})
         set(VCPKG_ROOT "$ENV{VCPKG_ROOT}")
     else()
-        set(VCPKG_ROOT "C:/tools/vcpkg")
+        message(FATAL_ERROR "vcpkg not found: install it to C:/tools/vcpkg")
     endif()
 
     file(TO_CMAKE_PATH "${VCPKG_ROOT}" VCPKG_ROOT)

@@ -62,7 +62,9 @@ C:\tools\vcpkg\bootstrap-vcpkg.bat -disableMetrics
 setx VCPKG_ROOT C:\tools\vcpkg
 ```
 
-`CMakeLists.txt` は Windows では `VCPKG_ROOT` の vcpkg を自動で使う。`VCPKG_ROOT` が未設定の場合は `C:\tools\vcpkg` を使う。
+このプロジェクトは常に `C:\tools\vcpkg` を使う (プリセット `windows` でツールチェーンを指定している)。プリセットを使わずに configure した場合も、`CMakeLists.txt` が `C:\tools\vcpkg` を優先して使い、無い場合だけ `VCPKG_ROOT` を見る。
+
+Visual Studio 2022 以降には vcpkg が付属しており、開発者用のシェル (Developer PowerShell for VS など) は `VCPKG_ROOT` を付属の vcpkg に書き換える。付属の vcpkg はこのプロジェクトでは使わない。
 
 ## 3. ライブラリ (vcpkg マニフェスト)
 
@@ -278,6 +280,7 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 ## 8. 注意事項
 
 - `build\` は vcpkg のライブラリも含むため、Linux や macOS の `build/` とは共有できない。
+- `this vcpkg instance requires a manifest with a specified baseline` というエラーが出た場合は、Visual Studio 付属の vcpkg が使われている。`C:\tools\vcpkg\scripts\buildsystems\vcpkg.cmake` があるか確認し、`build\` を消して configure し直す。
 - 以前に Ninja など別のジェネレーターで configure した `build\` があると、`Does not match the generator used previously` というエラーになる。configure が途中で失敗した場合も含め、`Remove-Item -Recurse -Force build` で消してから configure し直す。vcpkg のライブラリはキャッシュ (`%LOCALAPPDATA%\vcpkg\archives`) から戻るので、2回目以降はすぐ終わる。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
 - llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。

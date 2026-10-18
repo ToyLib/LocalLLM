@@ -35,6 +35,7 @@
             "displayName": "Windows (Visual Studio, x64)",
             "description": "最新の Visual Studio のジェネレーターを使う (Ninja と開発者用シェルは不要)",
             "binaryDir": "${sourceDir}/build",
+            "toolchainFile": "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake",
             "architecture": {
                 "value": "x64",
                 "strategy": "set"
