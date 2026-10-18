@@ -13,13 +13,13 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](S
 |---|---|
 | OS | Windows 10 / 11 (x64) |
 | コンパイラ | MSVC (Visual Studio 2022 以降) |
-| パッケージ管理 | vcpkg (マニフェストモード、`C:\tools\vcpkg`) |
+| パッケージ管理 | vcpkg (`C:\tools\vcpkg`。アプリはマニフェストモード、llama.cpp 用は `vcpkg install`) |
 | ビルド | CMake + Ninja |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl (vcpkg) |
 | JSON | nlohmann/json (vcpkg) |
-| LLM サーバー | llama.cpp (Vulkan) |
+| LLM サーバー | llama.cpp (Vulkan。Vulkan のヘッダー・ローダーと glslc は vcpkg) |
 
 ## 2. 必要なツール
 
@@ -139,37 +139,64 @@ $env:LOCALLLM_FONT = "C:\path\to\font.ttf"
 
 ## 6. llama.cpp サーバー
 
-AMD Radeon などの GPU では Vulkan 版を使う。
+AMD Radeon などの GPU では Vulkan 版を使う。Vulkan SDK は使わず、ビルドに必要なものは vcpkg (`C:\tools\vcpkg`) で入れる。
 
-### ビルド済みのバイナリを使う場合 (簡単)
+### 必要なライブラリ (vcpkg)
 
-[llama.cpp の Releases](https://github.com/ggml-org/llama.cpp/releases) から、Windows の Vulkan 版 (`llama-<バージョン>-bin-win-vulkan-x64.zip`) をダウンロードして展開する。NVIDIA の GPU では CUDA 版を選ぶ。
-
-### ソースからビルドする場合
-
-[Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) をインストールしてから、Developer PowerShell for VS で実行する。
+| パッケージ | 役割 |
+|---|---|
+| `vulkan` | Vulkan のヘッダーとローダー (`vulkan-headers`、`vulkan-loader` をまとめたもの) |
+| `shaderc` | シェーダーコンパイラー `glslc` (llama.cpp のビルド時に GPU 用のシェーダーをコンパイルする) |
+| `spirv-headers` | SPIR-V のヘッダー |
+| `openssl` | HTTPS 通信 (`-hf` で Hugging Face からモデルをダウンロードするのに必要) |
 
 ```powershell
+C:\tools\vcpkg\vcpkg.exe install vulkan shaderc spirv-headers openssl --triplet x64-windows
+```
+
+Vulkan を実際に動かすのは GPU ドライバー (AMD Software など) なので、GPU ドライバーは最新にしておく。
+
+### ビルド
+
+Developer PowerShell for VS で実行する。
+
+```powershell
+cd $env:USERPROFILE\Repos
 git clone https://github.com/ggml-org/llama.cpp.git
 cd llama.cpp
 
-cmake -S . -B build -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release -j
+cmake -S . -B build -G Ninja `
+    -DGGML_VULKAN=ON `
+    -DCMAKE_BUILD_TYPE=Release `
+    -DCMAKE_TOOLCHAIN_FILE=C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake `
+    -DVCPKG_TARGET_TRIPLET=x64-windows `
+    -DVulkan_GLSLC_EXECUTABLE=C:/tools/vcpkg/installed/x64-windows/tools/shaderc/glslc.exe
+
+cmake --build build
 ```
 
-実行ファイルは `build\bin\Release\` (Visual Studio ジェネレーターの場合) に作られる。
+- `Vulkan_GLSLC_EXECUTABLE`：CMake は glslc を Vulkan SDK のフォルダーで探すため、vcpkg の glslc は明示的に指定する。
+- configure の出力に `OpenSSL found` が出ることを確認する。`OpenSSL not found, HTTPS support disabled` と出た場合は `-hf` が使えない。
+- configure の出力に `... not supported by glslc` が出る場合は、glslc が対応していない GPU の機能が無効になる。ビルドは通るが、速度が落ちることがある。
 
-GPU 認識確認 (llama.cpp を展開またはビルドしたフォルダーで実行)：
+実行ファイルは `build\bin\` に作られる。vcpkg の DLL (`vulkan-1.dll`、`libssl-3-x64.dll` など) も同じフォルダーにコピーされる。
+
+GPU 認識確認：
 
 ```powershell
+cd build\bin
 .\llama-cli.exe --list-devices
 ```
 
-GPU が Vulkan デバイスとして表示されることを確認する。
+AMD Radeon などの GPU が Vulkan デバイスとして表示されることを確認する。
+
+### ビルド済みのバイナリを使う場合
+
+ソースからビルドしない場合は、[llama.cpp の Releases](https://github.com/ggml-org/llama.cpp/releases) から Windows の Vulkan 版 (`llama-<バージョン>-bin-win-vulkan-x64.zip`) をダウンロードして展開しても使える。この場合、vcpkg のライブラリは不要。
 
 ### モデル別の起動
 
-PowerShell では、行の継続にバッククォート (`` ` ``) を使う。
+`build\bin\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う。
 
 Qwen3 4B：
 
@@ -239,4 +266,5 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 
 - `build\` は vcpkg のライブラリも含むため、Linux や macOS の `build/` とは共有できない。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
+- llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。
 - 実機 (Windows) でのビルド・動作はまだ確認していない。
