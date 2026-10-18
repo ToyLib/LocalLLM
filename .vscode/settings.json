@@ -1,12 +1,7 @@
 {
-    // CMake Tools
-    "cmake.sourceDirectory": "${workspaceFolder}",
-    "cmake.buildDirectory": "${workspaceFolder}/build",
-    "cmake.generator": "Ninja",
+    // CMake Tools (設定は CMakePresets.json。OS に合うプリセットだけが表示される)
+    "cmake.useCMakePresets": "always",
     "cmake.configureOnOpen": true,
-    "cmake.configureSettings": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-    },
 
     // C/C++ (IntelliSense は CMake Tools から構成を取得)
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

@@ -1,6 +1,7 @@
 # LocalLLM GUI — 環境構築手順 (Windows)
 
 Windows 上で、Visual Studio (MSVC) と vcpkg を使って開発環境を構築する手順。
+ビルドには Visual Studio のジェネレーターを使うので、Ninja や開発者用のシェル (Developer PowerShell for VS) は不要。
 vcpkg は `C:\tools\vcpkg` にインストールすることを前提とする。
 
 Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md) を参照。
@@ -12,9 +13,9 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](S
 | 項目 | 構成 |
 |---|---|
 | OS | Windows 10 / 11 (x64) |
-| コンパイラ | MSVC (Visual Studio 2022 以降) |
+| コンパイラ | MSVC (Visual Studio 2022 以降。Visual Studio 2026 で確認中) |
 | パッケージ管理 | vcpkg (`C:\tools\vcpkg`。アプリはマニフェストモード、llama.cpp 用は `vcpkg install`) |
-| ビルド | CMake + Ninja |
+| ビルド | CMake + Visual Studio のジェネレーター (MSBuild) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl (vcpkg) |
@@ -27,7 +28,17 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](S
 
 Visual Studio 2022 以降 (Community で可) または Build Tools for Visual Studio をインストールし、ワークロード「**C++ によるデスクトップ開発**」を選ぶ。
 
-このワークロードには MSVC、Windows SDK、CMake、Ninja が含まれる。
+このワークロードには MSVC、Windows SDK、MSBuild が含まれる。
+
+### CMake
+
+通常の PowerShell から `cmake` を使うため、CMake を単体でインストールして PATH に入れる (Visual Studio に付属の CMake は、開発者用のシェルからしか使えない)。
+
+```powershell
+winget install Kitware.CMake
+```
+
+Visual Studio 2026 を使う場合は、そのバージョンに対応した新しい CMake (`cmake --help` の Generators に `Visual Studio 18 2026` が出るもの) が必要。
 
 ### Git
 
@@ -71,42 +82,43 @@ Dear ImGui は vcpkg ではなく、CMake の FetchContent で GitHub から自�
 
 ## 4. ビルド
 
-MSVC の環境変数が必要なので、スタートメニューの「**Developer PowerShell for VS**」で、プロジェクトのルートディレクトリに移動して実行する。
+プロジェクトのルートディレクトリで、通常の PowerShell から実行する。設定は [CMakePresets.json](CMakePresets.json) のプリセット `windows` にまとめてある (最新の Visual Studio のジェネレーター、x64)。
 
-Debug ビルド：
-
-```powershell
-cmake -S . -B build -G Ninja `
-    -DCMAKE_BUILD_TYPE=Debug `
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-cmake --build build
-```
-
-実行：
+configure：
 
 ```powershell
-.\build\LocalLLM.exe
+cmake --preset windows
 ```
 
-Release ビルド：
+Debug ビルドと実行：
 
 ```powershell
-cmake -S . -B build-release -G Ninja `
-    -DCMAKE_BUILD_TYPE=Release
+cmake --build --preset windows-debug
 
-cmake --build build-release
+.\build\Debug\LocalLLM.exe
 ```
+
+Release ビルドと実行：
+
+```powershell
+cmake --build --preset windows-release
+
+.\build\Release\LocalLLM.exe
+```
+
+Visual Studio のジェネレーターは Debug と Release を同じ `build\` で扱い、ビルド時に選ぶ (configure は1回でよい)。実行ファイルは `build\Debug\` または `build\Release\` に作られ、`Asset\` と vcpkg の DLL も同じフォルダーにコピーされる。
+
+`build\LocalLLM.sln` を Visual Studio で開いて、ビルドやデバッグをすることもできる。
 
 ソースには日本語の文字列リテラルが含まれるため、MSVC では `/utf-8` オプションを付けてビルドする (`CMakeLists.txt` で設定済み)。
 
 ### VS Code
 
-C/C++ と CMake Tools の拡張機能を入れる。
+C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり起動すればよい。
 
-- CMake Tools を使う場合：ステータスバーでキットに「Visual Studio ... - amd64」を選ぶ。CMake Tools が MSVC の環境を自動で設定する。
-- タスク (Ctrl+Shift+B) を使う場合：Developer PowerShell for VS から `code .` で VS Code を起動する。通常のターミナルから起動すると `cl.exe` が見つからずビルドできない。
-- F5：構成「Debug LocalLLM (Windows)」を選ぶと、Visual Studio のデバッガーでデバッグできる。
+- CMake Tools：`CMakePresets.json` を使う設定にしてあり、Windows では configure のプリセット「Windows (Visual Studio, x64)」だけが表示される。
+- タスク (Ctrl+Shift+B)：Windows では自動でプリセット `windows` / `windows-debug` を使う。
+- F5：構成「Debug LocalLLM (Windows)」を選ぶと、Debug ビルドしてから Visual Studio のデバッガーで `build\Debug\LocalLLM.exe` をデバッグする。
 
 ## 5. 日本語フォントと入力
 
@@ -158,33 +170,34 @@ Vulkan を実際に動かすのは GPU ドライバー (AMD Software など) な
 
 ### ビルド
 
-Developer PowerShell for VS で実行する。
+通常の PowerShell で実行する。
 
 ```powershell
 cd $env:USERPROFILE\Repos
 git clone https://github.com/ggml-org/llama.cpp.git
 cd llama.cpp
 
-cmake -S . -B build -G Ninja `
+cmake -S . -B build -A x64 `
     -DGGML_VULKAN=ON `
-    -DCMAKE_BUILD_TYPE=Release `
     -DCMAKE_TOOLCHAIN_FILE=C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake `
     -DVCPKG_TARGET_TRIPLET=x64-windows `
     -DVulkan_GLSLC_EXECUTABLE=C:/tools/vcpkg/installed/x64-windows/tools/shaderc/glslc.exe
 
-cmake --build build
+cmake --build build --config Release
 ```
 
+- `-A x64`：`-G` を省くと最新の Visual Studio のジェネレーターが使われる。`-A x64` で 64ビット向けにする。
+- `--config Release`：Visual Studio のジェネレーターでは、Debug / Release をビルド時に選ぶ (`CMAKE_BUILD_TYPE` は使われない)。
 - `Vulkan_GLSLC_EXECUTABLE`：CMake は glslc を Vulkan SDK のフォルダーで探すため、vcpkg の glslc は明示的に指定する。
 - configure の出力に `OpenSSL found` が出ることを確認する。`OpenSSL not found, HTTPS support disabled` と出た場合は `-hf` が使えない。
 - configure の出力に `... not supported by glslc` が出る場合は、glslc が対応していない GPU の機能が無効になる。ビルドは通るが、速度が落ちることがある。
 
-実行ファイルは `build\bin\` に作られる。vcpkg の DLL (`vulkan-1.dll`、`libssl-3-x64.dll` など) も同じフォルダーにコピーされる。
+実行ファイルは `build\bin\Release\` に作られる。vcpkg の DLL (`vulkan-1.dll`、`libssl-3-x64.dll` など) も同じフォルダーにコピーされる。
 
 GPU 認識確認：
 
 ```powershell
-cd build\bin
+cd build\bin\Release
 .\llama-cli.exe --list-devices
 ```
 
@@ -196,7 +209,7 @@ AMD Radeon などの GPU が Vulkan デバイスとして表示されること�
 
 ### モデル別の起動
 
-`build\bin\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う。
+`build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う。
 
 Qwen3 4B：
 
@@ -265,6 +278,7 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 ## 8. 注意事項
 
 - `build\` は vcpkg のライブラリも含むため、Linux や macOS の `build/` とは共有できない。
+- 以前に Ninja など別のジェネレーターで configure した `build\` があると、`Does not match the generator used previously` というエラーになる。configure が途中で失敗した場合も含め、`Remove-Item -Recurse -Force build` で消してから configure し直す。vcpkg のライブラリはキャッシュ (`%LOCALAPPDATA%\vcpkg\archives`) から戻るので、2回目以降はすぐ終わる。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
 - llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。
 - 実機 (Windows) でのビルド・動作はまだ確認していない。

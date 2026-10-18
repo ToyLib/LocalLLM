@@ -107,6 +107,7 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `main.cpp` | SDL3 + Dear ImGui のチャット画面 |
 | `llm_client.cpp` / `llm_client.h` | API へのストリーミング送信と SSE の解析 |
 | `CMakeLists.txt` | ビルド設定 |
+| `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |

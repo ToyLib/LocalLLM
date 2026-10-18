@@ -75,6 +75,7 @@ g++ --version
 ```text
 LocalLLM/
 ├── CMakeLists.txt
+├── CMakePresets.json   (OS 別のビルド設定)
 ├── README.md
 ├── SETUP.md            (Ubuntu)
 ├── SETUP-macOS.md
@@ -100,6 +101,7 @@ LocalLLM/
 |---|---|
 | main.cpp | SDL3 + ImGui の初期化、イベント処理、チャット画面、ワーカースレッド管理 |
 | llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
+| CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | vcpkg.json | vcpkg のマニフェスト (Windows でのみ使用) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
@@ -156,6 +158,15 @@ cmake -S . -B build-release -G Ninja \
 
 cmake --build build-release
 ```
+
+上と同じ設定は [CMakePresets.json](CMakePresets.json) のプリセットにもまとめてあり、次のように短く書ける。VS Code のタスクと CMake Tools もこのプリセットを使う。
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+```
+
+Release は `release` プリセット (`build-release/`)。
 
 VS Code では Ctrl+Shift+B でビルド、F5 で Debug ビルドして gdb でデバッグできる。
 

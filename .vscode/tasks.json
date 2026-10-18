@@ -1,42 +1,46 @@
 {
+    // ビルド設定は CMakePresets.json を使う
+    // Linux / macOS: Ninja (debug / release)
+    // Windows: Visual Studio ジェネレーター (windows)
     "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceFolder}"
+    },
     "tasks": [
         {
             "label": "CMake: configure (Debug)",
             "type": "shell",
             "command": "cmake",
-            "args": [
-                "-S", "${workspaceFolder}",
-                "-B", "${workspaceFolder}/build",
-                "-G", "Ninja",
-                "-DCMAKE_BUILD_TYPE=Debug",
-                "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-            ],
+            "args": ["--preset", "debug"],
+            "windows": {
+                "args": ["--preset", "windows"]
+            },
             "problemMatcher": []
         },
         {
             "label": "CMake: configure (Release)",
             "type": "shell",
             "command": "cmake",
-            "args": [
-                "-S", "${workspaceFolder}",
-                "-B", "${workspaceFolder}/build",
-                "-G", "Ninja",
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-            ],
+            "args": ["--preset", "release"],
+            "windows": {
+                // Debug / Release はビルド時に選ぶので configure は共通
+                "args": ["--preset", "windows"]
+            },
             "problemMatcher": []
         },
         {
             "label": "CMake: build",
             "type": "shell",
             "command": "cmake",
-            "args": ["--build", "${workspaceFolder}/build"],
+            "args": ["--build", "--preset", "debug"],
+            "windows": {
+                "args": ["--build", "--preset", "windows-debug"]
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": ["$gcc"]
+            "problemMatcher": ["$gcc", "$msCompile"]
         },
         {
             "label": "CMake: build (Debug)",
@@ -45,10 +49,24 @@
             "problemMatcher": []
         },
         {
+            "label": "CMake: build (Release)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "release"],
+            "windows": {
+                "args": ["--build", "--preset", "windows-release"]
+            },
+            "dependsOn": "CMake: configure (Release)",
+            "problemMatcher": ["$gcc", "$msCompile"]
+        },
+        {
             "label": "CMake: clean",
             "type": "shell",
             "command": "cmake",
-            "args": ["--build", "${workspaceFolder}/build", "--target", "clean"],
+            "args": ["--build", "--preset", "debug", "--target", "clean"],
+            "windows": {
+                "args": ["--build", "--preset", "windows-debug", "--target", "clean"]
+            },
             "problemMatcher": []
         },
         {
@@ -56,7 +74,7 @@
             "type": "shell",
             "command": "${workspaceFolder}/build/LocalLLM",
             "windows": {
-                "command": "${workspaceFolder}/build/LocalLLM.exe"
+                "command": "${workspaceFolder}/build/Debug/LocalLLM.exe"
             },
             "dependsOn": "CMake: build",
             "presentation": {

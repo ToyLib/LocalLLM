@@ -34,7 +34,7 @@
             "name": "Debug LocalLLM (Windows)",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/LocalLLM.exe",
+            "program": "${workspaceFolder}/build/Debug/LocalLLM.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
             "environment": [],
