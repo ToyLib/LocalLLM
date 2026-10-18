@@ -11,7 +11,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 回答をストリーミングで逐次表示
 - セッション中の会話履歴を保持し、毎回まとめて送信
 - 受信中の中断
-- 日本語の表示・入力 (同梱のフリーフォント Rounded M+ 1c Bold を使用し、足りない文字は OS の日本語フォントで補完)
+- 日本語の表示・入力 (同梱のフリーフォント M PLUS Rounded 1c Bold を使用し、足りない文字は OS の日本語フォントで補完)
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
 
@@ -85,7 +85,7 @@ cmake --build build
 | 最大トークン数 | `llm_client.cpp` の `max_tokens` |
 | フォントサイズ | `main.cpp` の `FONT_SIZE` |
 | 背景の不透明度 | `main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
-| フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/rounded-mplus-1c-bold.ttf`) |
+| フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`) |
 
 ```bash
 LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
@@ -109,12 +109,12 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `CMakeLists.txt` | ビルド設定 |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
-| `Asset/` | 同梱フォント (ビルド時に実行ファイルの隣へコピー) |
+| `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 
 ## ライセンス
 
 [MIT License](LICENSE)
 
-同梱フォント `Asset/rounded-mplus-1c-bold.ttf` (Rounded M+ 1c、Copyright (c) 2015 M+ FONTS PROJECT) は、本プロジェクトの MIT License の対象外で、配布元のライセンスに従います。
+同梱フォント `Asset/MPLUSRounded1c-Bold.ttf` ([M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c)、Copyright 2016 The Rounded M+ Project Authors.) は本プロジェクトの MIT License の対象外で、[SIL Open Font License 1.1](Asset/OFL.txt) に従います。
 
 Dear ImGui は MIT License、SDL3 は zlib License、nlohmann/json は MIT License、libcurl は curl License です。

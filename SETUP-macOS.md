@@ -113,17 +113,17 @@ C/C++ と CMake Tools の拡張機能を入れて開く。
 
 ## 4. 日本語フォントと入力
 
-日本語の表示には、プロジェクトに同梱したフリーフォント **Rounded M+ 1c Bold** (`Asset/rounded-mplus-1c-bold.ttf`) を使う。
+日本語の表示には、プロジェクトに同梱したフリーフォント **M PLUS Rounded 1c Bold** (`Asset/MPLUSRounded1c-Bold.ttf`) を使う。配布元は [Google Fonts](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) で、ライセンスは SIL Open Font License 1.1 (`Asset/OFL.txt`)。
 
 ビルドすると `Asset/` が実行ファイルの隣 (`build/Asset/`) にコピーされ、アプリは実行ファイルの場所を基準にフォントを読み込む。そのため、どのフォルダーから起動しても同じフォントが使われる。
 
 アプリは次の順にフォントを探す。
 
 1. 環境変数 `LOCALLLM_FONT` で指定したファイル
-2. 実行ファイルの隣の `Asset/rounded-mplus-1c-bold.ttf`
+2. 実行ファイルの隣の `Asset/MPLUSRounded1c-Bold.ttf`
 3. OS の日本語フォント (下記)
 
-Rounded M+ に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、Rounded M+ に無い文字は表示されない。
+M PLUS Rounded 1c に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、M PLUS Rounded 1c に無い文字は表示されない。
 
 macOS で補完に使う OS のフォント：
 

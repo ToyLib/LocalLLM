@@ -17,7 +17,7 @@ namespace {
 
 // 同梱フォント (実行ファイルからの相対パス)
 constexpr const char* BUNDLED_FONT_PATH =
-    "Asset/rounded-mplus-1c-bold.ttf";
+    "Asset/MPLUSRounded1c-Bold.ttf";
 
 // OSの日本語フォントの候補 (同梱フォントに無い文字の補完用)
 constexpr const char* SYSTEM_FONT_PATHS[] = {
