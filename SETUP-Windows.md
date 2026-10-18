@@ -13,9 +13,9 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](S
 | 項目 | 構成 |
 |---|---|
 | OS | Windows 10 / 11 (x64) |
-| コンパイラ | MSVC (Visual Studio 2022 以降。Visual Studio 2026 で確認中) |
+| コンパイラ | MSVC (Visual Studio 2022 以降。Visual Studio 2026 / MSVC 14.51 で確認) |
 | パッケージ管理 | vcpkg (`C:\tools\vcpkg`。アプリはマニフェストモード、llama.cpp 用は `vcpkg install`) |
-| ビルド | CMake + Visual Studio のジェネレーター (MSBuild) |
+| ビルド | CMake + Visual Studio のジェネレーター (MSBuild。CMake 4.4 で確認) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl (vcpkg) |
@@ -121,6 +121,7 @@ C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり�
 - CMake Tools：`CMakePresets.json` を使う設定にしてあり、Windows では configure のプリセット「Windows (Visual Studio, x64)」だけが表示される。
 - タスク (Ctrl+Shift+B)：Windows では自動でプリセット `windows` / `windows-debug` を使う。
 - F5：構成「Debug LocalLLM (Windows)」を選ぶと、Debug ビルドしてから Visual Studio のデバッガーで `build\Debug\LocalLLM.exe` をデバッグする。
+  - 「実行とデバッグ」パネル (Ctrl+Shift+D) の上のプルダウンで、最初に「**Debug LocalLLM (Windows)**」を選んでおく。既定で選ばれる先頭の「Debug LocalLLM」は Linux / macOS 用で、Windows では起動に失敗する。一度選べば次回からはそれが使われる。
 
 ## 5. 日本語フォントと入力
 
@@ -284,4 +285,4 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 - 以前に Ninja など別のジェネレーターで configure した `build\` があると、`Does not match the generator used previously` というエラーになる。configure が途中で失敗した場合も含め、`Remove-Item -Recurse -Force build` で消してから configure し直す。vcpkg のライブラリはキャッシュ (`%LOCALAPPDATA%\vcpkg\archives`) から戻るので、2回目以降はすぐ終わる。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
 - llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。
-- 実機 (Windows) でのビルド・動作はまだ確認していない。
+- Windows の実機で確認済みの内容：LocalLLM のビルドと起動 (直接実行、VS Code の F5)、vcpkg の Vulkan を使った llama.cpp のビルド。GPU の認識とモデルの起動は、この手順ではまだ確認していない。

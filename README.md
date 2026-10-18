@@ -25,7 +25,7 @@ Linux (Ubuntu)、macOS、Windows でビルドできます。詳しい環境構�
 | macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew |
 | Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (`C:\tools\vcpkg`) |
 
-macOS と Windows は、実機でのビルド・動作をまだ確認していません。
+Windows は Visual Studio 2026 でビルド・起動を確認しています。macOS は、実機でのビルド・動作をまだ確認していません。
 
 Ubuntu の場合は次のパッケージで動作を確認しています。
 
