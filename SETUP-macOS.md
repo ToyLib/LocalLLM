@@ -260,4 +260,4 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 ## 7. 注意事項
 
 - Retina ディスプレイでは SDL3 の高解像度対応 (`SDL_WINDOW_HIGH_PIXEL_DENSITY`) により、文字がくっきり表示される。
-- 実機 (macOS) でのビルド・動作はまだ確認していない。
+- この手順は macOS 27 の実機で、環境構築から LocalLLM のビルド・実行まで確認済み。

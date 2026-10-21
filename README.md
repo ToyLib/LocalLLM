@@ -19,13 +19,11 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 
 Linux (Ubuntu)、macOS、Windows でビルドできます。詳しい環境構築手順 (llama.cpp のビルドやモデル別の起動方法を含む) は OS ごとの手順書を参照してください。
 
-| OS | 手順書 | パッケージ管理 |
-| --- | --- | --- |
-| Ubuntu | [SETUP.md](SETUP.md) | APT |
-| macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew |
-| Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (`C:\tools\vcpkg`) |
-
-Windows は Visual Studio 2026 でビルド・起動を確認しています。macOS は、実機でのビルド・動作をまだ確認していません。
+| OS | 手順書 | パッケージ管理 | ビルド・実行を確認した環境 |
+| --- | --- | --- | --- |
+| Ubuntu | [SETUP.md](SETUP.md) | APT | Ubuntu 26.x |
+| macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew | macOS 27 |
+| Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (`C:\tools\vcpkg`) | Windows 11 + Visual Studio 2026 |
 
 Ubuntu の場合は次のパッケージで動作を確認しています。
 

@@ -304,4 +304,4 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 - 以前に Ninja など別のジェネレーターで configure した `build\` があると、`Does not match the generator used previously` というエラーになる。configure が途中で失敗した場合も含め、`Remove-Item -Recurse -Force build` で消してから configure し直す。vcpkg のライブラリはキャッシュ (`%LOCALAPPDATA%\vcpkg\archives`) から戻るので、2回目以降はすぐ終わる。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
 - llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。
-- Windows の実機で確認済みの内容：LocalLLM のビルドと起動 (直接実行、VS Code の F5)、vcpkg の Vulkan を使った llama.cpp のビルド。GPU の認識とモデルの起動は、この手順ではまだ確認していない。
+- この手順は Windows 11 + Visual Studio 2026 の実機で、環境構築から LocalLLM のビルド・実行まで確認済み。
