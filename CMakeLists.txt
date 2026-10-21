@@ -1,18 +1,30 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Windows では vcpkg のツールチェーンを使う
-# C:/tools/vcpkg を優先する (VS の開発環境は VCPKG_ROOT を
-# Visual Studio 付属の vcpkg に書き換えるため)
+# vcpkg の場所は環境変数 VCPKG_ROOT で指定する
 if(CMAKE_HOST_WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    if(EXISTS "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake")
-        set(VCPKG_ROOT "C:/tools/vcpkg")
-    elseif(DEFINED ENV{VCPKG_ROOT})
-        set(VCPKG_ROOT "$ENV{VCPKG_ROOT}")
-    else()
-        message(FATAL_ERROR "vcpkg not found: install it to C:/tools/vcpkg")
+    if(NOT DEFINED ENV{VCPKG_ROOT})
+        message(FATAL_ERROR
+            "VCPKG_ROOT is not set. Set it to your vcpkg directory "
+            "(e.g. setx VCPKG_ROOT C:\\tools\\vcpkg) and open a new terminal.")
     endif()
 
-    file(TO_CMAKE_PATH "${VCPKG_ROOT}" VCPKG_ROOT)
+    file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" VCPKG_ROOT)
+
+    # 開発者用のシェル (Developer PowerShell for VS など) は VCPKG_ROOT を
+    # Visual Studio 付属の vcpkg に書き換えるが、付属の vcpkg は
+    # baseline の無いこのプロジェクトのマニフェストを扱えない
+    if(VCPKG_ROOT MATCHES "Microsoft Visual Studio")
+        message(FATAL_ERROR
+            "VCPKG_ROOT points to the vcpkg bundled with Visual Studio "
+            "(${VCPKG_ROOT}). Run CMake from a normal PowerShell, "
+            "not the Developer PowerShell / Command Prompt for VS.")
+    endif()
+
+    if(NOT EXISTS "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+        message(FATAL_ERROR "vcpkg not found in VCPKG_ROOT: ${VCPKG_ROOT}")
+    endif()
+
     set(CMAKE_TOOLCHAIN_FILE
         "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         CACHE STRING "vcpkg toolchain file")

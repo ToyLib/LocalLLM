@@ -2,7 +2,7 @@
 
 Windows 上で、Visual Studio (MSVC) と vcpkg を使って開発環境を構築する手順。
 ビルドには Visual Studio のジェネレーターを使うので、Ninja や開発者用のシェル (Developer PowerShell for VS) は不要。
-vcpkg は `C:\tools\vcpkg` にインストールすることを前提とする。
+vcpkg の場所は環境変数 `VCPKG_ROOT` で指定する (この手順では例として `C:\tools\vcpkg` にインストールする)。
 
 Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md) を参照。
 
@@ -14,7 +14,7 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](S
 |---|---|
 | OS | Windows 10 / 11 (x64) |
 | コンパイラ | MSVC (Visual Studio 2022 以降。Visual Studio 2026 / MSVC 14.51 で確認) |
-| パッケージ管理 | vcpkg (`C:\tools\vcpkg`。アプリはマニフェストモード、llama.cpp 用は `vcpkg install`) |
+| パッケージ管理 | vcpkg (場所は環境変数 `VCPKG_ROOT`。アプリはマニフェストモード、llama.cpp 用は `vcpkg install`) |
 | ビルド | CMake + Visual Studio のジェネレーター (MSBuild。CMake 4.4 で確認) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
@@ -46,7 +46,7 @@ Visual Studio 2026 を使う場合は、そのバージョンに対応した新�
 
 ### vcpkg
 
-PowerShell で `C:\tools\vcpkg` に取得してセットアップする。
+vcpkg はどこにインストールしてもよい。この手順では例として `C:\tools\vcpkg` に取得してセットアップする。別の場所にする場合は、以降の `C:\tools\vcpkg` を読み替える。
 
 ```powershell
 New-Item -ItemType Directory -Force C:\tools
@@ -56,15 +56,21 @@ git clone https://github.com/microsoft/vcpkg.git C:\tools\vcpkg
 C:\tools\vcpkg\bootstrap-vcpkg.bat -disableMetrics
 ```
 
-環境変数 `VCPKG_ROOT` を設定しておく (設定後は新しいターミナルを開く)。
+環境変数 `VCPKG_ROOT` に、インストールした vcpkg のフォルダーを設定する。`setx` はユーザー環境変数に保存するので、設定後は新しいターミナルを開く (VS Code も開き直す)。
 
 ```powershell
 setx VCPKG_ROOT C:\tools\vcpkg
 ```
 
-このプロジェクトは常に `C:\tools\vcpkg` を使う (プリセット `windows` でツールチェーンを指定している)。プリセットを使わずに configure した場合も、`CMakeLists.txt` が `C:\tools\vcpkg` を優先して使い、無い場合だけ `VCPKG_ROOT` を見る。
+新しいターミナルで、設定されたことを確認する。
 
-Visual Studio 2022 以降には vcpkg が付属しており、開発者用のシェル (Developer PowerShell for VS など) は `VCPKG_ROOT` を付属の vcpkg に書き換える。付属の vcpkg はこのプロジェクトでは使わない。
+```powershell
+$env:VCPKG_ROOT
+```
+
+このプロジェクトは `VCPKG_ROOT` の vcpkg を使う。`CMakeLists.txt` が `VCPKG_ROOT` からツールチェーン (`scripts\buildsystems\vcpkg.cmake`) を見つけるので、プリセットを使っても使わなくても同じ vcpkg が使われる。`VCPKG_ROOT` が未設定のときや、そこに vcpkg が無いときは、configure がエラーで止まる。
+
+Visual Studio 2022 以降には vcpkg が付属しており、開発者用のシェル (Developer PowerShell for VS など) は `VCPKG_ROOT` を付属の vcpkg に書き換える。付属の vcpkg はこのプロジェクトでは使えないので、configure は通常の PowerShell で行う (開発者用のシェルで実行すると、`CMakeLists.txt` がエラーで止める)。
 
 ## 3. ライブラリ (vcpkg マニフェスト)
 
@@ -154,7 +160,7 @@ $env:LOCALLLM_FONT = "C:\path\to\font.ttf"
 
 ## 6. llama.cpp サーバー
 
-AMD Radeon などの GPU では Vulkan 版を使う。Vulkan SDK は使わず、ビルドに必要なものは vcpkg (`C:\tools\vcpkg`) で入れる。
+AMD Radeon などの GPU では Vulkan 版を使う。Vulkan SDK は使わず、ビルドに必要なものは vcpkg (`VCPKG_ROOT`) で入れる。
 
 ### 必要なライブラリ (vcpkg)
 
@@ -166,7 +172,7 @@ AMD Radeon などの GPU では Vulkan 版を使う。Vulkan SDK は使わず、
 | `openssl` | HTTPS 通信 (`-hf` で Hugging Face からモデルをダウンロードするのに必要) |
 
 ```powershell
-C:\tools\vcpkg\vcpkg.exe install vulkan shaderc spirv-headers openssl --triplet x64-windows
+& "$env:VCPKG_ROOT\vcpkg.exe" install vulkan shaderc spirv-headers openssl --triplet x64-windows
 ```
 
 Vulkan を実際に動かすのは GPU ドライバー (AMD Software など) なので、GPU ドライバーは最新にしておく。
@@ -182,9 +188,9 @@ cd llama.cpp
 
 cmake -S . -B build -A x64 `
     -DGGML_VULKAN=ON `
-    -DCMAKE_TOOLCHAIN_FILE=C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake `
+    -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
     -DVCPKG_TARGET_TRIPLET=x64-windows `
-    -DVulkan_GLSLC_EXECUTABLE=C:/tools/vcpkg/installed/x64-windows/tools/shaderc/glslc.exe
+    -DVulkan_GLSLC_EXECUTABLE="$env:VCPKG_ROOT/installed/x64-windows/tools/shaderc/glslc.exe"
 
 cmake --build build --config Release
 ```
@@ -302,7 +308,9 @@ Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions `
 ## 8. 注意事項
 
 - `build\` は vcpkg のライブラリも含むため、Linux や macOS の `build/` とは共有できない。
-- `this vcpkg instance requires a manifest with a specified baseline` というエラーが出た場合は、Visual Studio 付属の vcpkg が使われている。`C:\tools\vcpkg\scripts\buildsystems\vcpkg.cmake` があるか確認し、`build\` を消して configure し直す。
+- configure が `VCPKG_ROOT is not set` や `vcpkg not found in VCPKG_ROOT` で止まる場合は、`$env:VCPKG_ROOT` が vcpkg のフォルダー (`scripts\buildsystems\vcpkg.cmake` があるところ) を指しているか確認する。`setx` の後は新しいターミナルを開く必要がある。
+- `VCPKG_ROOT points to the vcpkg bundled with Visual Studio` というエラーや、`this vcpkg instance requires a manifest with a specified baseline` というエラーが出た場合は、Visual Studio 付属の vcpkg が使われている。開発者用のシェルではなく通常の PowerShell で configure する。
+- vcpkg の場所はツールチェーンとして `build\` のキャッシュに記録される。`VCPKG_ROOT` を変えたときは、`build\` を消して configure し直す。
 - 以前に Ninja など別のジェネレーターで configure した `build\` があると、`Does not match the generator used previously` というエラーになる。configure が途中で失敗した場合も含め、`Remove-Item -Recurse -Force build` で消してから configure し直す。vcpkg のライブラリはキャッシュ (`%LOCALAPPDATA%\vcpkg\archives`) から戻るので、2回目以降はすぐ終わる。
 - `--host 127.0.0.1` で起動すると外部には公開されないため、通常は Windows ファイアウォールの許可は不要。
 - llama.cpp のビルドで vcpkg の Vulkan と glslc を使う方法は、llama.cpp の公式手順 (Vulkan SDK を使う) とは異なる。うまくいかない場合は Vulkan SDK を入れるか、ビルド済みのバイナリを使う。

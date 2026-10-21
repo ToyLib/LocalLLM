@@ -33,9 +33,8 @@
         {
             "name": "windows",
             "displayName": "Windows (Visual Studio, x64)",
-            "description": "最新の Visual Studio のジェネレーターを使う (Ninja と開発者用シェルは不要)",
+            "description": "最新の Visual Studio のジェネレーターを使う (Ninja と開発者用シェルは不要。vcpkg は CMakeLists.txt が環境変数 VCPKG_ROOT から見つける)",
             "binaryDir": "${sourceDir}/build",
-            "toolchainFile": "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake",
             "architecture": {
                 "value": "x64",
                 "strategy": "set"
