@@ -58,8 +58,12 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC SDL3::SDL3)
 
 add_executable(LocalLLM
-    main.cpp
-    llm_client.cpp
+    src/main.cpp
+    src/chat.cpp
+    src/chat_ui.cpp
+    src/font.cpp
+    src/ime.cpp
+    src/llm_client.cpp
 )
 
 # ソースは UTF-8 (日本語の文字列リテラルを含む)

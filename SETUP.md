@@ -89,9 +89,16 @@ LocalLLM/
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)
-├── main.cpp
-├── llm_client.h
-├── llm_client.cpp
+├── doc/
+│   ├── llm-client.md   (LLM との通信の解説)
+│   └── gui-app.md      (GUI アプリの解説)
+├── src/
+│   ├── main.cpp
+│   ├── chat.h / chat.cpp
+│   ├── chat_ui.h / chat_ui.cpp
+│   ├── ime.h / ime.cpp
+│   ├── font.h / font.cpp
+│   └── llm_client.h / llm_client.cpp
 └── .vscode/
     ├── settings.json
     ├── tasks.json
@@ -103,15 +110,19 @@ LocalLLM/
 
 | ファイル | 役割 |
 |---|---|
-| main.cpp | SDL3 + ImGui の初期化、イベント処理、チャット画面、ワーカースレッド管理 |
-| llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
+| src/main.cpp | SDL3 + ImGui の初期化、イベント処理、メインループ |
+| src/chat.h/.cpp | 会話の状態、ワーカースレッド管理 |
+| src/chat_ui.h/.cpp | チャット画面 |
+| src/ime.h/.cpp | IME の変換中の文字列の表示 |
+| src/font.h/.cpp | 日本語フォントの読み込み |
+| src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | vcpkg.json | vcpkg のマニフェスト (Windows でのみ使用) |
 | scripts/ | llama-server の起動スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
 
-GUI と LLM 通信は別のファイルに分けている。会話履歴は GUI 側 (`main.cpp`) で保持し、送信のたびに `llm_client` へ渡す。
+GUI と LLM 通信は別のファイルに分けている。会話履歴は GUI 側 (`src/chat.cpp`) で保持し、送信のたびに `llm_client` へ渡す。
 
 ## 4. CMakeLists.txt
 
@@ -120,7 +131,7 @@ GUI と LLM 通信は別のファイルに分けている。会話履歴は GUI 
 - `find_package` で `CURL`、`nlohmann_json`、`SDL3`、`Threads` を検出
 - `FetchContent` で Dear ImGui v1.92.9b を取得
 - ImGui 本体、SDL3 / SDL_Renderer 用バックエンド、`imgui_stdlib` を静的ライブラリ `imgui` としてビルド
-- 実行ファイル `LocalLLM` (`main.cpp`、`llm_client.cpp`) にリンク
+- 実行ファイル `LocalLLM` (`src/` 以下の `.cpp`) にリンク
 
 ```cmake
 FetchContent_Declare(imgui

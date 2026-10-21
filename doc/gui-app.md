@@ -1,7 +1,15 @@
-# GUI アプリとしての構成 (main.cpp)
+# GUI アプリとしての構成
 
 このドキュメントでは、チャット画面を表示する GUI アプリの部分を解説します。
-対象のファイルは [main.cpp](../main.cpp) です。
+対象のファイルは `src/` 以下の次のファイルです。
+
+| ファイル | 内容 |
+| --- | --- |
+| [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
+| [chat.h](../src/chat.h) / [chat.cpp](../src/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
+| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`) |
+| [ime.h](../src/ime.h) / [ime.cpp](../src/ime.cpp) | IME の変換中の文字列の表示 |
+| [font.h](../src/font.h) / [font.cpp](../src/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
 
 LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md) を参照してください。
 
@@ -32,27 +40,27 @@ if (ImGui::Button("送信"))   // ボタンを描き、押されたフレーム�
 ## 全体の構成
 
 ```
-main()
+main()                         … main.cpp
  ├ 初期化: curl / SDL / ウィンドウ / レンダラー / ImGui / フォント
  ├ メインループ
  │   ├ イベント処理 (ImGui に渡す・IME の変換中の文字列・終了)
  │   ├ ImGui の新しいフレームを開始
- │   ├ DrawUI()          … 画面全体を組み立てる
+ │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
  │   │   ├ DrawMessages()    … 会話の一覧
  │   │   ├ 入力欄・送信/中断・クリアのボタン
- │   │   └ DrawComposition() … IME の変換中の文字列
+ │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
  │   └ 描画して画面に表示
  └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
 
-SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskLLM() を実行
+SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskLLM() を実行 (chat.cpp)
 ```
 
-## 起動処理 (main の前半)
+## 起動処理 (main.cpp の main の前半)
 
 1. `curl_global_init()` で libcurl を初期化します。
-2. `SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition")` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
+2. `SetImeHint()` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
 3. `SDL_Init(SDL_INIT_VIDEO)` で SDL を初期化します。
-4. `SDL_RegisterEvents(1)` で独自のイベント番号を 1 つ確保します。ワーカースレッドから UI を起こすのに使います (後述)。
+4. `RegisterWakeEvent()` で独自のイベント番号を 1 つ確保します (`SDL_RegisterEvents`)。ワーカースレッドから UI を起こすのに使います (後述)。
 5. ディスプレイの拡大率 (`SDL_GetDisplayContentScale`) を取得し、900×700 に拡大率を掛けた大きさでウィンドウを作ります。
    - `SDL_WINDOW_HIGH_PIXEL_DENSITY` で、Retina などの高解像度ディスプレイでもぼやけずに描きます。
    - `SDL_WINDOW_HIDDEN` で作成し、中央に移動してから表示するので、ウィンドウが一瞬別の場所に見えることはありません。
@@ -65,9 +73,9 @@ SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskL
    - ウィンドウ背景の不透明度を `WINDOW_OPACITY` にします。
 8. 日本語フォントを読み込みます (`LoadFont`)。
 9. ImGui の SDL3 用・SDL_Renderer 用のバックエンドを初期化します。
-10. IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
+10. `InstallImeHook()` で、IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
 
-## 日本語フォントの読み込み (LoadFont)
+## 日本語フォントの読み込み (font.cpp)
 
 ImGui に入っている標準フォントには日本語の文字がないため、次の順でフォントを探します。
 
@@ -100,7 +108,7 @@ bool hasEvent = framesToRender > 0
 描画では、まず画面を透明な色でクリアし、その上に ImGui の描画データ (半透明の背景を含む) を重ねます。
 高解像度ディスプレイでは `SDL_SetRenderScale` でフレームバッファの倍率を設定してから描きます。
 
-## 会話の状態とスレッド
+## 会話の状態とスレッド (chat.cpp)
 
 ### ChatState
 
@@ -155,7 +163,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 ウィンドウを閉じたときに受信中であれば、`cancel = true` にしてからワーカースレッドの終了を待ちます。
 `AskLLM()` は遅くとも 1 秒ほどで中断に気づくので、終了が長く待たされることはありません。
 
-## 画面の組み立て (DrawUI)
+## 画面の組み立て (chat_ui.cpp)
 
 ```
 ┌────────────────────────────────────────────┐
@@ -215,7 +223,7 @@ ImGui::InputTextMultiline("##input", &input, size,
 - 「中断」: 受信中は「送信」の代わりに表示します。押すと `state.cancel = true` にします。
 - 「クリア」: 会話とエラーを消します。受信中は `BeginDisabled` で押せなくしています。受信中に `messages` を消すと、ワーカースレッドが書き込む先 (最後の assistant メッセージ) がなくなるためです。
 
-## IME の変換中の文字列 (日本語入力)
+## IME の変換中の文字列 (ime.cpp)
 
 ### 何が問題か
 
@@ -224,9 +232,10 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 
 ### 対処の内容
 
-1. **SDL に伝える**: `SDL_HINT_IME_IMPLEMENTED_UI` に `"composition"` を設定し、変換中の文字列はアプリが描くことを伝えます。Windows や Linux で OS の変換ウィンドウと二重に表示されるのを防ぎます。変換候補の一覧は、これまでどおり OS が表示します。
+1. **SDL に伝える** (`SetImeHint`): `SDL_HINT_IME_IMPLEMENTED_UI` に `"composition"` を設定し、変換中の文字列はアプリが描くことを伝えます。Windows や Linux で OS の変換ウィンドウと二重に表示されるのを防ぎます。変換候補の一覧は、これまでどおり OS が表示します。
 2. **変換中の文字列を覚える** (`HandleCompositionEvent`): `SDL_EVENT_TEXT_EDITING` が来たら、文字列と、選択中の文節の位置 (`start`) と長さ (`length`) を `g_composition` に保存します。確定したとき (`SDL_EVENT_TEXT_INPUT`) とウィンドウのフォーカスが外れたときは消します。
-3. **カーソルの位置を知る** (`SetImeData`): ImGui は入力欄のカーソルの画面上の位置を、フレームの終わりに `Platform_SetImeDataFn` でバックエンドへ通知します (バックエンドはこれを使って、OS の変換候補ウィンドウの位置を決めます)。この関数を `SetImeData` で包み、位置を `g_imeData` に保存してから元の関数を呼びます。
+3. **カーソルの位置を知る** (`InstallImeHook` / `SetImeData`): ImGui は入力欄のカーソルの画面上の位置を、フレームの終わりに `Platform_SetImeDataFn` でバックエンドへ通知します (バックエンドはこれを使って、OS の変換候補ウィンドウの位置を決めます)。この関数を `SetImeData` で包み、位置を `g_imeData` に保存してから元の関数を呼びます。
+   変換中の文字列とカーソル位置の変数は `ime.cpp` の中に閉じていて、ほかのファイルからは `ime.h` の 4 つの関数だけを使います。
 4. **描く** (`DrawComposition`): 入力欄を描いた後、カーソルの位置に変換中の文字列を重ねて描きます。
    - ほかの UI より手前に描くため、`GetForegroundDrawList()` を使います。
    - 下の文字が透けないよう、入力欄の背景色を不透明にした四角形を先に描きます。
@@ -244,10 +253,10 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 
 | 変えたいもの | 場所 |
 | --- | --- |
-| フォントの大きさ | `FONT_SIZE` |
-| 同梱フォント・OS フォントの候補 | `BUNDLED_FONT_PATH`、`SYSTEM_FONT_PATHS` |
-| 背景の不透明度 | `WINDOW_OPACITY` |
-| ウィンドウの初期サイズ | `main()` の `SDL_CreateWindow` (900×700) |
-| 入力欄の高さ | `DrawUI` の `inputHeight` (4 行分) |
-| 送信者名の色 | `DrawMessages` の `TextColored` |
-| 接続先や system プロンプト | [llm_client.cpp](../llm_client.cpp) ([llm-client.md](llm-client.md) を参照) |
+| フォントの大きさ | `font.cpp` の `FONT_SIZE` |
+| 同梱フォント・OS フォントの候補 | `font.cpp` の `BUNDLED_FONT_PATH`、`SYSTEM_FONT_PATHS` |
+| 背景の不透明度 | `main.cpp` の `WINDOW_OPACITY` |
+| ウィンドウの初期サイズ | `main.cpp` の `SDL_CreateWindow` (900×700) |
+| 入力欄の高さ | `chat_ui.cpp` の `DrawUI` の `inputHeight` (4 行分) |
+| 送信者名の色 | `chat_ui.cpp` の `DrawMessages` の `TextColored` |
+| 接続先や system プロンプト | [src/llm_client.cpp](../src/llm_client.cpp) ([llm-client.md](llm-client.md) を参照) |

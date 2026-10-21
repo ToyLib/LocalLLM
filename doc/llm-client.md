@@ -1,7 +1,7 @@
 # LLM への問い合わせ (llm_client)
 
 このドキュメントでは、ローカルの LLM サーバーに質問を送り、回答をストリーミングで受け取る部分を解説します。
-対象のファイルは [llm_client.h](../llm_client.h) と [llm_client.cpp](../llm_client.cpp) です。
+対象のファイルは [src/llm_client.h](../src/llm_client.h) と [src/llm_client.cpp](../src/llm_client.cpp) です。
 
 GUI 側のコード (画面の描画やスレッドの扱い) については [gui-app.md](gui-app.md) を参照してください。
 
@@ -13,7 +13,7 @@ GUI 側のコード (画面の描画やスレッドの扱い) については [g
 - 画面のことは何も知らず、受け取ったテキスト片をコールバックで呼び出し元に渡すだけです。
 
 ```
-main.cpp (ワーカースレッド)
+chat.cpp (ワーカースレッド)
     │  AskLLM(history, onDelta, cancel)
     ▼
 llm_client.cpp
@@ -50,7 +50,7 @@ std::string AskLLM(
 
 ## 設定値
 
-[llm_client.cpp](../llm_client.cpp) の先頭で定数として定義しています。
+[src/llm_client.cpp](../src/llm_client.cpp) の先頭で定数として定義しています。
 
 | 定数 | 値 | 説明 |
 | --- | --- | --- |
@@ -84,7 +84,7 @@ API はステートレスなので、毎回それまでの会話をすべて送�
 ]
 ```
 
-system メッセージは `CreateHistory()` が入れます。user と assistant のメッセージは GUI 側 (`SendPrompt`) が画面に表示しているメッセージから組み立てます。
+system メッセージは `CreateHistory()` が入れます。user と assistant のメッセージは GUI 側 (`src/chat.cpp` の `SendPrompt`) が画面に表示しているメッセージから組み立てます。
 
 ## AskLLM の処理の流れ
 

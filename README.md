@@ -90,11 +90,11 @@ cmake --build build
 
 | 項目 | 場所 |
 | --- | --- |
-| サーバーの URL | `llm_client.cpp` の `SERVER_URL` |
-| システムプロンプト | `llm_client.cpp` の `SYSTEM_PROMPT` |
-| 最大トークン数 | `llm_client.cpp` の `max_tokens` |
-| フォントサイズ | `main.cpp` の `FONT_SIZE` |
-| 背景の不透明度 | `main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
+| サーバーの URL | `src/llm_client.cpp` の `SERVER_URL` |
+| システムプロンプト | `src/llm_client.cpp` の `SYSTEM_PROMPT` |
+| 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
+| フォントサイズ | `src/font.cpp` の `FONT_SIZE` |
+| 背景の不透明度 | `src/main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
 | フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`) |
 
 ```bash
@@ -114,8 +114,13 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 
 | ファイル | 内容 |
 | --- | --- |
-| `main.cpp` | SDL3 + Dear ImGui のチャット画面 |
-| `llm_client.cpp` / `llm_client.h` | API へのストリーミング送信と SSE の解析 |
+| `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
+| `src/chat.cpp` / `src/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
+| `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
+| `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
+| `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
+| `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析 |
+| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
