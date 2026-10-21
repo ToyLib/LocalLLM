@@ -6,6 +6,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -20,4 +21,10 @@ using DeltaCallback = std::function<void(std::string_view)>;
 std::string AskLLM(
     const json& messages,
     const DeltaCallback& onDelta,
+    const std::atomic<bool>& cancel);
+
+// 埋め込みサーバーで文章をベクトルに変換する (inputs と同じ順で返す)
+// cancel が true になると中断して std::runtime_error を投げる
+std::vector<std::vector<float>> Embed(
+    const std::vector<std::string>& inputs,
     const std::atomic<bool>& cancel);

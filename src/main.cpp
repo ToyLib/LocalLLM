@@ -2,6 +2,7 @@
 #include "chat_ui.h"
 #include "font.h"
 #include "ime.h"
+#include "rag.h"
 
 #include <SDL3/SDL.h>
 #include <curl/curl.h>
@@ -97,8 +98,12 @@ int main(int, char**)
     InstallImeHook();
 
     ChatState state;
+    RagState rag;
     std::string input;
     bool focusInput = true;
+
+    // rag/ の資料のインデックスをバックグラウンドで作る
+    StartRagIndexing(rag);
 
     // 入力後しばらくは毎フレーム描画し、それ以外はイベント待ちで省電力
     int framesToRender = 3;
@@ -142,7 +147,7 @@ int main(int, char**)
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-        DrawUI(state, input, focusInput);
+        DrawUI(state, rag, input, focusInput);
 
         ImGui::Render();
         SDL_SetRenderScale(
@@ -165,6 +170,9 @@ int main(int, char**)
     // 受信中なら中断してから終了
     state.cancel = true;
     JoinWorker(state);
+
+    rag.cancel = true;
+    JoinRagWorker(rag);
 
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();

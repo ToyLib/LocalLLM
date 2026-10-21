@@ -1,8 +1,11 @@
 #include "chat.h"
 
 #include "llm_client.h"
+#include "rag.h"
 
 #include <SDL3/SDL.h>
+
+#include <cstdio>
 
 namespace
 {
@@ -10,11 +13,32 @@ namespace
 // ワーカースレッドからUIスレッドを起こすためのイベント
 Uint32 g_wakeEvent = 0;
 
-void WakeUI()
+// 参照した資料の一覧 (回答の下に表示する)
+std::string FormatSources(const std::vector<RagHit>& hits)
 {
-    SDL_Event event{};
-    event.type = g_wakeEvent;
-    SDL_PushEvent(&event);
+    if (hits.empty())
+    {
+        return "参照: 関係のある資料は見つかりませんでした";
+    }
+
+    std::string note = "参照:";
+
+    for (size_t i = 0; i < hits.size(); ++i)
+    {
+        char score[16];
+        std::snprintf(score, sizeof(score), "%.2f", hits[i].score);
+
+        note += "\n  [" + std::to_string(i + 1) + "] " + hits[i].source;
+
+        if (!hits[i].heading.empty())
+        {
+            note += " (" + hits[i].heading + ")";
+        }
+
+        note += std::string(" ") + score;
+    }
+
+    return note;
 }
 
 } // namespace
@@ -22,6 +46,13 @@ void WakeUI()
 void RegisterWakeEvent()
 {
     g_wakeEvent = SDL_RegisterEvents(1);
+}
+
+void WakeUI()
+{
+    SDL_Event event{};
+    event.type = g_wakeEvent;
+    SDL_PushEvent(&event);
 }
 
 void JoinWorker(ChatState& state)
@@ -32,7 +63,7 @@ void JoinWorker(ChatState& state)
     }
 }
 
-void SendPrompt(ChatState& state, const std::string& prompt)
+void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 {
     JoinWorker(state);
 
@@ -61,9 +92,46 @@ void SendPrompt(ChatState& state, const std::string& prompt)
 
     state.cancel = false;
 
-    state.worker = std::thread([&state, history, prompt] {
+    const bool useRag = state.useRag;
+
+    state.worker = std::thread([&state, &rag, history, prompt, useRag]() mutable {
         try
         {
+            if (useRag)
+            {
+                // 資料は送信する質問にだけ添え、画面の履歴には残さない
+                std::string note;
+
+                try
+                {
+                    const auto hits = SearchRag(rag, prompt, state.cancel);
+
+                    if (!hits.empty())
+                    {
+                        history.back()["content"] =
+                            BuildRagPrompt(hits, prompt);
+                    }
+
+                    note = FormatSources(hits);
+                }
+                catch (const std::exception& e)
+                {
+                    if (state.cancel)
+                    {
+                        throw;
+                    }
+
+                    // 検索できなくても、資料なしで回答は続ける
+                    note = std::string("資料を参照できませんでした: ") + e.what();
+                }
+
+                {
+                    std::lock_guard lock(state.mutex);
+                    state.messages.back().note = std::move(note);
+                }
+                WakeUI();
+            }
+
             AskLLM(
                 history,
                 [&state](std::string_view text) {

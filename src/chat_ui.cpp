@@ -37,6 +37,13 @@ void DrawMessages(ChatState& state)
             ImGui::TextWrapped("%s", message.content.c_str());
         }
 
+        if (!message.note.empty())
+        {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("%s", message.note.c_str());
+            ImGui::PopTextWrapPos();
+        }
+
         if (ImGui::BeginPopupContextItem("copy"))
         {
             if (ImGui::MenuItem("コピー"))
@@ -59,9 +66,35 @@ void DrawMessages(ChatState& state)
     }
 }
 
+// RAG のオン/オフとインデックスの状態
+void DrawRagBar(ChatState& state, RagState& rag)
+{
+    bool building;
+    std::string status;
+    {
+        std::lock_guard lock(rag.mutex);
+        building = rag.building;
+        status = rag.status;
+    }
+
+    ImGui::Checkbox("資料を参照 (RAG)", &state.useRag);
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(building);
+    if (ImGui::SmallButton("再読込"))
+    {
+        StartRagIndexing(rag);
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", status.c_str());
+}
+
 } // namespace
 
-void DrawUI(ChatState& state, std::string& input, bool& focusInput)
+void DrawUI(
+    ChatState& state, RagState& rag, std::string& input, bool& focusInput)
 {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -95,7 +128,9 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
     const float errorHeight =
         error.empty() ? 0.0f : lineHeight + style.ItemSpacing.y;
 
-    // 会話表示
+    DrawRagBar(state, rag);
+
+    // 会話表示 (高さは残りから入力欄などの分を引いたもの)
     ImGui::BeginChild(
         "messages",
         ImVec2(0.0f, -(inputHeight + errorHeight + style.ItemSpacing.y)),
@@ -166,7 +201,7 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
 
     if (send && input.find_first_not_of(" \t\r\n") != std::string::npos)
     {
-        SendPrompt(state, input);
+        SendPrompt(state, rag, input);
         input.clear();
         focusInput = true;
     }
