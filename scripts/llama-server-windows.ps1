@@ -2,13 +2,22 @@
 # llama.cpp server launcher (Windows / Vulkan)
 # Qwen3 / Gemma3 / Phi-4 mini
 #
+# Also starts the embedding server for RAG (BGE-M3, port 8081) in the
+# background and stops it when the chat server exits.
+# Its log goes to logs\embed-server.log (stderr: logs\embed-server.err.log).
+#
 # Override paths with environment variables:
 #   LLAMA_DIR    llama.cpp directory (default: %USERPROFILE%\Repos\llama.cpp)
 #   LLAMA_SERVER llama-server.exe (e.g. from the prebuilt release zip)
 #
 # Run:
 #   powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+#   (add -NoEmbed to start the chat server only, without RAG)
 # --------------------------------------------------
+
+param(
+    [switch]$NoEmbed
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -20,6 +29,17 @@ $HostAddr = '127.0.0.1'
 $Port = 8080
 $Context = 4096
 $GpuLayers = 99
+
+# Embedding server for RAG
+# Each chunk must fit in one batch, so batch = context
+$EmbedPort = 8081
+$EmbedModel = 'ggml-org/bge-m3-Q8_0-GGUF'
+$EmbedContext = 8192
+
+$LogDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'logs'
+# Start-Process cannot send stdout and stderr to the same file
+$LogFile = Join-Path $LogDir 'embed-server.log'
+$ErrLogFile = Join-Path $LogDir 'embed-server.err.log'
 
 if (-not (Test-Path -LiteralPath $Server -PathType Leaf)) {
     Write-Host "Error: llama-server not found: $Server"
@@ -69,19 +89,62 @@ Write-Host " GPU layers : $GpuLayers"
 Write-Host " Context    : $Context"
 Write-Host " Endpoint   : http://${HostAddr}:$Port"
 Write-Host ' Alias      : local'
+if ($NoEmbed) {
+    Write-Host ' Embedding  : off'
+} else {
+    Write-Host " Embedding  : BGE-M3 (http://${HostAddr}:$EmbedPort, alias embed)"
+}
 Write-Host '----------------------------------'
 Write-Host ''
+
+$Embed = $null
+
+if (-not $NoEmbed) {
+    New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+
+    $Embed = Start-Process -FilePath $Server `
+        -ArgumentList '-hf', $EmbedModel, '--embeddings',
+            '-ngl', $GpuLayers, '-c', $EmbedContext,
+            '-b', $EmbedContext, '-ub', $EmbedContext,
+            '--alias', 'embed', '--host', $HostAddr, '--port', $EmbedPort `
+        -RedirectStandardOutput $LogFile `
+        -RedirectStandardError $ErrLogFile `
+        -NoNewWindow -PassThru
+
+    # Fail early if it could not start (e.g. port in use)
+    Start-Sleep -Seconds 1
+    if ($Embed.HasExited) {
+        Write-Host "Error: embedding server exited. Log: $ErrLogFile"
+        Get-Content -LiteralPath $ErrLogFile -Tail 20 -ErrorAction SilentlyContinue
+        exit 1
+    }
+
+    Write-Host "Embedding server is running in the background (PID $($Embed.Id))"
+    Write-Host "  Log: $LogFile"
+    Write-Host ''
+}
 
 if (Test-Path -LiteralPath $LlamaDir -PathType Container) {
     Set-Location -LiteralPath $LlamaDir
 }
 
-& $Server `
-    -hf $Model `
-    -ngl $GpuLayers `
-    -c $Context `
-    --alias local `
-    --host $HostAddr `
-    --port $Port
+# Stop the embedding server when the chat server exits (Ctrl+C included)
+try {
+    & $Server `
+        -hf $Model `
+        -ngl $GpuLayers `
+        -c $Context `
+        --alias local `
+        --host $HostAddr `
+        --port $Port
 
-exit $LASTEXITCODE
+    $ExitCode = $LASTEXITCODE
+}
+finally {
+    if ($Embed -and -not $Embed.HasExited) {
+        Write-Host "Stopping embedding server (PID $($Embed.Id))..."
+        Stop-Process -Id $Embed.Id -Force
+    }
+}
+
+exit $ExitCode

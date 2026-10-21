@@ -67,7 +67,7 @@ cmake --build build
 
    使い方は OS ごとの手順書を参照してください。
 
-   RAG を使う場合は、埋め込み用のサーバーも 8081 番で起動します ([scripts/embed-server-macos.sh](scripts/embed-server-macos.sh) など。詳しくは [doc/rag.md](doc/rag.md))。
+   スクリプトは RAG 用の埋め込みサーバー (8081 番) も一緒に起動します。不要なら `--no-embed` (Windows は `-NoEmbed`) を付けてください (詳しくは [doc/rag.md](doc/rag.md))。
 
 2. アプリを起動します。
 
@@ -131,7 +131,7 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
-| `scripts/` | llama-server の起動スクリプト (チャット用・埋め込み用、Linux / macOS / Windows) |
+| `scripts/` | llama-server の起動スクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 

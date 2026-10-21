@@ -14,3 +14,6 @@ imgui.ini
 rag/*
 !rag/README.md
 !rag/samples/
+
+# 起動スクリプトが出す埋め込みサーバーのログ
+logs/

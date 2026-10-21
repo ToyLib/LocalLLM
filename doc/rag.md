@@ -5,13 +5,24 @@ LLM が知らない個人的なメモや手元の資料についても、資料�
 
 ## 動かし方
 
-チャット用のサーバー (8080 番) に加えて、埋め込み用のサーバーを 8081 番で起動します。
+チャット用のサーバー (8080 番) に加えて、埋め込み用のサーバーを 8081 番で使います。
+llama-server の起動スクリプトが、両方をまとめて起動します。
 
 | OS | スクリプト |
 | --- | --- |
-| Linux | [scripts/embed-server-linux.sh](../scripts/embed-server-linux.sh) |
-| macOS | [scripts/embed-server-macos.sh](../scripts/embed-server-macos.sh) |
-| Windows | [scripts/embed-server-windows.ps1](../scripts/embed-server-windows.ps1) |
+| Linux | [scripts/llama-server-linux.sh](../scripts/llama-server-linux.sh) |
+| macOS | [scripts/llama-server-macos.sh](../scripts/llama-server-macos.sh) |
+| Windows | [scripts/llama-server-windows.ps1](../scripts/llama-server-windows.ps1) |
+
+```bash
+./scripts/llama-server-macos.sh
+```
+
+- メニューでモデルを選ぶと、埋め込み用のサーバーを裏で起動してから、チャット用のサーバーを手前で起動します。
+- 埋め込み用のサーバーのログは `logs/embed-server.log` に出ます (Windows は標準エラーが `logs/embed-server.err.log`)。
+- チャット用のサーバーを Ctrl+C で止めると、埋め込み用のサーバーも一緒に止まります。
+- 埋め込み用のサーバーがすぐに終了した場合 (8081 番が使用中など) は、ログの末尾を表示して、チャット用のサーバーを起動せずに止まります。
+- RAG を使わないときは `--no-embed` (Windows は `-NoEmbed`) を付けると、チャット用のサーバーだけを起動します。
 
 埋め込みモデルは多言語に対応した BGE-M3 (`ggml-org/bge-m3-Q8_0-GGUF`、約 600 MB) です。初回起動時に自動でダウンロードされます。
 
