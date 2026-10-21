@@ -10,6 +10,10 @@ namespace
 constexpr const char* SERVER_URL =
     "http://127.0.0.1:8080/v1/chat/completions";
 
+// RAG 用の埋め込みサーバー (llama-server --embeddings)
+constexpr const char* EMBED_URL =
+    "http://127.0.0.1:8081/v1/embeddings";
+
 constexpr const char* SYSTEM_PROMPT =
     "あなたは親切なAIアシスタントです。"
     "日本語で回答してください。";
@@ -161,6 +165,36 @@ int ProgressCallback(
     return context->cancel->load() ? 1 : 0;
 }
 
+// 埋め込みの受信状態 (ストリーミングではないので全部ためる)
+struct EmbedContext
+{
+    std::string body;
+    const std::atomic<bool>* cancel = nullptr;
+};
+
+size_t EmbedWriteCallback(
+    char* data,
+    size_t size,
+    size_t count,
+    void* userdata)
+{
+    auto* context =
+        static_cast<EmbedContext*>(userdata);
+
+    context->body.append(data, size * count);
+    return size * count;
+}
+
+int EmbedProgressCallback(
+    void* userdata,
+    curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+{
+    auto* context =
+        static_cast<EmbedContext*>(userdata);
+
+    return context->cancel->load() ? 1 : 0;
+}
+
 } // namespace
 
 json CreateHistory()
@@ -270,4 +304,114 @@ std::string AskLLM(
     }
 
     return context.answer;
+}
+
+std::vector<std::vector<float>> Embed(
+    const std::vector<std::string>& inputs,
+    const std::atomic<bool>& cancel)
+{
+    CURL* curl = curl_easy_init();
+
+    if (!curl)
+    {
+        throw std::runtime_error("curl_easy_init failed");
+    }
+
+    json request = {
+        {"model", "embed"},
+        {"input", inputs}
+    };
+
+    std::string body = request.dump();
+
+    EmbedContext context;
+    context.cancel = &cancel;
+
+    curl_slist* headers = nullptr;
+    headers = curl_slist_append(
+        headers, "Content-Type: application/json");
+
+    curl_easy_setopt(
+        curl, CURLOPT_URL, EMBED_URL);
+
+    curl_easy_setopt(
+        curl, CURLOPT_HTTPHEADER, headers);
+
+    curl_easy_setopt(
+        curl, CURLOPT_POSTFIELDS, body.c_str());
+
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEFUNCTION, EmbedWriteCallback);
+
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEDATA, &context);
+
+    curl_easy_setopt(
+        curl, CURLOPT_XFERINFOFUNCTION, EmbedProgressCallback);
+
+    curl_easy_setopt(
+        curl, CURLOPT_XFERINFODATA, &context);
+
+    curl_easy_setopt(
+        curl, CURLOPT_NOPROGRESS, 0L);
+
+    // サーバーが起動していないときに待たされないように
+    curl_easy_setopt(
+        curl, CURLOPT_CONNECTTIMEOUT, 3L);
+
+    CURLcode result = curl_easy_perform(curl);
+
+    long status = 0;
+    curl_easy_getinfo(
+        curl, CURLINFO_RESPONSE_CODE, &status);
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (cancel.load())
+    {
+        throw std::runtime_error("Cancelled");
+    }
+
+    if (result != CURLE_OK)
+    {
+        throw std::runtime_error(
+            std::string("Embedding server: ") +
+            curl_easy_strerror(result));
+    }
+
+    if (status != 200)
+    {
+        throw std::runtime_error(
+            "Embedding server: HTTP " + std::to_string(status));
+    }
+
+    json response = json::parse(context.body, nullptr, false);
+
+    if (response.is_discarded() ||
+        !response.contains("data") ||
+        !response["data"].is_array() ||
+        response["data"].size() != inputs.size())
+    {
+        throw std::runtime_error("Invalid embedding response");
+    }
+
+    // index の順に並べ直す
+    std::vector<std::vector<float>> vectors(inputs.size());
+
+    for (const auto& item : response["data"])
+    {
+        const size_t index = item.value("index", size_t{0});
+
+        if (index >= vectors.size() ||
+            !item.contains("embedding"))
+        {
+            throw std::runtime_error("Invalid embedding response");
+        }
+
+        vectors[index] =
+            item["embedding"].get<std::vector<float>>();
+    }
+
+    return vectors;
 }

@@ -14,6 +14,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 日本語の表示・入力 (同梱のフリーフォント M PLUS Rounded 1c Bold を使用し、足りない文字は OS の日本語フォントで補完)
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
+- `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
 
 ## 必要なもの
 
@@ -66,6 +67,8 @@ cmake --build build
 
    使い方は OS ごとの手順書を参照してください。
 
+   RAG を使う場合は、埋め込み用のサーバーも 8081 番で起動します ([scripts/embed-server-macos.sh](scripts/embed-server-macos.sh) など。詳しくは [doc/rag.md](doc/rag.md))。
+
 2. アプリを起動します。
 
    ```bash
@@ -81,6 +84,8 @@ cmake --build build
 | 中断ボタン | 受信を止める (途中までの回答は残る) |
 | クリアボタン | 会話履歴をリセット |
 | メッセージを右クリック | コピー |
+| 資料を参照 (RAG) | `rag/` の資料を質問に添えるかどうか |
+| 再読込ボタン | `rag/` を読み直してインデックスを更新 |
 
 送信に失敗した場合、その質問は履歴から外されて入力欄に戻ります。
 
@@ -91,6 +96,8 @@ cmake --build build
 | サーバーの URL | `src/llm_client.cpp` の `SERVER_URL` |
 | システムプロンプト | `src/llm_client.cpp` の `SYSTEM_PROMPT` |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
+| 埋め込みサーバーの URL (RAG) | `src/llm_client.cpp` の `EMBED_URL` |
+| RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
 | フォントサイズ | `src/font.cpp` の `FONT_SIZE` |
 | 背景の不透明度 | `src/main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
 | フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`) |
@@ -117,13 +124,15 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
 | `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
-| `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析 |
-| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md)) |
+| `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
+| `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
+| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `vcpkg.json` | vcpkg のマニフェスト (Windows 用) |
-| `scripts/` | llama-server の起動スクリプト (Linux / macOS / Windows) |
+| `scripts/` | llama-server の起動スクリプト (チャット用・埋め込み用、Linux / macOS / Windows) |
+| `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 
 ## ライセンス

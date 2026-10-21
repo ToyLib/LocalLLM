@@ -64,6 +64,7 @@ add_executable(LocalLLM
     src/font.cpp
     src/ime.cpp
     src/llm_client.cpp
+    src/rag.cpp
 )
 
 # ソースは UTF-8 (日本語の文字列リテラルを含む)
@@ -86,3 +87,15 @@ add_custom_command(TARGET LocalLLM POST_BUILD
         $<TARGET_FILE_DIR:LocalLLM>/Asset
     VERBATIM
 )
+
+# RAG 用の文書 (rag/) を実行ファイルの隣に同期する
+# 文書だけを変えたときも反映されるように、ビルドのたびに実行する
+# (消したファイルが残らないように、いったん削除してからコピー)
+add_custom_target(sync_rag ALL
+    COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:LocalLLM>/rag
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/rag
+        $<TARGET_FILE_DIR:LocalLLM>/rag
+    VERBATIM
+)
+add_dependencies(LocalLLM sync_rag)

@@ -9,3 +9,8 @@ imgui.ini
 *.swp
 *~
 .DS_Store
+
+# RAG 用文書: サンプルと説明だけをコミットし、ユーザーが追加したものは無視
+rag/*
+!rag/README.md
+!rag/samples/
