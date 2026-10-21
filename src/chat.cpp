@@ -4,7 +4,8 @@
 
 #include <SDL3/SDL.h>
 
-namespace {
+namespace
+{
 
 // ワーカースレッドからUIスレッドを起こすためのイベント
 Uint32 g_wakeEvent = 0;
@@ -26,7 +27,9 @@ void RegisterWakeEvent()
 void JoinWorker(ChatState& state)
 {
     if (state.worker.joinable())
+    {
         state.worker.join();
+    }
 }
 
 void SendPrompt(ChatState& state, const std::string& prompt)
@@ -41,7 +44,8 @@ void SendPrompt(ChatState& state, const std::string& prompt)
         state.messages.push_back({"user", prompt});
 
         // 履歴全体を送信
-        for (const auto& message : state.messages) {
+        for (const auto& message : state.messages)
+        {
             history.push_back({
                 {"role", message.role},
                 {"content", message.content}
@@ -58,7 +62,8 @@ void SendPrompt(ChatState& state, const std::string& prompt)
     state.cancel = false;
 
     state.worker = std::thread([&state, history, prompt] {
-        try {
+        try
+        {
             AskLLM(
                 history,
                 [&state](std::string_view text) {
@@ -70,13 +75,15 @@ void SendPrompt(ChatState& state, const std::string& prompt)
                 },
                 state.cancel);
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             std::lock_guard lock(state.mutex);
 
             const bool keepPartial =
                 state.cancel && !state.messages.back().content.empty();
 
-            if (!keepPartial) {
+            if (!keepPartial)
+            {
                 // 失敗した質問は履歴から取り除き、入力欄に戻す
                 state.messages.pop_back();
                 state.messages.pop_back();
@@ -84,7 +91,9 @@ void SendPrompt(ChatState& state, const std::string& prompt)
             }
 
             if (!state.cancel)
+            {
                 state.error = e.what();
+            }
         }
 
         {

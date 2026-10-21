@@ -5,7 +5,8 @@
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
-namespace {
+namespace
+{
 
 void DrawMessages(ChatState& state)
 {
@@ -15,7 +16,8 @@ void DrawMessages(ChatState& state)
     const bool atBottom =
         ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
 
-    for (size_t i = 0; i < state.messages.size(); ++i) {
+    for (size_t i = 0; i < state.messages.size(); ++i)
+    {
         const auto& message = state.messages[i];
         const bool isUser = message.role == "user";
 
@@ -27,13 +29,20 @@ void DrawMessages(ChatState& state)
             "%s", isUser ? "You" : "AI");
 
         if (message.content.empty() && state.busy)
+        {
             ImGui::TextDisabled("考え中...");
+        }
         else
+        {
             ImGui::TextWrapped("%s", message.content.c_str());
+        }
 
-        if (ImGui::BeginPopupContextItem("copy")) {
+        if (ImGui::BeginPopupContextItem("copy"))
+        {
             if (ImGui::MenuItem("コピー"))
+            {
                 ImGui::SetClipboardText(message.content.c_str());
+            }
             ImGui::EndPopup();
         }
 
@@ -45,7 +54,9 @@ void DrawMessages(ChatState& state)
     }
 
     if (atBottom)
+    {
         ImGui::SetScrollHereY(1.0f);
+    }
 }
 
 } // namespace
@@ -69,7 +80,8 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
         busy = state.busy;
         error = state.error;
 
-        if (!state.restoredPrompt.empty()) {
+        if (!state.restoredPrompt.empty())
+        {
             input = std::move(state.restoredPrompt);
             state.restoredPrompt.clear();
             focusInput = true;
@@ -92,13 +104,16 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
     ImGui::EndChild();
 
     if (!error.empty())
+    {
         ImGui::TextColored(
             ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error: %s", error.c_str());
+    }
 
     // 入力欄 (Enterで送信 / Shift+Enterで改行)
     const float buttonWidth = ImGui::CalcTextSize("クリア").x * 2.5f;
 
-    if (focusInput) {
+    if (focusInput)
+    {
         ImGui::SetKeyboardFocusHere();
         focusInput = false;
     }
@@ -118,16 +133,21 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
 
     bool send = false;
 
-    if (busy) {
+    if (busy)
+    {
         if (ImGui::Button("中断", buttonSize))
+        {
             state.cancel = true;
+        }
     }
-    else {
+    else
+    {
         send = ImGui::Button("送信", buttonSize) || entered;
     }
 
     ImGui::BeginDisabled(busy);
-    if (ImGui::Button("クリア", buttonSize)) {
+    if (ImGui::Button("クリア", buttonSize))
+    {
         std::lock_guard lock(state.mutex);
         state.messages.clear();
         state.error.clear();
@@ -140,9 +160,12 @@ void DrawUI(ChatState& state, std::string& input, bool& focusInput)
     DrawComposition();
 
     if (entered)
+    {
         focusInput = true;
+    }
 
-    if (send && input.find_first_not_of(" \t\r\n") != std::string::npos) {
+    if (send && input.find_first_not_of(" \t\r\n") != std::string::npos)
+    {
         SendPrompt(state, input);
         input.clear();
         focusInput = true;

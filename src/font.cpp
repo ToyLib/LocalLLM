@@ -4,7 +4,8 @@
 
 #include <string>
 
-namespace {
+namespace
+{
 
 // 同梱フォント (実行ファイルからの相対パス)
 constexpr const char* BUNDLED_FONT_PATH =
@@ -43,14 +44,18 @@ void LoadFont(ImGuiIO& io)
 {
     bool loaded = false;
 
-    if (const char* env = SDL_getenv("LOCALLLM_FONT")) {
+    if (const char* env = SDL_getenv("LOCALLLM_FONT"))
+    {
         loaded = TryLoadFont(io, env);
 
         if (!loaded)
+        {
             SDL_Log("Font not found: %s", env);
+        }
     }
 
-    if (!loaded) {
+    if (!loaded)
+    {
         const char* basePath = SDL_GetBasePath();
         const std::string bundled =
             std::string(basePath ? basePath : "") + BUNDLED_FONT_PATH;
@@ -58,16 +63,22 @@ void LoadFont(ImGuiIO& io)
         loaded = TryLoadFont(io, bundled.c_str());
 
         if (!loaded)
+        {
             SDL_Log("Font not found: %s", bundled.c_str());
+        }
     }
 
     // 先に読めたフォントがあれば、OSのフォントは補完として合成する
-    for (const char* path : SYSTEM_FONT_PATHS) {
+    for (const char* path : SYSTEM_FONT_PATHS)
+    {
         if (TryLoadFont(io, path, loaded))
+        {
             return;
+        }
     }
 
-    if (!loaded) {
+    if (!loaded)
+    {
         SDL_Log("Japanese font not found (using default font)");
         io.Fonts->AddFontDefault();
     }

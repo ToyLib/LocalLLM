@@ -4,7 +4,8 @@
 
 #include <stdexcept>
 
-namespace {
+namespace
+{
 
 constexpr const char* SERVER_URL =
     "http://127.0.0.1:8080/v1/chat/completions";
@@ -14,7 +15,8 @@ constexpr const char* SYSTEM_PROMPT =
     "日本語で回答してください。";
 
 // SSE受信状態
-struct StreamContext {
+struct StreamContext
+{
     std::string buffer;
     std::string answer;
     std::string error;
@@ -29,47 +31,64 @@ void ProcessLine(
     StreamContext& context)
 {
     if (line.empty() || line.front() == ':')
+    {
         return;
+    }
 
     if (!line.starts_with("data:"))
+    {
         return;
+    }
 
     line.remove_prefix(5);
 
     if (!line.empty() && line.front() == ' ')
+    {
         line.remove_prefix(1);
+    }
 
-    if (line == "[DONE]") {
+    if (line == "[DONE]")
+    {
         context.done = true;
         return;
     }
 
     if (line.empty())
+    {
         return;
+    }
 
     json data = json::parse(line, nullptr, false);
 
     if (data.is_discarded())
+    {
         throw std::runtime_error("Invalid SSE JSON");
+    }
 
     if (data.contains("error"))
+    {
         throw std::runtime_error(data["error"].dump());
+    }
 
     if (!data.contains("choices") ||
         !data["choices"].is_array() ||
         data["choices"].empty())
+    {
         return;
+    }
 
     const auto& choice = data["choices"][0];
 
     if (!choice.contains("delta"))
+    {
         return;
+    }
 
     const auto& delta = choice["delta"];
 
     if (delta.contains("content") &&
-        delta["content"].is_string()) {
-
+        delta["content"].is_string())
+    {
         std::string text =
             delta["content"].get<std::string>();
 
@@ -77,7 +96,9 @@ void ProcessLine(
         context.answer += text;
 
         if (*context.onDelta)
+        {
             (*context.onDelta)(text);
+        }
     }
 }
 
@@ -93,30 +114,35 @@ size_t WriteCallback(
 
     const size_t bytes = size * count;
 
-    try {
+    try
+    {
         context->buffer.append(data, bytes);
 
         size_t pos;
 
         while ((pos = context->buffer.find('\n'))
-               != std::string::npos) {
-
+               != std::string::npos)
+        {
             std::string line =
                 context->buffer.substr(0, pos);
 
             context->buffer.erase(0, pos + 1);
 
             if (!line.empty() && line.back() == '\r')
+            {
                 line.pop_back();
+            }
 
             ProcessLine(line, *context);
         }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e)
+    {
         context->error = e.what();
         return 0;
     }
-    catch (...) {
+    catch (...)
+    {
         context->error = "Unknown streaming error";
         return 0;
     }
@@ -155,7 +181,9 @@ std::string AskLLM(
     CURL* curl = curl_easy_init();
 
     if (!curl)
+    {
         throw std::runtime_error("curl_easy_init failed");
+    }
 
     json request = {
         {"model", "local"},
@@ -215,21 +243,31 @@ std::string AskLLM(
     curl_easy_cleanup(curl);
 
     if (cancel.load())
+    {
         throw std::runtime_error("Cancelled");
+    }
 
     if (!context.error.empty())
+    {
         throw std::runtime_error(context.error);
+    }
 
     if (result != CURLE_OK)
+    {
         throw std::runtime_error(curl_easy_strerror(result));
+    }
 
     if (status != 200)
+    {
         throw std::runtime_error(
             "HTTP " + std::to_string(status));
+    }
 
     if (!context.done)
+    {
         throw std::runtime_error(
             "Stream ended before [DONE]");
+    }
 
     return context.answer;
 }

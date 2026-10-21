@@ -11,7 +11,8 @@
 
 #include <string>
 
-namespace {
+namespace
+{
 
 // チャット画面の背景の不透明度 (文字は不透明のまま)
 // macOS では透明ウィンドウにするとタイトルバーまで透けるため不透明にする
@@ -27,14 +28,16 @@ constexpr SDL_WindowFlags TRANSPARENT_FLAG = SDL_WINDOW_TRANSPARENT;
 
 int main(int, char**)
 {
-    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+    {
         SDL_Log("curl initialization failed");
         return 1;
     }
 
     SetImeHint();
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
     }
@@ -53,14 +56,16 @@ int main(int, char**)
         TRANSPARENT_FLAG |
         SDL_WINDOW_HIGH_PIXEL_DENSITY);
 
-    if (!window) {
+    if (!window)
+    {
         SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
         return 1;
     }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
 
-    if (!renderer) {
+    if (!renderer)
+    {
         SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
         return 1;
     }
@@ -99,29 +104,36 @@ int main(int, char**)
     int framesToRender = 3;
     bool done = false;
 
-    while (!done) {
+    while (!done)
+    {
         SDL_Event event;
 
         bool hasEvent = framesToRender > 0
             ? SDL_PollEvent(&event)
             : SDL_WaitEventTimeout(&event, 500);
 
-        while (hasEvent) {
+        while (hasEvent)
+        {
             ImGui_ImplSDL3_ProcessEvent(&event);
             HandleCompositionEvent(event);
 
             if (event.type == SDL_EVENT_QUIT)
+            {
                 done = true;
+            }
 
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                 event.window.windowID == SDL_GetWindowID(window))
+            {
                 done = true;
+            }
 
             framesToRender = 3;
             hasEvent = SDL_PollEvent(&event);
         }
 
-        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
+        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
+        {
             SDL_Delay(10);
             continue;
         }
@@ -145,7 +157,9 @@ int main(int, char**)
         SDL_RenderPresent(renderer);
 
         if (framesToRender > 0)
+        {
             --framesToRender;
+        }
     }
 
     // 受信中なら中断してから終了

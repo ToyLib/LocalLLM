@@ -4,10 +4,12 @@
 
 #include <string>
 
-namespace {
+namespace
+{
 
 // IMEで変換中 (未確定) の文字列
-struct Composition {
+struct Composition
+{
     std::string text;
     int start = -1;     // 選択中の文節の先頭 (文字数)
     int length = -1;    // 選択中の文節の長さ (文字数)
@@ -26,16 +28,21 @@ void SetImeData(
     g_imeData = *data;
 
     if (g_setImeData)
+    {
         g_setImeData(context, viewport, data);
+    }
 }
 
 // UTF-8文字列の先頭から count 文字進めた位置
 const char* AdvanceChars(const char* text, const char* end, int count)
 {
-    while (text < end && count > 0) {
+    while (text < end && count > 0)
+    {
         ++text;
         while (text < end && (static_cast<unsigned char>(*text) & 0xC0) == 0x80)
+        {
             ++text;
+        }
         --count;
     }
     return text;
@@ -58,13 +65,15 @@ void InstallImeHook()
 
 void HandleCompositionEvent(const SDL_Event& event)
 {
-    if (event.type == SDL_EVENT_TEXT_EDITING) {
+    if (event.type == SDL_EVENT_TEXT_EDITING)
+    {
         g_composition.text = event.edit.text ? event.edit.text : "";
         g_composition.start = event.edit.start;
         g_composition.length = event.edit.length;
     }
     else if (event.type == SDL_EVENT_TEXT_INPUT ||
-             event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+             event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+    {
         g_composition = {};
     }
 }
@@ -72,7 +81,9 @@ void HandleCompositionEvent(const SDL_Event& event)
 void DrawComposition()
 {
     if (g_composition.text.empty() || !g_imeData.WantVisible)
+    {
         return;
+    }
 
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
 
@@ -99,12 +110,15 @@ void DrawComposition()
         ImVec2(x, underlineY), ImVec2(x + width, underlineY), textColor);
 
     if (g_composition.start < 0)
+    {
         return;
+    }
 
     const char* selBegin = AdvanceChars(begin, end, g_composition.start);
     const float selX = x + ImGui::CalcTextSize(begin, selBegin).x;
 
-    if (g_composition.length > 0) {
+    if (g_composition.length > 0)
+    {
         const char* selEnd =
             AdvanceChars(selBegin, end, g_composition.length);
         const float selWidth = ImGui::CalcTextSize(selBegin, selEnd).x;
@@ -113,7 +127,8 @@ void DrawComposition()
             ImVec2(selX, underlineY), ImVec2(selX + selWidth, underlineY),
             textColor, 3.0f);
     }
-    else {
+    else
+    {
         // 変換中のカーソル
         drawList->AddLine(
             ImVec2(selX, y), ImVec2(selX, y + height), textColor);

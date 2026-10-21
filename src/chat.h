@@ -6,13 +6,15 @@
 #include <thread>
 #include <vector>
 
-struct Message {
+struct Message
+{
     std::string role;
     std::string content;
 };
 
 // UIスレッドとワーカースレッドで共有する会話状態
-struct ChatState {
+struct ChatState
+{
     std::mutex mutex;
 
     // systemプロンプトを除いた会話 (user / assistant)
