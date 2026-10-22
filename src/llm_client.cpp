@@ -14,10 +14,6 @@ constexpr const char* SERVER_URL =
 constexpr const char* EMBED_URL =
     "http://127.0.0.1:8081/v1/embeddings";
 
-constexpr const char* SYSTEM_PROMPT =
-    "あなたは親切なAIアシスタントです。"
-    "日本語で回答してください。";
-
 // SSE受信状態
 struct StreamContext
 {
@@ -196,16 +192,6 @@ int EmbedProgressCallback(
 }
 
 } // namespace
-
-json CreateHistory()
-{
-    return json::array({
-        {
-            {"role", "system"},
-            {"content", SYSTEM_PROMPT}
-        }
-    });
-}
 
 std::string AskLLM(
     const json& messages,

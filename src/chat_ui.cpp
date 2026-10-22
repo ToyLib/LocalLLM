@@ -23,10 +23,15 @@ void DrawMessages(ChatState& state)
 
         ImGui::PushID(static_cast<int>(i));
 
+        // AI の回答には、答えたエージェントの名前を出す
+        const char* name = isUser ? "You"
+            : message.agent.empty() ? "AI"
+            : message.agent.c_str();
+
         ImGui::TextColored(
             isUser ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f)
                    : ImVec4(0.55f, 0.9f, 0.55f, 1.0f),
-            "%s", isUser ? "You" : "AI");
+            "%s", name);
 
         if (message.content.empty() && state.busy)
         {

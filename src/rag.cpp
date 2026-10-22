@@ -36,6 +36,9 @@ constexpr float MIN_SCORE = 0.5f;
 // チャンクの分け方を変えたら上げる (保存済みのインデックスを作り直す)
 constexpr int INDEX_VERSION = 2;
 
+// ルーターに見せる、見出しの無い資料の書き出しの文字数
+constexpr size_t PREVIEW_CHARS = 40;
+
 // インデックスの保存先 (実行ファイルの隣)
 constexpr const char* INDEX_FILE = "rag-index.json";
 
@@ -776,23 +779,90 @@ std::vector<RagHit> SearchRag(
     return hits;
 }
 
-std::vector<std::string> ListRagSources(RagState& state)
+std::vector<std::string> DescribeRagSources(RagState& state)
 {
-    std::vector<std::string> sources;
+    // 資料ごとの見出し (階層の最後の部分) と、最初のチャンクの本文
+    struct Source
+    {
+        std::vector<std::string> headings;
+        std::string firstText;
+    };
+
+    std::map<std::string, Source> sources;
 
     {
         std::lock_guard lock(state.mutex);
 
         for (const auto& chunk : state.chunks)
         {
-            sources.push_back(chunk.source);
+            auto& source = sources[chunk.source];
+
+            if (source.firstText.empty())
+            {
+                source.firstText = chunk.text;
+            }
+
+            if (chunk.heading.empty())
+            {
+                continue;
+            }
+
+            const size_t separator = chunk.heading.rfind(" > ");
+            std::string heading = separator == std::string::npos
+                ? chunk.heading
+                : chunk.heading.substr(separator + 3);
+
+            if (std::find(source.headings.begin(), source.headings.end(),
+                          heading) == source.headings.end())
+            {
+                source.headings.push_back(std::move(heading));
+            }
         }
     }
 
-    std::sort(sources.begin(), sources.end());
-    sources.erase(std::unique(sources.begin(), sources.end()), sources.end());
+    std::vector<std::string> descriptions;
 
-    return sources;
+    for (const auto& [name, source] : sources)
+    {
+        std::string description = name + ": ";
+
+        if (!source.headings.empty())
+        {
+            for (size_t i = 0; i < source.headings.size(); ++i)
+            {
+                description += (i == 0 ? "" : " / ") + source.headings[i];
+            }
+        }
+        else
+        {
+            // 見出しが無いときは書き出しを見せる (文字の途中で切らない)
+            std::string preview;
+            size_t chars = 0;
+
+            for (const char c : source.firstText)
+            {
+                if (c == '\n' || c == '\r')
+                {
+                    preview += ' ';
+                    continue;
+                }
+
+                if (!IsContinuationByte(c) && ++chars > PREVIEW_CHARS)
+                {
+                    preview += "…";
+                    break;
+                }
+
+                preview += c;
+            }
+
+            description += preview;
+        }
+
+        descriptions.push_back(std::move(description));
+    }
+
+    return descriptions;
 }
 
 std::string BuildRagPrompt(

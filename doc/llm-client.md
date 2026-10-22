@@ -30,8 +30,6 @@ onDelta(text)  … テキスト片ごとに呼び出し元へ通知
 ```cpp
 using json = nlohmann::json;
 
-json CreateHistory();
-
 using DeltaCallback = std::function<void(std::string_view)>;
 
 struct LLMOptions
@@ -51,7 +49,6 @@ std::string AskLLM(
 
 | 名前 | 役割 |
 | --- | --- |
-| `CreateHistory()` | system プロンプトだけを入れた会話履歴 (JSON 配列) を作ります。呼び出し元はこの後ろに user / assistant のメッセージを追加して `AskLLM` に渡します。 |
 | `DeltaCallback` | 回答のテキスト片を受け取るコールバックです。`AskLLM` を呼んだスレッド (GUI ではワーカースレッド) から呼ばれます。 |
 | `LLMOptions` | 1 回の問い合わせごとの設定です。省略すると今までどおり `max_tokens: 1024` だけを付けます。`schema` を入れると `response_format` (`json_schema`) を、`disableThinking` を true にすると `chat_template_kwargs.enable_thinking = false` を付けます ([エージェント](agent.md) で使っています)。 |
 | `AskLLM()` | 会話履歴を送り、回答が終わるまで処理を返しません (ブロッキング)。戻り値は回答の全文です。失敗したときや中断されたときは `std::runtime_error` を投げます。 |
@@ -65,7 +62,6 @@ std::string AskLLM(
 | 定数 | 値 | 説明 |
 | --- | --- | --- |
 | `SERVER_URL` | `http://127.0.0.1:8080/v1/chat/completions` | 問い合わせ先 |
-| `SYSTEM_PROMPT` | 「あなたは親切なAIアシスタントです。日本語で回答してください。」 | 会話の先頭に入れる system メッセージ |
 
 リクエストの本文にはこのほかに次の値を入れています。
 
@@ -94,7 +90,7 @@ API はステートレスなので、毎回それまでの会話をすべて送�
 ]
 ```
 
-system メッセージは `CreateHistory()` が入れます。user と assistant のメッセージは GUI 側 (`src/chat.cpp` の `SendPrompt`) が画面に表示しているメッセージから組み立てます。
+system メッセージは、回答役のエージェント (`src/agent.cpp` の `RunAgent`) が先頭に入れます ([エージェント](agent.md))。user と assistant のメッセージは GUI 側 (`src/chat.cpp` の `SendPrompt`) が画面に表示しているメッセージから組み立てます。
 
 ## AskLLM の処理の流れ
 

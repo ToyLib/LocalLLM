@@ -51,7 +51,7 @@ bool DecideRag(
     const std::atomic<bool>& cancel,
     std::string& note)
 {
-    const auto sources = ListRagSources(rag);
+    const auto sources = DescribeRagSources(rag);
 
     if (sources.empty())
     {
@@ -59,10 +59,10 @@ bool DecideRag(
         return false;
     }
 
-    // 送信する履歴から system と今回の質問を除いたもの
+    // 送信する履歴から今回の質問を除いたもの
     json previous = json::array();
 
-    for (size_t i = 1; i + 1 < history.size(); ++i)
+    for (size_t i = 0; i + 1 < history.size(); ++i)
     {
         previous.push_back(history[i]);
     }
@@ -120,7 +120,8 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 {
     JoinWorker(state);
 
-    json history = CreateHistory();
+    // system プロンプトは回答役のエージェントが付ける
+    json history = json::array();
 
     {
         std::lock_guard lock(state.mutex);
@@ -150,64 +151,66 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
     state.worker = std::thread([&state, &rag, history, prompt, ragMode]() mutable {
         try
         {
-            if (ragMode != RagMode::Never)
+            std::string note;
+            bool useRag = ragMode == RagMode::Always;
+
+            if (ragMode == RagMode::Auto)
             {
-                // 資料は送信する質問にだけ添え、画面の履歴には残さない
-                std::string note;
-                bool useRag = true;
-
-                if (ragMode == RagMode::Auto)
-                {
-                    useRag = DecideRag(rag, history, prompt, state.cancel, note);
-
-                    {
-                        std::lock_guard lock(state.mutex);
-                        state.messages.back().note = note;
-                    }
-                    WakeUI();
-                }
-
-                if (useRag)
-                {
-                    // ルーターの判断の下に、参照した資料を続ける
-                    if (!note.empty())
-                    {
-                        note += "\n";
-                    }
-
-                    try
-                    {
-                        const auto hits = SearchRag(rag, prompt, state.cancel);
-
-                        if (!hits.empty())
-                        {
-                            history.back()["content"] =
-                                BuildRagPrompt(hits, prompt);
-                        }
-
-                        note += FormatSources(hits);
-                    }
-                    catch (const std::exception& e)
-                    {
-                        if (state.cancel)
-                        {
-                            throw;
-                        }
-
-                        // 検索できなくても、資料なしで回答は続ける
-                        note += std::string("資料を参照できませんでした: ") +
-                            e.what();
-                    }
-
-                    {
-                        std::lock_guard lock(state.mutex);
-                        state.messages.back().note = std::move(note);
-                    }
-                    WakeUI();
-                }
+                useRag = DecideRag(rag, history, prompt, state.cancel, note);
             }
 
-            AskLLM(
+            // 資料を使う質問はアシスタント、使わない質問は侍が答える
+            const Agent answerer = useRag ? CreateAssistant() : CreateSamurai();
+
+            {
+                std::lock_guard lock(state.mutex);
+                state.messages.back().agent = answerer.name;
+                state.messages.back().note = note;
+            }
+            WakeUI();
+
+            if (useRag)
+            {
+                // 資料は送信する質問にだけ添え、画面の履歴には残さない
+                // (ルーターの判断の下に、参照した資料を続ける)
+                if (!note.empty())
+                {
+                    note += "\n";
+                }
+
+                try
+                {
+                    const auto hits = SearchRag(rag, prompt, state.cancel);
+
+                    if (!hits.empty())
+                    {
+                        history.back()["content"] =
+                            BuildRagPrompt(hits, prompt);
+                    }
+
+                    note += FormatSources(hits);
+                }
+                catch (const std::exception& e)
+                {
+                    if (state.cancel)
+                    {
+                        throw;
+                    }
+
+                    // 検索できなくても、資料なしで回答は続ける
+                    note += std::string("資料を参照できませんでした: ") +
+                        e.what();
+                }
+
+                {
+                    std::lock_guard lock(state.mutex);
+                    state.messages.back().note = std::move(note);
+                }
+                WakeUI();
+            }
+
+            RunAgent(
+                answerer,
                 history,
                 [&state](std::string_view text) {
                     {

@@ -23,6 +23,9 @@ struct Message
 
     // 回答の下に表示する補足 (RAG で参照した資料など)
     std::string note;
+
+    // 回答したエージェントの名前 (assistant のみ)
+    std::string agent;
 };
 
 // UIスレッドとワーカースレッドで共有する会話状態

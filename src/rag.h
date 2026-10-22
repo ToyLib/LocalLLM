@@ -51,8 +51,9 @@ std::vector<RagHit> SearchRag(
     const std::string& query,
     const std::atomic<bool>& cancel);
 
-// インデックスにある資料の名前 (rag/ からの相対パス) を返す
-std::vector<std::string> ListRagSources(RagState& state);
+// インデックスにある資料ごとに「名前: 見出し / 見出し …」の 1 行を返す
+// (見出しが無い資料は書き出し。ルーターに資料の中身の見当をつけさせる)
+std::vector<std::string> DescribeRagSources(RagState& state);
 
 // 検索結果を参考資料として質問に添えたプロンプトを作る
 std::string BuildRagPrompt(

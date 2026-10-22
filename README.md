@@ -15,7 +15,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
 - `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
-- 資料を参照するかを質問ごとに判断するルーターエージェント ([説明](doc/agent.md))
+- 資料を参照するかを質問ごとに判断するルーターと、口調の違う 2 つの回答役 (資料に基づくアシスタント / 時代劇口調の侍) ([説明](doc/agent.md))
 
 ## 必要なもの
 
@@ -95,7 +95,7 @@ cmake --build build
 | 項目 | 場所 |
 | --- | --- |
 | サーバーの URL | `src/llm_client.cpp` の `SERVER_URL` |
-| システムプロンプト | `src/llm_client.cpp` の `SYSTEM_PROMPT` |
+| システムプロンプト | `src/agent.cpp` の `CreateAssistant` / `CreateSamurai` / `CreateRouter` |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | 埋め込みサーバーの URL (RAG) | `src/llm_client.cpp` の `EMBED_URL` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
@@ -122,7 +122,7 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | --- | --- |
 | `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
 | `src/chat.cpp` / `src/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
-| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出しと、RAG の要否を決めるルーター |
+| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出し (ルーター / アシスタント / 侍) |
 | `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
 | `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |

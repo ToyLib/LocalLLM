@@ -29,6 +29,13 @@ json RunAgentJson(
     const json& messages,
     const std::atomic<bool>& cancel);
 
+// 回答役のエージェント (口調を変えて、どちらが答えたか分かるようにする)
+// 資料を参照する質問に、資料に基づいて普通の口調で答える
+Agent CreateAssistant();
+
+// 資料の要らない質問 (雑談や一般的な質問) に、時代劇の侍の口調で答える
+Agent CreateSamurai();
+
 // ルーターの判断
 struct RouteDecision
 {
@@ -38,7 +45,7 @@ struct RouteDecision
 
 // 質問に rag/ の資料が必要かをルーターに判断させる
 // history は直前までの会話 (指示語を含む質問の判断に使う)
-// sources は rag/ にある資料の名前
+// sources は rag/ にある資料の説明 (DescribeRagSources の結果)
 RouteDecision RouteQuestion(
     const json& history,
     const std::string& question,
