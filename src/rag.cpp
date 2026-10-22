@@ -776,6 +776,25 @@ std::vector<RagHit> SearchRag(
     return hits;
 }
 
+std::vector<std::string> ListRagSources(RagState& state)
+{
+    std::vector<std::string> sources;
+
+    {
+        std::lock_guard lock(state.mutex);
+
+        for (const auto& chunk : state.chunks)
+        {
+            sources.push_back(chunk.source);
+        }
+    }
+
+    std::sort(sources.begin(), sources.end());
+    sources.erase(std::unique(sources.begin(), sources.end()), sources.end());
+
+    return sources;
+}
+
 std::string BuildRagPrompt(
     const std::vector<RagHit>& hits,
     const std::string& question)

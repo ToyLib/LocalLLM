@@ -15,6 +15,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
 - `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
+- 資料を参照するかを質問ごとに判断するルーターエージェント ([説明](doc/agent.md))
 
 ## 必要なもの
 
@@ -84,7 +85,7 @@ cmake --build build
 | 中断ボタン | 受信を止める (途中までの回答は残る) |
 | クリアボタン | 会話履歴をリセット |
 | メッセージを右クリック | コピー |
-| 資料を参照 (RAG) | `rag/` の資料を質問に添えるかどうか |
+| 資料 (RAG) | `rag/` の資料を質問に添えるか (自動: ルーターが判断 / 常に / 使わない) |
 | 再読込ボタン | `rag/` を読み直してインデックスを更新 |
 
 送信に失敗した場合、その質問は履歴から外されて入力欄に戻ります。
@@ -121,12 +122,13 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 | --- | --- |
 | `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
 | `src/chat.cpp` / `src/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
+| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出しと、RAG の要否を決めるルーター |
 | `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
 | `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
 | `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
-| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md)) |
+| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |

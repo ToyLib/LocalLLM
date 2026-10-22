@@ -51,6 +51,9 @@ std::vector<RagHit> SearchRag(
     const std::string& query,
     const std::atomic<bool>& cancel);
 
+// インデックスにある資料の名前 (rag/ からの相対パス) を返す
+std::vector<std::string> ListRagSources(RagState& state);
+
 // 検索結果を参考資料として質問に添えたプロンプトを作る
 std::string BuildRagPrompt(
     const std::vector<RagHit>& hits,

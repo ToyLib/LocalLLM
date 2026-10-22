@@ -8,6 +8,14 @@
 
 struct RagState;
 
+// 質問に rag/ の資料を添えるか
+enum class RagMode
+{
+    Auto,    // ルーターが質問ごとに判断する
+    Always,
+    Never
+};
+
 struct Message
 {
     std::string role;
@@ -35,7 +43,7 @@ struct ChatState
     std::thread worker;
 
     // 質問に rag/ の資料を添えるか (UIスレッドだけが触る)
-    bool useRag = true;
+    RagMode ragMode = RagMode::Auto;
 };
 
 // ワーカースレッドからUIスレッドを起こすためのイベントを登録する

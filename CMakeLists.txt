@@ -71,6 +71,7 @@ target_link_libraries(imgui PUBLIC SDL3::SDL3)
 
 add_executable(LocalLLM
     src/main.cpp
+    src/agent.cpp
     src/chat.cpp
     src/chat_ui.cpp
     src/font.cpp

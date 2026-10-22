@@ -210,7 +210,8 @@ json CreateHistory()
 std::string AskLLM(
     const json& messages,
     const DeltaCallback& onDelta,
-    const std::atomic<bool>& cancel)
+    const std::atomic<bool>& cancel,
+    const LLMOptions& options)
 {
     CURL* curl = curl_easy_init();
 
@@ -222,9 +223,28 @@ std::string AskLLM(
     json request = {
         {"model", "local"},
         {"messages", messages},
-        {"max_tokens", 1024},
+        {"max_tokens", options.maxTokens},
         {"stream", true}
     };
+
+    if (options.temperature >= 0.0f)
+    {
+        request["temperature"] = options.temperature;
+    }
+
+    if (!options.schema.is_null())
+    {
+        // llama-server は文法で出力を縛るので、小さいモデルでも形が崩れない
+        request["response_format"] = {
+            {"type", "json_schema"},
+            {"json_schema", {{"name", "result"}, {"schema", options.schema}}}
+        };
+    }
+
+    if (options.disableThinking)
+    {
+        request["chat_template_kwargs"] = {{"enable_thinking", false}};
+    }
 
     std::string body = request.dump();
 
