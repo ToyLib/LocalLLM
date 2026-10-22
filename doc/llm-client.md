@@ -34,16 +34,26 @@ json CreateHistory();
 
 using DeltaCallback = std::function<void(std::string_view)>;
 
+struct LLMOptions
+{
+    int maxTokens = 1024;
+    float temperature = -1.0f;   // 負ならサーバーの既定値
+    json schema = nullptr;       // JSON スキーマ (出力の形を縛る)
+    bool disableThinking = false;
+};
+
 std::string AskLLM(
     const json& messages,
     const DeltaCallback& onDelta,
-    const std::atomic<bool>& cancel);
+    const std::atomic<bool>& cancel,
+    const LLMOptions& options = {});
 ```
 
 | 名前 | 役割 |
 | --- | --- |
 | `CreateHistory()` | system プロンプトだけを入れた会話履歴 (JSON 配列) を作ります。呼び出し元はこの後ろに user / assistant のメッセージを追加して `AskLLM` に渡します。 |
 | `DeltaCallback` | 回答のテキスト片を受け取るコールバックです。`AskLLM` を呼んだスレッド (GUI ではワーカースレッド) から呼ばれます。 |
+| `LLMOptions` | 1 回の問い合わせごとの設定です。省略すると今までどおり `max_tokens: 1024` だけを付けます。`schema` を入れると `response_format` (`json_schema`) を、`disableThinking` を true にすると `chat_template_kwargs.enable_thinking = false` を付けます ([エージェント](agent.md) で使っています)。 |
 | `AskLLM()` | 会話履歴を送り、回答が終わるまで処理を返しません (ブロッキング)。戻り値は回答の全文です。失敗したときや中断されたときは `std::runtime_error` を投げます。 |
 
 `AskLLM` は処理が終わるまで戻らないため、GUI から呼ぶときは必ず別スレッドで実行します。
@@ -188,4 +198,4 @@ GUI の「中断」ボタンを押すと、`std::atomic<bool>` の `cancel` が 
 
 - 接続先を変えるときは、`SERVER_URL` を書き換えます。OpenAI 互換の API を持つサーバー (Ollama や LM Studio など) であれば、そのまま使えます。
 - 認証が必要なサーバーでは、`Authorization: Bearer ...` のヘッダーを `curl_slist_append` で追加する必要があります。
-- `model` や `max_tokens` など、ほかのパラメーターは `AskLLM` の中の `request` で変更できます。
+- `max_tokens` や `temperature` は `LLMOptions` で変えられます。`model` など、ほかのパラメーターは `AskLLM` の中の `request` で変更できます。

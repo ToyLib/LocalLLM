@@ -77,7 +77,26 @@ void DrawRagBar(ChatState& state, RagState& rag)
         status = rag.status;
     }
 
-    ImGui::Checkbox("資料を参照 (RAG)", &state.useRag);
+    // 資料を添えるか (自動ならルーターが質問ごとに判断する)
+    ImGui::TextUnformatted("資料 (RAG):");
+
+    ImGui::SameLine();
+    if (ImGui::RadioButton("自動", state.ragMode == RagMode::Auto))
+    {
+        state.ragMode = RagMode::Auto;
+    }
+
+    ImGui::SameLine();
+    if (ImGui::RadioButton("常に", state.ragMode == RagMode::Always))
+    {
+        state.ragMode = RagMode::Always;
+    }
+
+    ImGui::SameLine();
+    if (ImGui::RadioButton("使わない", state.ragMode == RagMode::Never))
+    {
+        state.ragMode = RagMode::Never;
+    }
 
     ImGui::SameLine();
     ImGui::BeginDisabled(building);
