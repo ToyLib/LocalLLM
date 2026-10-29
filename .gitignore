@@ -17,3 +17,8 @@ rag/*
 
 # 起動スクリプトが出す埋め込みサーバーのログ
 logs/
+
+# Python 版
+__pycache__/
+python/rag-index.json
+python/rag-index.json.tmp
