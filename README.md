@@ -109,6 +109,28 @@ LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
 
 背景が透けない場合は、デスクトップ環境がウィンドウの透過に対応していない可能性があります。
 
+## Python 版
+
+`python/` に、同じ機能を Python + Tk で作ったクライアントがあります (標準ライブラリだけで動き、ビルドは不要)。
+Python 3.10 以上と、Tk が使える Python が必要です (macOS の Homebrew なら `brew install python-tk`、Ubuntu なら `sudo apt install python3-tk`)。
+
+```bash
+python3 python/main.py
+```
+
+- 操作と設定は C++ 版と同じです (サーバーの URL は `python/llm_client.py`、システムプロンプトは `python/agent.py`、フォントサイズは `python/chat_ui.py` の `FONT_SIZE`)。
+- RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
+- フォントは OS の標準フォントを使います。背景の半透明には対応していません。
+
+| ファイル | 内容 (対応する C++ のファイル) |
+| --- | --- |
+| `python/main.py` | 起動 (`main.cpp`) |
+| `python/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
+| `python/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
+| `python/agent.py` | ルーター / アシスタント / 侍 (`agent.cpp`) |
+| `python/llm_client.py` | ストリーミング送信と SSE の解析、埋め込みの取得 (`llm_client.cpp`) |
+| `python/rag.py` | RAG のインデックス作成と検索 (`rag.cpp`) |
+
 ## VS Code
 
 `.vscode` に設定を入れてあります。C/C++ と CMake Tools の拡張機能を入れて開いてください。
