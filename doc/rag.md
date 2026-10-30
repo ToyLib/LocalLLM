@@ -12,7 +12,7 @@ llama-server の起動スクリプトが、両方をまとめて起動します�
 | --- | --- |
 | Linux | [scripts/llama-server-linux.sh](../scripts/llama-server-linux.sh) |
 | macOS | [scripts/llama-server-macos.sh](../scripts/llama-server-macos.sh) |
-| Windows | [scripts/llama-server-windows.ps1](../scripts/llama-server-windows.ps1) |
+| Windows | [scripts/llama-server-windows.bat](../scripts/llama-server-windows.bat) |
 
 ```bash
 ./scripts/llama-server-macos.sh
@@ -22,7 +22,7 @@ llama-server の起動スクリプトが、両方をまとめて起動します�
 - 埋め込み用のサーバーのログは `logs/embed-server.log` に出ます (Windows は標準エラーが `logs/embed-server.err.log`)。
 - チャット用のサーバーを Ctrl+C で止めると、埋め込み用のサーバーも一緒に止まります。
 - 埋め込み用のサーバーがすぐに終了した場合 (8081 番が使用中など) は、ログの末尾を表示して、チャット用のサーバーを起動せずに止まります。
-- RAG を使わないときは `--no-embed` (Windows は `-NoEmbed`) を付けると、チャット用のサーバーだけを起動します。
+- RAG を使わないときは `--no-embed` を付けると、チャット用のサーバーだけを起動します。
 
 埋め込みモデルは多言語に対応した BGE-M3 (`ggml-org/bge-m3-Q8_0-GGUF`、約 600 MB) です。初回起動時に自動でダウンロードされます。
 

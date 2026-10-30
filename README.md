@@ -64,11 +64,11 @@ cmake --build build
    | --- | --- |
    | Linux | [scripts/llama-server-linux.sh](scripts/llama-server-linux.sh) |
    | macOS | [scripts/llama-server-macos.sh](scripts/llama-server-macos.sh) |
-   | Windows | [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) |
+   | Windows | [scripts/llama-server-windows.bat](scripts/llama-server-windows.bat) |
 
    使い方は OS ごとの手順書を参照してください。
 
-   スクリプトは RAG 用の埋め込みサーバー (8081 番) も一緒に起動します。不要なら `--no-embed` (Windows は `-NoEmbed`) を付けてください (詳しくは [doc/rag.md](doc/rag.md))。
+   スクリプトは RAG 用の埋め込みサーバー (8081 番) も一緒に起動します。不要なら `--no-embed` を付けてください (詳しくは [doc/rag.md](doc/rag.md))。
 
 2. アプリを起動します。
 

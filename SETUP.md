@@ -85,7 +85,8 @@ LocalLLM/
 ├── scripts/
 │   ├── llama-server-linux.sh
 │   ├── llama-server-macos.sh
-│   └── llama-server-windows.ps1
+│   ├── llama-server-windows.bat
+│   └── llama-server-windows.ps1   (bat から呼ばれる本体)
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)

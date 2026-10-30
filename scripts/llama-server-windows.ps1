@@ -11,7 +11,8 @@
 #   LLAMA_SERVER llama-server.exe (e.g. from the prebuilt release zip)
 #
 # Run:
-#   powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+#   scripts\llama-server-windows.bat  (calls this script with the policy bypassed)
+#   or: powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
 #   (add -NoEmbed to start the chat server only, without RAG)
 # --------------------------------------------------
 

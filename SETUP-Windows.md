@@ -218,23 +218,23 @@ AMD Radeon などの GPU が Vulkan デバイスとして表示されること�
 
 ### 起動スクリプト
 
-モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) に置いてある。
-
-Windows の既定の設定では PowerShell スクリプトの実行が禁止されているため、そのときだけ実行を許可して起動する (システムの設定は変わらない)。
+モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-windows.bat](scripts/llama-server-windows.bat) に置いてある。エクスプローラーからダブルクリックするか、コマンドプロンプト / PowerShell で実行する。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+.\scripts\llama-server-windows.bat
 ```
+
+中身は [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) を、そのときだけ PowerShell の実行ポリシーを外して呼び出している (システムの設定は変わらない)。
 
 メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
 
-あわせて RAG 用の埋め込みサーバー (BGE-M3、`127.0.0.1:8081`、初回は約 600 MB をダウンロード) を裏で起動し、チャット用のサーバーを止めると一緒に止める。RAG を使わないときは `-NoEmbed` を付ける。詳しくは [doc/rag.md](doc/rag.md) を参照。
+あわせて RAG 用の埋め込みサーバー (BGE-M3、`127.0.0.1:8081`、初回は約 600 MB をダウンロード) を裏で起動し、チャット用のサーバーを止めると一緒に止める。RAG を使わないときは `--no-embed` を付ける (`-NoEmbed` でもよい)。詳しくは [doc/rag.md](doc/rag.md) を参照。
 
 llama-server.exe は既定で `%USERPROFILE%\Repos\llama.cpp\build\bin\Release\llama-server.exe` を使う。場所が違う場合 (ビルド済みのバイナリを使う場合など) は環境変数で指定する。
 
 ```powershell
 $env:LLAMA_SERVER = "C:\path\to\llama-server.exe"
-powershell -ExecutionPolicy Bypass -File .\scripts\llama-server-windows.ps1
+.\scripts\llama-server-windows.bat
 ```
 
 ### モデル別の起動

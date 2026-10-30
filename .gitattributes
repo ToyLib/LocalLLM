@@ -1,2 +1,5 @@
 # シェルスクリプトは OS によらず LF (Windows で取得しても Linux / macOS で動くように)
 *.sh text eol=lf
+
+# バッチファイルは CRLF (LF だと cmd がラベルや行を誤読することがある)
+*.bat text eol=crlf
