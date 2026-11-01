@@ -3,8 +3,8 @@
     "configurePresets": [
         {
             "name": "debug",
-            "displayName": "Debug (Ninja)",
-            "generator": "Ninja",
+            "displayName": "Debug (Unix Makefiles)",
+            "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
@@ -18,8 +18,8 @@
         },
         {
             "name": "release",
-            "displayName": "Release (Ninja)",
-            "generator": "Ninja",
+            "displayName": "Release (Unix Makefiles)",
+            "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
@@ -33,7 +33,7 @@
         {
             "name": "windows",
             "displayName": "Windows (Visual Studio, x64)",
-            "description": "最新の Visual Studio のジェネレーターを使う (Ninja と開発者用シェルは不要。vcpkg は CMakeLists.txt が環境変数 VCPKG_ROOT から見つける)",
+            "description": "最新の Visual Studio のジェネレーターを使う (開発者用シェルは不要。vcpkg は CMakeLists.txt が環境変数 VCPKG_ROOT から見つける)",
             "binaryDir": "${sourceDir}/build",
             "architecture": {
                 "value": "x64",
@@ -50,6 +50,7 @@
         {
             "name": "debug",
             "configurePreset": "debug",
+            "jobs": 8,
             "condition": {
                 "type": "notEquals",
                 "lhs": "${hostSystemName}",
@@ -59,6 +60,7 @@
         {
             "name": "release",
             "configurePreset": "release",
+            "jobs": 8,
             "condition": {
                 "type": "notEquals",
                 "lhs": "${hostSystemName}",

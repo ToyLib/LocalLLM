@@ -16,7 +16,7 @@ LLM 本体は別プロセスの `llama-server` で実行し、クライアント
 | ハードウェア | GMKtec M6 Ultra |
 | GPU | AMD Radeon 760M |
 | 言語 | C++20 |
-| ビルド | CMake + Ninja |
+| ビルド | CMake + Make (Unix Makefiles) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl |
@@ -34,7 +34,6 @@ sudo apt update
 sudo apt install -y \
     build-essential \
     cmake \
-    ninja-build \
     pkg-config \
     git \
     curl \
@@ -46,9 +45,8 @@ sudo apt install -y \
 
 パッケージの役割：
 
-- `build-essential`：GCC、G++ などのコンパイラ
+- `build-essential`：GCC、G++ などのコンパイラと make
 - `cmake`：ビルドシステム
-- `ninja-build`：CMake のジェネレーター (VS Code の設定でも使用)
 - `pkg-config`：ライブラリの確認
 - `git`：ソース管理、Dear ImGui の取得
 - `curl`：サーバーの動作確認用コマンド
@@ -66,7 +64,7 @@ Dear ImGui は APT ではなく、初回の CMake configure 時に FetchContent 
 pkg-config --modversion sdl3
 curl-config --version
 cmake --version
-ninja --version
+make --version
 g++ --version
 ```
 
@@ -116,7 +114,7 @@ LocalLLM/
 | src/ime.h/.cpp | IME の変換中の文字列の表示 |
 | src/font.h/.cpp | 日本語フォントの読み込み |
 | src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
-| CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
+| CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | scripts/ | llama-server の起動スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
@@ -152,11 +150,11 @@ Vulkan は LLM サーバー側で使用する。
 Debug ビルド：
 
 ```bash
-cmake -S . -B build -G Ninja \
+cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-cmake --build build
+cmake --build build -j$(nproc)
 ```
 
 実行：
@@ -168,13 +166,15 @@ cmake --build build
 Release ビルド：
 
 ```bash
-cmake -S . -B build-release -G Ninja \
+cmake -S . -B build-release \
     -DCMAKE_BUILD_TYPE=Release
 
-cmake --build build-release
+cmake --build build-release -j$(nproc)
 ```
 
-上と同じ設定は [CMakePresets.json](CMakePresets.json) のプリセットにもまとめてあり、次のように短く書ける。VS Code のタスクと CMake Tools もこのプリセットを使う。
+ジェネレーターは CMake の標準 (Unix Makefiles) なので、`-G` の指定は不要。make は並列数を指定しないと1ファイルずつビルドするので、`-j` を付ける。
+
+上と同じ設定は [CMakePresets.json](CMakePresets.json) のプリセットにもまとめてあり、次のように短く書ける (プリセットは8並列でビルドする)。VS Code のタスクと CMake Tools もこのプリセットを使う。
 
 ```bash
 cmake --preset debug
@@ -185,7 +185,7 @@ Release は `release` プリセット (`build-release/`)。
 
 VS Code では Ctrl+Shift+B でビルド、F5 で Debug ビルドして gdb でデバッグできる。
 
-`build/` を別の場所からコピーした場合や移動した場合は、CMake のキャッシュがパスと合わずに configure が失敗する。そのときは `build/` を削除して作り直す。
+`build/` を別の場所からコピーした場合や移動した場合は、CMake のキャッシュがパスと合わずに configure が失敗する。そのときは `build/` を削除して作り直す。以前に Ninja で configure した `build/` / `build-release/` が残っている場合も、`Does not match the generator used previously` というエラーになるので、削除して作り直す。
 
 ## 6. 日本語フォントと入力
 

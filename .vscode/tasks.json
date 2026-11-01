@@ -1,6 +1,6 @@
 {
     // ビルド設定は CMakePresets.json を使う
-    // Linux / macOS: Ninja (debug / release)
+    // Linux / macOS: Unix Makefiles (debug / release)
     // Windows: Visual Studio ジェネレーター (windows)
     "version": "2.0.0",
     "options": {

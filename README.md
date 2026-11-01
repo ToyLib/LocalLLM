@@ -30,7 +30,7 @@ Linux (Ubuntu)、macOS、Windows でビルドできます。詳しい環境構�
 Ubuntu の場合は次のパッケージで動作を確認しています。
 
 ```bash
-sudo apt install build-essential cmake ninja-build \
+sudo apt install build-essential cmake \
     libsdl3-dev libcurl4-openssl-dev nlohmann-json3-dev fonts-noto-cjk
 ```
 
@@ -44,8 +44,8 @@ sudo apt install build-essential cmake ninja-build \
 ## ビルド
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
 初回の configure では Dear ImGui を取得するため、ネット接続が必要です。
@@ -152,7 +152,7 @@ python3 python/main.py
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
 | `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md)) |
 | `CMakeLists.txt` | ビルド設定 |
-| `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
+| `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
 | `scripts/` | llama-server の起動スクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |

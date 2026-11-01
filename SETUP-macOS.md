@@ -12,7 +12,7 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、Windows の手順は [SETUP-Windows.m
 | OS | macOS (Apple Silicon / Intel) |
 | パッケージ管理 | Homebrew |
 | コンパイラ | Apple Clang (Xcode Command Line Tools) |
-| ビルド | CMake + Ninja |
+| ビルド | CMake + Make (Unix Makefiles) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer、Metal) |
 | GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl (macOS 標準) |
@@ -23,7 +23,7 @@ Ubuntu の手順は [SETUP.md](SETUP.md)、Windows の手順は [SETUP-Windows.m
 
 ### Xcode Command Line Tools
 
-コンパイラ (Apple Clang) と git が入る。
+コンパイラ (Apple Clang)、make、git が入る。
 
 ```bash
 xcode-select --install
@@ -40,7 +40,6 @@ brew update
 
 brew install \
     cmake \
-    ninja \
     pkgconf \
     sdl3 \
     nlohmann-json
@@ -49,7 +48,6 @@ brew install \
 パッケージの役割：
 
 - `cmake`：ビルドシステム
-- `ninja`：CMake のジェネレーター (VS Code の設定でも使用)
 - `pkgconf`：ライブラリの確認 (`pkg-config` コマンド)
 - `sdl3`：ウィンドウ、イベント、2D 描画、IME 入力
 - `nlohmann-json`：JSON 処理
@@ -63,7 +61,7 @@ Dear ImGui は初回の CMake configure 時に FetchContent で GitHub から自
 pkg-config --modversion sdl3
 curl-config --version
 cmake --version
-ninja --version
+make --version
 clang++ --version
 ```
 
@@ -74,11 +72,11 @@ clang++ --version
 Debug ビルド：
 
 ```bash
-cmake -S . -B build -G Ninja \
+cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-cmake --build build
+cmake --build build -j$(sysctl -n hw.ncpu)
 ```
 
 実行：
@@ -90,16 +88,20 @@ cmake --build build
 Release ビルド：
 
 ```bash
-cmake -S . -B build-release -G Ninja \
+cmake -S . -B build-release \
     -DCMAKE_BUILD_TYPE=Release
 
-cmake --build build-release
+cmake --build build-release -j$(sysctl -n hw.ncpu)
 ```
+
+ジェネレーターは CMake の標準 (Unix Makefiles) なので、`-G` の指定は不要。make は並列数を指定しないと1ファイルずつビルドするので、`-j` を付ける。プリセット (`cmake --preset debug` / `cmake --build --preset debug`) も使え、プリセットは8並列でビルドする。
+
+以前に Ninja で configure した `build/` / `build-release/` が残っている場合は、`Does not match the generator used previously` というエラーになるので、削除してから configure し直す。
 
 CMake が SDL3 や nlohmann/json を見つけられない場合は、Homebrew のインストール先を指定する。
 
 ```bash
-cmake -S . -B build -G Ninja \
+cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_PREFIX_PATH="$(brew --prefix)"
 ```
