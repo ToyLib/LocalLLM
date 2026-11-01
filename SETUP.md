@@ -81,7 +81,6 @@ LocalLLM/
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md
 ├── LICENSE
-├── vcpkg.json          (Windows 用の依存ライブラリ)
 ├── scripts/
 │   ├── llama-server-linux.sh
 │   ├── llama-server-macos.sh
@@ -118,7 +117,6 @@ LocalLLM/
 | src/font.h/.cpp | 日本語フォントの読み込み |
 | src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Ninja、Windows: Visual Studio) |
-| vcpkg.json | vcpkg のマニフェスト (Windows でのみ使用) |
 | scripts/ | llama-server の起動スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |

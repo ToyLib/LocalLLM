@@ -13,7 +13,7 @@ if(CMAKE_HOST_WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 
     # 開発者用のシェル (Developer PowerShell for VS など) は VCPKG_ROOT を
     # Visual Studio 付属の vcpkg に書き換えるが、付属の vcpkg は
-    # baseline の無いこのプロジェクトのマニフェストを扱えない
+    # vcpkg install で入れたライブラリ (クラシックモード) を扱えない
     if(VCPKG_ROOT MATCHES "Microsoft Visual Studio")
         message(FATAL_ERROR
             "VCPKG_ROOT points to the vcpkg bundled with Visual Studio "
