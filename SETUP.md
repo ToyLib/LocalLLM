@@ -421,3 +421,4 @@ SDL3 Main Thread
 - Qwen、Gemma、Phi の切り替えはサーバー側で管理する。
 - IME の変換確定で押した Enter は IME が受け取るため送信されない (実機で確認済み)。
 - 背景の半透明表示は `SDL_WINDOW_TRANSPARENT` を使う。デスクトップ環境が透過に対応していない場合は透けない。
+- macOS では本文をタイトルバーの下まで広げ、タイトルバーも本文と同じ半透明にする (`src/macos_window.mm`)。

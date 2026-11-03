@@ -10,6 +10,7 @@
 | [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`) |
 | [ime.h](../src/ime.h) / [ime.cpp](../src/ime.cpp) | IME の変換中の文字列の表示 |
 | [font.h](../src/font.h) / [font.cpp](../src/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
+| [macos_window.h](../src/macos_window.h) / [macos_window.mm](../src/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
 LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md) を参照してください。
 
@@ -64,8 +65,10 @@ SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskL
 5. ディスプレイの拡大率 (`SDL_GetDisplayContentScale`) を取得し、900×700 に拡大率を掛けた大きさでウィンドウを作ります。
    - `SDL_WINDOW_HIGH_PIXEL_DENSITY` で、Retina などの高解像度ディスプレイでもぼやけずに描きます。
    - `SDL_WINDOW_HIDDEN` で作成し、中央に移動してから表示するので、ウィンドウが一瞬別の場所に見えることはありません。
-   - Linux と Windows では `SDL_WINDOW_TRANSPARENT` を付けて半透明にします。macOS ではタイトルバーまで透けてしまうため付けません (`TRANSPARENT_FLAG` と `WINDOW_OPACITY`)。
+   - `SDL_WINDOW_TRANSPARENT` を付けて、ウィンドウの背景を透明にします。
 6. `SDL_CreateRenderer()` でレンダラーを作り、VSync を有効にします。
+   - macOS では続けて `ApplyMacTitleBarStyle()` を呼びます。透明にしただけではタイトルバーだけが素通しで透けてしまうため、本文をタイトルバーの下まで広げ (`NSWindowStyleMaskFullSizeContentView`)、タイトルバーも ImGui の半透明の背景で塗って本文と一体にします。
+   - タイトルバーに中身が隠れないよう、毎フレーム `GetMacTitleBarHeight()` で高さを求め、`DrawUI` に `topInset` として渡します。背景はタイトルバーの下まで塗り、中身はその下から並べます。
 7. ImGui を初期化します。
    - `io.IniFilename = nullptr` で、ウィンドウ配置を保存する `imgui.ini` を作らないようにします。
    - キーボードでのフォーカス移動 (`NavEnableKeyboard`) を有効にします。

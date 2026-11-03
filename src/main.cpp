@@ -10,20 +10,17 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
+#if defined(__APPLE__)
+#include "macos_window.h"
+#endif
+
 #include <string>
 
 namespace
 {
 
 // チャット画面の背景の不透明度 (文字は不透明のまま)
-// macOS では透明ウィンドウにするとタイトルバーまで透けるため不透明にする
-#if defined(__APPLE__)
-constexpr float WINDOW_OPACITY = 1.0f;
-constexpr SDL_WindowFlags TRANSPARENT_FLAG = 0;
-#else
 constexpr float WINDOW_OPACITY = 0.85f;
-constexpr SDL_WindowFlags TRANSPARENT_FLAG = SDL_WINDOW_TRANSPARENT;
-#endif
 
 } // namespace
 
@@ -54,7 +51,7 @@ int main(int, char**)
         static_cast<int>(700 * scale),
         SDL_WINDOW_RESIZABLE |
         SDL_WINDOW_HIDDEN |
-        TRANSPARENT_FLAG |
+        SDL_WINDOW_TRANSPARENT |
         SDL_WINDOW_HIGH_PIXEL_DENSITY);
 
     if (!window)
@@ -70,6 +67,10 @@ int main(int, char**)
         SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
         return 1;
     }
+
+#if defined(__APPLE__)
+    ApplyMacTitleBarStyle(window);
+#endif
 
     SDL_SetRenderVSync(renderer, 1);
     SDL_SetWindowPosition(
@@ -147,7 +148,13 @@ int main(int, char**)
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-        DrawUI(state, rag, input, focusInput);
+#if defined(__APPLE__)
+        const float topInset = GetMacTitleBarHeight(window);
+#else
+        const float topInset = 0.0f;
+#endif
+
+        DrawUI(state, rag, input, focusInput, topInset);
 
         ImGui::Render();
         SDL_SetRenderScale(

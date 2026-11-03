@@ -118,7 +118,11 @@ void DrawRagBar(ChatState& state, RagState& rag)
 } // namespace
 
 void DrawUI(
-    ChatState& state, RagState& rag, std::string& input, bool& focusInput)
+    ChatState& state,
+    RagState& rag,
+    std::string& input,
+    bool& focusInput,
+    float topInset)
 {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -151,6 +155,9 @@ void DrawUI(
         lineHeight * 4.0f + style.FramePadding.y * 2.0f;
     const float errorHeight =
         error.empty() ? 0.0f : lineHeight + style.ItemSpacing.y;
+
+    // 背景はタイトルバーの下まで塗り、中身はその下から並べる
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topInset);
 
     DrawRagBar(state, rag);
 

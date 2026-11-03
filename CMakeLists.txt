@@ -80,6 +80,15 @@ add_executable(LocalLLM
     src/rag.cpp
 )
 
+# macOS ではタイトルバーの設定に AppKit を使う (Objective-C++)
+if(APPLE)
+    enable_language(OBJCXX)
+    target_sources(LocalLLM PRIVATE src/macos_window.mm)
+    set_source_files_properties(src/macos_window.mm
+        PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_link_libraries(LocalLLM PRIVATE "-framework AppKit")
+endif()
+
 # ソースは UTF-8 (日本語の文字列リテラルを含む)
 if(MSVC)
     target_compile_options(imgui PRIVATE /utf-8)
