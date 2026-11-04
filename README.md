@@ -95,7 +95,7 @@ cmake --build build --parallel
 | 項目 | 場所 |
 | --- | --- |
 | サーバーの URL | `src/llm_client.cpp` の `SERVER_URL` |
-| システムプロンプト | `src/agent.cpp` の `CreateAssistant` / `CreateSamurai` / `CreateRouter` |
+| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | 埋め込みサーバーの URL (RAG) | `src/llm_client.cpp` の `EMBED_URL` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |

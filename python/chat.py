@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 import rag
-from agent import create_assistant, create_samurai, route_question, run_agent
+from agent import create_assistant, create_general, route_question, run_agent
 from llm_client import CancelToken
 
 
@@ -143,8 +143,8 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                 use_rag, note = _decide_rag(
                     rag_state, history, prompt, state.cancel)
 
-            # 資料を使う質問はアシスタント、使わない質問は侍が答える
-            answerer = create_assistant() if use_rag else create_samurai()
+            # 資料を使う質問はアシスタント、使わない質問は汎用の回答役が答える
+            answerer = create_assistant() if use_rag else create_general()
 
             with state.lock:
                 state.messages[-1].agent = answerer.name

@@ -28,7 +28,7 @@
 }
 ```
 
-- キーは `router` / `assistant` / `samurai` の 3 つです。
+- キーは `router` / `assistant` / `general` の 3 つです。`general` は資料の要らない質問に答える汎用の回答役で、既定のプロンプトでは侍の口調にしています。
 - `system_prompt` は文字列か、文字列の配列です。配列は区切りなしでつなげて 1 つのプロンプトにします。
 - 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても次の質問から反映されます。
 - C++ 版は実行ファイルの隣の `config/agents.json` を読みます (ビルドのたびに `config/` がコピーされます)。Python 版はリポジトリの `config/agents.json` を読みます。
@@ -118,14 +118,14 @@ RouteDecision RouteQuestion(const json& history, const std::string& question,
 | `Agent` | 役割 (system プロンプト) と、1 回の問い合わせの設定 (`LLMOptions`) |
 | `RunAgent()` | system プロンプトを先頭に付けて `AskLLM` を呼ぶ。`messages` は user / assistant だけでよい |
 | `RunAgentJson()` | `RunAgent` の回答を JSON として読む (`options.schema` を入れておく) |
-| `CreateAssistant()` / `CreateSamurai()` | 回答役のエージェントを作る |
+| `CreateAssistant()` / `CreateGeneral()` | 回答役のエージェントを作る |
 | `RouteQuestion()` | ルーターを作って呼び、資料が必要かの判断 (`RouteDecision`) を返す |
 
 どれも `AskLLM` と同じくブロッキングなので、ワーカースレッドから呼びます。
 
 ## エージェントを増やすとき
 
-`config/agents.json` にエントリーを足し、`agent.cpp` の `CreateRouter()` や `CreateSamurai()` と同じように `LoadAgent("キー")` で `Agent` を作り、`RunAgent` / `RunAgentJson` で呼びます。
+`config/agents.json` にエントリーを足し、`agent.cpp` の `CreateRouter()` や `CreateGeneral()` と同じように `LoadAgent("キー")` で `Agent` を作り、`RunAgent` / `RunAgentJson` で呼びます。
 呼び出しはワーカースレッド (`chat.cpp` の `SendPrompt`) の中に足します。
 
 - 呼ぶ回数のぶんだけ回答が遅くなります。画面に見せない段階は `maxTokens` を小さくしてください。

@@ -33,8 +33,9 @@ json RunAgentJson(
 // 資料を参照する質問に、資料に基づいて普通の口調で答える
 Agent CreateAssistant();
 
-// 資料の要らない質問 (雑談や一般的な質問) に、時代劇の侍の口調で答える
-Agent CreateSamurai();
+// 資料の要らない質問 (雑談や一般的な質問) に答える
+// 口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)
+Agent CreateGeneral();
 
 // ルーターの判断
 struct RouteDecision

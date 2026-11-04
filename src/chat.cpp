@@ -159,8 +159,8 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
                 useRag = DecideRag(rag, history, prompt, state.cancel, note);
             }
 
-            // 資料を使う質問はアシスタント、使わない質問は侍が答える
-            const Agent answerer = useRag ? CreateAssistant() : CreateSamurai();
+            // 資料を使う質問はアシスタント、使わない質問は汎用の回答役が答える
+            const Agent answerer = useRag ? CreateAssistant() : CreateGeneral();
 
             {
                 std::lock_guard lock(state.mutex);

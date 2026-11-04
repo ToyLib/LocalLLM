@@ -121,10 +121,11 @@ def create_assistant() -> Agent:
     return _load_agent("assistant")
 
 
-def create_samurai() -> Agent:
-    """資料の要らない質問 (雑談や一般的な質問) に、時代劇の侍の口調で答える"""
+def create_general() -> Agent:
+    """資料の要らない質問 (雑談や一般的な質問) に答える
+    口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)"""
 
-    return _load_agent("samurai")
+    return _load_agent("general")
 
 
 def run_agent(

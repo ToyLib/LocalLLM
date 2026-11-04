@@ -147,9 +147,9 @@ Agent CreateAssistant()
     return LoadAgent("assistant");
 }
 
-Agent CreateSamurai()
+Agent CreateGeneral()
 {
-    return LoadAgent("samurai");
+    return LoadAgent("general");
 }
 
 std::string RunAgent(
