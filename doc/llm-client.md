@@ -57,11 +57,12 @@ std::string AskLLM(
 
 ## 設定値
 
-[src/llm_client.cpp](../src/llm_client.cpp) の先頭で定数として定義しています。
+接続先は [config/server.json](../config/server.json) に書きます (`config.cpp` の `ConfigString` で、送信のたびに読みます)。
 
-| 定数 | 値 | 説明 |
+| キー | 既定値 | 説明 |
 | --- | --- | --- |
-| `SERVER_URL` | `http://127.0.0.1:8080/v1/chat/completions` | 問い合わせ先 |
+| `chat_url` | `http://127.0.0.1:8080/v1/chat/completions` | 問い合わせ先 |
+| `embed_url` | `http://127.0.0.1:8081/v1/embeddings` | 埋め込み (RAG) の問い合わせ先 |
 
 リクエストの本文にはこのほかに次の値を入れています。
 
@@ -101,7 +102,7 @@ system メッセージは、回答役のエージェント (`src/agent.cpp` の 
 
    | オプション | 設定内容 |
    | --- | --- |
-   | `CURLOPT_URL` | `SERVER_URL` |
+   | `CURLOPT_URL` | `config/server.json` の `chat_url` |
    | `CURLOPT_HTTPHEADER` | `Content-Type: application/json` と `Accept: text/event-stream` |
    | `CURLOPT_POSTFIELDS` | リクエストの本文 (これを設定すると POST になります) |
    | `CURLOPT_WRITEFUNCTION` / `CURLOPT_WRITEDATA` | 受信データを `WriteCallback` に `StreamContext` 付きで渡します |
@@ -192,6 +193,6 @@ GUI の「中断」ボタンを押すと、`std::atomic<bool>` の `cancel` が 
 
 ## 別のサーバーに問い合わせたいとき
 
-- 接続先を変えるときは、`SERVER_URL` を書き換えます。OpenAI 互換の API を持つサーバー (Ollama や LM Studio など) であれば、そのまま使えます。
+- 接続先を変えるときは、`config/server.json` の `chat_url` を書き換えます (ビルドし直す必要はありません。ビルド済みの C++ 版は `build/config/server.json` を読みます)。OpenAI 互換の API を持つサーバー (Ollama や LM Studio など) であれば、そのまま使えます。
 - 認証が必要なサーバーでは、`Authorization: Bearer ...` のヘッダーを `curl_slist_append` で追加する必要があります。
 - `max_tokens` や `temperature` は `LLMOptions` で変えられます。`model` など、ほかのパラメーターは `AskLLM` の中の `request` で変更できます。

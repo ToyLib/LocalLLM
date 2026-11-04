@@ -92,7 +92,7 @@ LOCALLLM_RAG_DIR=~/Documents/notes ./build/LocalLLM
 
 | 項目 | 場所 |
 | --- | --- |
-| 埋め込みサーバーの URL | `src/llm_client.cpp` の `EMBED_URL` |
+| 埋め込みサーバーの URL | `config/server.json` の `embed_url` |
 | チャンクの最大文字数 | `src/rag.cpp` の `MAX_CHUNK_CHARS` (変えたら `INDEX_VERSION` を上げる) |
 | 添える資料の数 | `src/rag.cpp` の `TOP_K` |
 | 類似度の下限 | `src/rag.cpp` の `MIN_SCORE` |

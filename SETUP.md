@@ -328,7 +328,7 @@ Hugging Face から取得したモデルは、通常 `~/.cache/huggingface/hub/`
 
 ## 8. クライアントとサーバーの接続
 
-接続先 (`llm_client.cpp` の `SERVER_URL`)：
+接続先 (`config/server.json` の `chat_url`)：
 
 ```text
 http://127.0.0.1:8080/v1/chat/completions

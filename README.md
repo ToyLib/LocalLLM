@@ -92,12 +92,23 @@ cmake --build build --parallel
 
 ## 設定
 
+サーバーの URL と system プロンプトは `config/` の JSON ファイルに書きます。
+ビルドのたびに実行ファイルの隣 (`build/config/`) にコピーされ、アプリは送信のたびに読み直すので、書き換えると再起動しなくても次の質問から反映されます。
+環境変数 `LOCALLLM_CONFIG_DIR` で別のフォルダを指定できます。
+
+```json
+{
+  "chat_url": "http://127.0.0.1:8080/v1/chat/completions",
+  "embed_url": "http://127.0.0.1:8081/v1/embeddings"
+}
+```
+
 | 項目 | 場所 |
 | --- | --- |
-| サーバーの URL | `src/llm_client.cpp` の `SERVER_URL` |
-| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`) |
+| サーバーの URL | `config/server.json` の `chat_url` |
+| 埋め込みサーバーの URL (RAG) | `config/server.json` の `embed_url` |
+| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`、[説明](doc/agent.md)) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
-| 埋め込みサーバーの URL (RAG) | `src/llm_client.cpp` の `EMBED_URL` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
 | フォントサイズ | `src/font.cpp` の `FONT_SIZE` |
 | 背景の不透明度 | `src/main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
@@ -118,7 +129,7 @@ Python 3.10 以上と、Tk が使える Python が必要です (macOS の Homebr
 python3 python/main.py
 ```
 
-- 操作と設定は C++ 版と同じです (サーバーの URL は `python/llm_client.py`、システムプロンプトは `python/agent.py`、フォントサイズは `python/chat_ui.py` の `FONT_SIZE`)。
+- 操作と設定は C++ 版と同じです (サーバーの URL とシステムプロンプトはリポジトリの `config/` を読みます。フォントサイズは `python/chat_ui.py` の `FONT_SIZE`)。
 - RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
 - フォントは OS の標準フォントを使います。背景の半透明には対応していません。
 
@@ -127,7 +138,8 @@ python3 python/main.py
 | `python/main.py` | 起動 (`main.cpp`) |
 | `python/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
 | `python/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
-| `python/agent.py` | ルーター / アシスタント / 侍 (`agent.cpp`) |
+| `python/agent.py` | ルーター / アシスタント / 汎用の回答役 (`agent.cpp`) |
+| `python/config.py` | `config/` の設定ファイルの読み込み (`config.cpp`) |
 | `python/llm_client.py` | ストリーミング送信と SSE の解析、埋め込みの取得 (`llm_client.cpp`) |
 | `python/rag.py` | RAG のインデックス作成と検索 (`rag.cpp`) |
 

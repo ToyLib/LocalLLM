@@ -1,5 +1,7 @@
 #include "llm_client.h"
 
+#include "config.h"
+
 #include <curl/curl.h>
 
 #include <stdexcept>
@@ -7,12 +9,9 @@
 namespace
 {
 
-constexpr const char* SERVER_URL =
-    "http://127.0.0.1:8080/v1/chat/completions";
-
-// RAG 用の埋め込みサーバー (llama-server --embeddings)
-constexpr const char* EMBED_URL =
-    "http://127.0.0.1:8081/v1/embeddings";
+// サーバーの URL は config/server.json に書く
+// chat_url: チャットのサーバー、embed_url: RAG 用の埋め込みサーバー (llama-server --embeddings)
+constexpr const char* SERVER_CONFIG = "server.json";
 
 // SSE受信状態
 struct StreamContext
@@ -199,6 +198,8 @@ std::string AskLLM(
     const std::atomic<bool>& cancel,
     const LLMOptions& options)
 {
+    const std::string url = ConfigString(SERVER_CONFIG, "chat_url");
+
     CURL* curl = curl_easy_init();
 
     if (!curl)
@@ -245,7 +246,7 @@ std::string AskLLM(
         headers, "Accept: text/event-stream");
 
     curl_easy_setopt(
-        curl, CURLOPT_URL, SERVER_URL);
+        curl, CURLOPT_URL, url.c_str());
 
     curl_easy_setopt(
         curl, CURLOPT_HTTPHEADER, headers);
@@ -316,6 +317,8 @@ std::vector<std::vector<float>> Embed(
     const std::vector<std::string>& inputs,
     const std::atomic<bool>& cancel)
 {
+    const std::string url = ConfigString(SERVER_CONFIG, "embed_url");
+
     CURL* curl = curl_easy_init();
 
     if (!curl)
@@ -338,7 +341,7 @@ std::vector<std::vector<float>> Embed(
         headers, "Content-Type: application/json");
 
     curl_easy_setopt(
-        curl, CURLOPT_URL, EMBED_URL);
+        curl, CURLOPT_URL, url.c_str());
 
     curl_easy_setopt(
         curl, CURLOPT_HTTPHEADER, headers);

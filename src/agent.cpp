@@ -1,12 +1,8 @@
 #include "agent.h"
 
-#include <SDL3/SDL.h>
+#include "config.h"
 
-#include <filesystem>
-#include <fstream>
 #include <stdexcept>
-
-namespace fs = std::filesystem;
 
 namespace
 {
@@ -15,56 +11,17 @@ namespace
 constexpr size_t ROUTER_HISTORY_MESSAGES = 4;
 constexpr size_t ROUTER_HISTORY_BYTES = 300;
 
-fs::path Utf8ToPath(const std::string& text)
-{
-    return fs::path(std::u8string(text.begin(), text.end()));
-}
-
-std::string PathToUtf8(const fs::path& path)
-{
-    const std::u8string text = path.generic_u8string();
-    return std::string(text.begin(), text.end());
-}
-
-// エージェントの設定ファイル
-// 環境変数 LOCALLLM_AGENTS_FILE、無ければ実行ファイルの隣の config/agents.json
-fs::path AgentsFile()
-{
-    if (const char* env = SDL_getenv("LOCALLLM_AGENTS_FILE"))
-    {
-        return Utf8ToPath(env);
-    }
-
-    const char* basePath = SDL_GetBasePath();
-    return Utf8ToPath(basePath ? basePath : "") / "config" / "agents.json";
-}
-
-// 設定ファイルから key のエージェントの名前と system プロンプトを読む
+// config/agents.json から key のエージェントの名前と system プロンプトを読む
 // 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
 // system_prompt は文字列か、文字列の配列 (つなげて1つにする)
 Agent LoadAgent(const std::string& key)
 {
-    const fs::path path = AgentsFile();
-    std::ifstream file(path, std::ios::binary);
-
-    if (!file)
-    {
-        throw std::runtime_error(
-            "エージェントの設定ファイルを開けません: " + PathToUtf8(path));
-    }
-
-    const json config = json::parse(file, nullptr, false);
-
-    if (config.is_discarded() || !config.is_object())
-    {
-        throw std::runtime_error(
-            "エージェントの設定ファイルを JSON として読めません: " + PathToUtf8(path));
-    }
+    const json config = LoadConfig("agents.json");
 
     if (!config.contains(key) || !config[key].is_object())
     {
         throw std::runtime_error(
-            "エージェントの設定ファイルに " + key + " がありません: " + PathToUtf8(path));
+            "設定ファイル agents.json に " + key + " がありません");
     }
 
     const json& entry = config[key];

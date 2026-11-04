@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
-SERVER_URL = "http://127.0.0.1:8080/v1/chat/completions"
+import config
 
-# RAG 用の埋め込みサーバー (llama-server --embeddings)
-EMBED_URL = "http://127.0.0.1:8081/v1/embeddings"
+# サーバーの URL は config/server.json に書く
+# chat_url: チャットのサーバー、embed_url: RAG 用の埋め込みサーバー (llama-server --embeddings)
+SERVER_CONFIG = "server.json"
 
 # 受信したテキスト片ごとに呼ばれる (ワーカースレッドから呼ばれる)
 DeltaCallback = Callable[[str], None]
@@ -200,13 +201,14 @@ def ask_llm(
     if options.disable_thinking:
         request["chat_template_kwargs"] = {"enable_thinking": False}
 
+    url = config.get_string(SERVER_CONFIG, "chat_url")
     answer: list[str] = []
     done = False
     connection = None
 
     try:
         connection, response = _post(
-            SERVER_URL, request, {"Accept": "text/event-stream"},
+            url, request, {"Accept": "text/event-stream"},
             cancel, connect_timeout=None)
 
         if response.status == 200:
@@ -246,13 +248,14 @@ def embed(inputs: list[str], cancel: CancelToken) -> list[list[float]]:
     """埋め込みサーバーで文章をベクトルに変換する (inputs と同じ順で返す)
     cancel されると Cancelled を投げる"""
 
+    url = config.get_string(SERVER_CONFIG, "embed_url")
     request = {"model": "embed", "input": inputs}
     connection = None
 
     try:
         # サーバーが起動していないときに待たされないように
         connection, response = _post(
-            EMBED_URL, request, {}, cancel, connect_timeout=3)
+            url, request, {}, cancel, connect_timeout=3)
         body = response.read()
     except Exception as e:
         if cancel.is_set():

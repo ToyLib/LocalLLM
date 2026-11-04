@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+import config
 from llm_client import CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm
 
 # ルーターに見せる直前の会話の数と、1件あたりの長さ (バイト)
 ROUTER_HISTORY_MESSAGES = 4
 ROUTER_HISTORY_BYTES = 300
-
-# リポジトリのフォルダ (このスクリプトの1つ上)
-BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -47,45 +43,25 @@ def _truncate(text: str, max_bytes: int) -> str:
     return data[:max_bytes].decode("utf-8", errors="ignore") + "…"
 
 
-def agents_file() -> Path:
-    """エージェントの設定ファイル
-    環境変数 LOCALLLM_AGENTS_FILE、無ければリポジトリの config/agents.json"""
-
-    if env := os.environ.get("LOCALLLM_AGENTS_FILE"):
-        return Path(env)
-
-    return BASE_DIRECTORY / "config" / "agents.json"
-
-
 def _load_agent(key: str, options: LLMOptions | None = None) -> Agent:
-    """設定ファイルから key のエージェントの名前と system プロンプトを読む
+    """config/agents.json から key のエージェントの名前と system プロンプトを読む
     質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
     system_prompt は文字列か、文字列の配列 (つなげて1つにする)"""
 
-    path = agents_file()
-
-    try:
-        config = json.loads(path.read_bytes())
-    except OSError as e:
-        raise LLMError(f"エージェントの設定ファイルを開けません: {path}") from e
-    except ValueError as e:
-        raise LLMError(
-            f"エージェントの設定ファイルを JSON として読めません: {path}") from e
-
-    entry = config.get(key) if isinstance(config, dict) else None
+    entry = config.load("agents.json").get(key)
 
     if not isinstance(entry, dict):
-        raise LLMError(f"エージェントの設定ファイルに {key} がありません: {path}")
+        raise config.ConfigError(f"設定ファイル agents.json に {key} がありません")
 
     prompt = entry.get("system_prompt")
 
     if isinstance(prompt, list):
         if not all(isinstance(line, str) for line in prompt):
-            raise LLMError(f"{key} の system_prompt に文字列以外が含まれています")
+            raise config.ConfigError(f"{key} の system_prompt に文字列以外が含まれています")
         prompt = "".join(prompt)
 
     if not isinstance(prompt, str):
-        raise LLMError(f"{key} の system_prompt がありません")
+        raise config.ConfigError(f"{key} の system_prompt がありません")
 
     return Agent(
         name=str(entry.get("name", key)),

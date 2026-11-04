@@ -74,6 +74,7 @@ add_executable(LocalLLM
     src/agent.cpp
     src/chat.cpp
     src/chat_ui.cpp
+    src/config.cpp
     src/font.cpp
     src/ime.cpp
     src/llm_client.cpp
@@ -122,7 +123,7 @@ add_custom_target(sync_rag ALL
 )
 add_dependencies(LocalLLM sync_rag)
 
-# エージェントの設定 (config/agents.json の system プロンプトなど) を実行ファイルの隣に同期する
+# 設定ファイル (config/ のサーバーの URL や system プロンプト) を実行ファイルの隣に同期する
 # 設定だけを変えたときも反映されるように、ビルドのたびに実行する
 add_custom_target(sync_config ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
