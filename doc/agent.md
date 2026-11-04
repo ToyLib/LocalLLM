@@ -12,6 +12,30 @@
 回答役の 2 つは口調を変えてあるので、ルーターがどちらに振り分けたかが回答を見るだけで分かります。
 回答の上には、答えたエージェントの名前 (`アシスタント` / `侍`) も表示されます。
 
+## system プロンプトの設定 (config/agents.json)
+
+各エージェントの名前と system プロンプトは `config/agents.json` に書きます (C++ 版・Python 版で共通)。
+
+```json
+{
+  "assistant": {
+    "name": "アシスタント",
+    "system_prompt": [
+      "あなたは親切なAIアシスタントです。",
+      "日本語で回答してください。"
+    ]
+  }
+}
+```
+
+- キーは `router` / `assistant` / `samurai` の 3 つです。
+- `system_prompt` は文字列か、文字列の配列です。配列は区切りなしでつなげて 1 つのプロンプトにします。
+- 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても次の質問から反映されます。
+- C++ 版は実行ファイルの隣の `config/agents.json` を読みます (ビルドのたびに `config/` がコピーされます)。Python 版はリポジトリの `config/agents.json` を読みます。
+- 環境変数 `LOCALLLM_AGENTS_FILE` で別のファイルを指定できます。
+- ルーターの `maxTokens` / `temperature` / JSON スキーマなどの設定は、コードと結びついているので `agent.cpp` に残しています。
+- ファイルが無い・読めないときは、回答の代わりにエラーを表示します (ルーターの失敗は、いつもどおり資料を参照して回答を続けます)。
+
 ## ルーター
 
 画面上部の「資料 (RAG)」で選びます。
@@ -101,7 +125,7 @@ RouteDecision RouteQuestion(const json& history, const std::string& question,
 
 ## エージェントを増やすとき
 
-`agent.cpp` の `CreateRouter()` や `CreateSamurai()` と同じように `Agent` を作り、`RunAgent` / `RunAgentJson` で呼びます。
+`config/agents.json` にエントリーを足し、`agent.cpp` の `CreateRouter()` や `CreateSamurai()` と同じように `LoadAgent("キー")` で `Agent` を作り、`RunAgent` / `RunAgentJson` で呼びます。
 呼び出しはワーカースレッド (`chat.cpp` の `SendPrompt`) の中に足します。
 
 - 呼ぶ回数のぶんだけ回答が遅くなります。画面に見せない段階は `maxTokens` を小さくしてください。

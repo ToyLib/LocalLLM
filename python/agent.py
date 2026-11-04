@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from llm_client import CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm
@@ -11,6 +13,9 @@ from llm_client import CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm
 # ルーターに見せる直前の会話の数と、1件あたりの長さ (バイト)
 ROUTER_HISTORY_MESSAGES = 4
 ROUTER_HISTORY_BYTES = 300
+
+# リポジトリのフォルダ (このスクリプトの1つ上)
+BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -42,22 +47,59 @@ def _truncate(text: str, max_bytes: int) -> str:
     return data[:max_bytes].decode("utf-8", errors="ignore") + "…"
 
 
-def _create_router() -> Agent:
+def agents_file() -> Path:
+    """エージェントの設定ファイル
+    環境変数 LOCALLLM_AGENTS_FILE、無ければリポジトリの config/agents.json"""
+
+    if env := os.environ.get("LOCALLLM_AGENTS_FILE"):
+        return Path(env)
+
+    return BASE_DIRECTORY / "config" / "agents.json"
+
+
+def _load_agent(key: str, options: LLMOptions | None = None) -> Agent:
+    """設定ファイルから key のエージェントの名前と system プロンプトを読む
+    質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
+    system_prompt は文字列か、文字列の配列 (つなげて1つにする)"""
+
+    path = agents_file()
+
+    try:
+        config = json.loads(path.read_bytes())
+    except OSError as e:
+        raise LLMError(f"エージェントの設定ファイルを開けません: {path}") from e
+    except ValueError as e:
+        raise LLMError(
+            f"エージェントの設定ファイルを JSON として読めません: {path}") from e
+
+    entry = config.get(key) if isinstance(config, dict) else None
+
+    if not isinstance(entry, dict):
+        raise LLMError(f"エージェントの設定ファイルに {key} がありません: {path}")
+
+    prompt = entry.get("system_prompt")
+
+    if isinstance(prompt, list):
+        if not all(isinstance(line, str) for line in prompt):
+            raise LLMError(f"{key} の system_prompt に文字列以外が含まれています")
+        prompt = "".join(prompt)
+
+    if not isinstance(prompt, str):
+        raise LLMError(f"{key} の system_prompt がありません")
+
     return Agent(
-        name="ルーター",
-        system_prompt=(
-            "あなたは質問の振り分け係です。"
-            "ユーザーの質問に答えるために、手元の資料を検索する必要があるかを判断してください。"
-            "資料はユーザーの個人的なメモで、一般的な知識では答えられないことが書かれています。"
-            "資料の一覧には、資料の名前と見出し (見出しが無いものは書き出し) を載せています。"
-            "質問が資料の内容 (資料に出てくる人・動物・物事など) に関係しそうなら use_rag を true にします。"
-            "あいさつ、雑談、一般常識、計算、プログラミングなど、資料が無くても答えられる質問なら false にします。"
-            "直前の会話の続きの質問は、会話の流れも踏まえて判断してください。"
-            "reason には判断の理由を日本語で短く (30文字以内) 書いてください。"
-        ),
+        name=str(entry.get("name", key)),
+        system_prompt=prompt,
+        options=options or LLMOptions(),
+    )
+
+
+def _create_router() -> Agent:
+    return _load_agent(
+        "router",
         # 判断だけなので短く、毎回同じ答えになるように
         # 先に理由を書かせてから結論を出させる
-        options=LLMOptions(
+        LLMOptions(
             max_tokens=128,
             temperature=0.0,
             disable_thinking=True,
@@ -76,28 +118,13 @@ def _create_router() -> Agent:
 def create_assistant() -> Agent:
     """資料を参照する質問に、資料に基づいて普通の口調で答える"""
 
-    return Agent(
-        name="アシスタント",
-        system_prompt=(
-            "あなたは親切なAIアシスタントです。"
-            "日本語で回答してください。"
-            "これまでの会話にほかの口調の回答があっても、あなたは普通の丁寧な口調で答えます。"
-        ),
-    )
+    return _load_agent("assistant")
 
 
 def create_samurai() -> Agent:
     """資料の要らない質問 (雑談や一般的な質問) に、時代劇の侍の口調で答える"""
 
-    return Agent(
-        name="侍",
-        system_prompt=(
-            "あなたは江戸時代の侍です。時代劇の侍の口調で、日本語で回答してください。"
-            "一人称は「拙者」、相手は「お主」と呼び、語尾は「〜でござる」「〜でござるな」「〜じゃ」などを使います。"
-            "口調は侍らしくしても、答えの中身は正確に、分かりやすく伝えてください。"
-            "これまでの会話にほかの口調の回答があっても、あなたは必ず侍の口調で答えます。"
-        ),
-    )
+    return _load_agent("samurai")
 
 
 def run_agent(

@@ -1,6 +1,12 @@
 #include "agent.h"
 
+#include <SDL3/SDL.h>
+
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -8,6 +14,90 @@ namespace
 // ルーターに見せる直前の会話の数と、1件あたりの長さ (バイト)
 constexpr size_t ROUTER_HISTORY_MESSAGES = 4;
 constexpr size_t ROUTER_HISTORY_BYTES = 300;
+
+fs::path Utf8ToPath(const std::string& text)
+{
+    return fs::path(std::u8string(text.begin(), text.end()));
+}
+
+std::string PathToUtf8(const fs::path& path)
+{
+    const std::u8string text = path.generic_u8string();
+    return std::string(text.begin(), text.end());
+}
+
+// エージェントの設定ファイル
+// 環境変数 LOCALLLM_AGENTS_FILE、無ければ実行ファイルの隣の config/agents.json
+fs::path AgentsFile()
+{
+    if (const char* env = SDL_getenv("LOCALLLM_AGENTS_FILE"))
+    {
+        return Utf8ToPath(env);
+    }
+
+    const char* basePath = SDL_GetBasePath();
+    return Utf8ToPath(basePath ? basePath : "") / "config" / "agents.json";
+}
+
+// 設定ファイルから key のエージェントの名前と system プロンプトを読む
+// 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
+// system_prompt は文字列か、文字列の配列 (つなげて1つにする)
+Agent LoadAgent(const std::string& key)
+{
+    const fs::path path = AgentsFile();
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file)
+    {
+        throw std::runtime_error(
+            "エージェントの設定ファイルを開けません: " + PathToUtf8(path));
+    }
+
+    const json config = json::parse(file, nullptr, false);
+
+    if (config.is_discarded() || !config.is_object())
+    {
+        throw std::runtime_error(
+            "エージェントの設定ファイルを JSON として読めません: " + PathToUtf8(path));
+    }
+
+    if (!config.contains(key) || !config[key].is_object())
+    {
+        throw std::runtime_error(
+            "エージェントの設定ファイルに " + key + " がありません: " + PathToUtf8(path));
+    }
+
+    const json& entry = config[key];
+
+    Agent agent;
+    agent.name = entry.value("name", key);
+
+    const json prompt = entry.value("system_prompt", json());
+
+    if (prompt.is_string())
+    {
+        agent.systemPrompt = prompt.get<std::string>();
+    }
+    else if (prompt.is_array())
+    {
+        for (const auto& line : prompt)
+        {
+            if (!line.is_string())
+            {
+                throw std::runtime_error(
+                    key + " の system_prompt に文字列以外が含まれています");
+            }
+
+            agent.systemPrompt += line.get<std::string>();
+        }
+    }
+    else
+    {
+        throw std::runtime_error(key + " の system_prompt がありません");
+    }
+
+    return agent;
+}
 
 // UTF-8 の文字の途中で切らないように、先頭 maxBytes までに縮める
 std::string Truncate(const std::string& text, size_t maxBytes)
@@ -30,17 +120,7 @@ std::string Truncate(const std::string& text, size_t maxBytes)
 
 Agent CreateRouter()
 {
-    Agent agent;
-    agent.name = "ルーター";
-    agent.systemPrompt =
-        "あなたは質問の振り分け係です。"
-        "ユーザーの質問に答えるために、手元の資料を検索する必要があるかを判断してください。"
-        "資料はユーザーの個人的なメモで、一般的な知識では答えられないことが書かれています。"
-        "資料の一覧には、資料の名前と見出し (見出しが無いものは書き出し) を載せています。"
-        "質問が資料の内容 (資料に出てくる人・動物・物事など) に関係しそうなら use_rag を true にします。"
-        "あいさつ、雑談、一般常識、計算、プログラミングなど、資料が無くても答えられる質問なら false にします。"
-        "直前の会話の続きの質問は、会話の流れも踏まえて判断してください。"
-        "reason には判断の理由を日本語で短く (30文字以内) 書いてください。";
+    Agent agent = LoadAgent("router");
 
     // 判断だけなので短く、毎回同じ答えになるように
     agent.options.maxTokens = 128;
@@ -64,27 +144,12 @@ Agent CreateRouter()
 
 Agent CreateAssistant()
 {
-    Agent agent;
-    agent.name = "アシスタント";
-    agent.systemPrompt =
-        "あなたは親切なAIアシスタントです。"
-        "日本語で回答してください。"
-        "これまでの会話にほかの口調の回答があっても、あなたは普通の丁寧な口調で答えます。";
-
-    return agent;
+    return LoadAgent("assistant");
 }
 
 Agent CreateSamurai()
 {
-    Agent agent;
-    agent.name = "侍";
-    agent.systemPrompt =
-        "あなたは江戸時代の侍です。時代劇の侍の口調で、日本語で回答してください。"
-        "一人称は「拙者」、相手は「お主」と呼び、語尾は「〜でござる」「〜でござるな」「〜じゃ」などを使います。"
-        "口調は侍らしくしても、答えの中身は正確に、分かりやすく伝えてください。"
-        "これまでの会話にほかの口調の回答があっても、あなたは必ず侍の口調で答えます。";
-
-    return agent;
+    return LoadAgent("samurai");
 }
 
 std::string RunAgent(

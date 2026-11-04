@@ -121,3 +121,13 @@ add_custom_target(sync_rag ALL
     VERBATIM
 )
 add_dependencies(LocalLLM sync_rag)
+
+# エージェントの設定 (config/agents.json の system プロンプトなど) を実行ファイルの隣に同期する
+# 設定だけを変えたときも反映されるように、ビルドのたびに実行する
+add_custom_target(sync_config ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/config
+        $<TARGET_FILE_DIR:LocalLLM>/config
+    VERBATIM
+)
+add_dependencies(LocalLLM sync_config)
