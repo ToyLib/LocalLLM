@@ -58,6 +58,52 @@ json LoadConfig(const std::string& fileName)
     return config;
 }
 
+json LoadConfigOrEmpty(const std::string& fileName)
+{
+    try
+    {
+        return LoadConfig(fileName);
+    }
+    catch (const std::exception& e)
+    {
+        SDL_Log("%s (using defaults)", e.what());
+        return json::object();
+    }
+}
+
+float ConfigNumberOr(const json& config, const std::string& key, float fallback)
+{
+    if (!config.contains(key))
+    {
+        return fallback;
+    }
+
+    if (!config[key].is_number())
+    {
+        SDL_Log("Config %s is not a number (using default)", key.c_str());
+        return fallback;
+    }
+
+    return config[key].get<float>();
+}
+
+std::string ConfigStringOr(
+    const json& config, const std::string& key, const std::string& fallback)
+{
+    if (!config.contains(key))
+    {
+        return fallback;
+    }
+
+    if (!config[key].is_string())
+    {
+        SDL_Log("Config %s is not a string (using default)", key.c_str());
+        return fallback;
+    }
+
+    return config[key].get<std::string>();
+}
+
 std::string ConfigString(const std::string& fileName, const std::string& key)
 {
     const json config = LoadConfig(fileName);

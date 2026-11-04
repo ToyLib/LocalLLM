@@ -142,8 +142,10 @@ C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり�
 アプリは次の順にフォントを探す。
 
 1. 環境変数 `LOCALLLM_FONT` で指定したファイル
-2. 実行ファイルの隣の `Asset/MPLUSRounded1c-Bold.ttf`
+2. `config/ui.json` の `font_file` (既定は実行ファイルの隣の `Asset/MPLUSRounded1c-Bold.ttf`)
 3. OS の日本語フォント (下記)
+
+フォントの大きさは `config/ui.json` の `font_size` (既定 18) で変えられる。
 
 M PLUS Rounded 1c に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、M PLUS Rounded 1c に無い文字は表示されない。
 
@@ -153,7 +155,7 @@ Windows で補完に使う OS のフォント：
 - `C:\Windows\Fonts\meiryo.ttc` (メイリオ)
 - `C:\Windows\Fonts\msgothic.ttc` (MS ゴシック)
 
-別のフォントを使う場合：
+別のフォントを使う場合は `config/ui.json` の `font_file` を書き換えるか、環境変数で指定する：
 
 ```powershell
 $env:LOCALLLM_FONT = "C:\path\to\font.ttf"

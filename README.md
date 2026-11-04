@@ -92,8 +92,9 @@ cmake --build build --parallel
 
 ## 設定
 
-サーバーの URL と system プロンプトは `config/` の JSON ファイルに書きます。
-ビルドのたびに実行ファイルの隣 (`build/config/`) にコピーされ、アプリは送信のたびに読み直すので、書き換えると再起動しなくても次の質問から反映されます。
+サーバーの URL、system プロンプト、画面の設定は `config/` の JSON ファイルに書きます。
+ビルドのたびに実行ファイルの隣 (`build/config/`) にコピーされます。
+`server.json` と `agents.json` は送信のたびに読み直すので、書き換えると再起動しなくても次の質問から反映されます。`ui.json` は起動時に読みます。
 環境変数 `LOCALLLM_CONFIG_DIR` で別のフォルダを指定できます。
 
 ```json
@@ -110,13 +111,21 @@ cmake --build build --parallel
 | システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`、[説明](doc/agent.md)) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
-| フォントサイズ | `src/font.cpp` の `FONT_SIZE` |
-| 背景の不透明度 | `src/main.cpp` の `WINDOW_OPACITY` (既定 0.85) |
-| フォントファイル | 環境変数 `LOCALLLM_FONT` (既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`) |
+| 背景の不透明度 | `config/ui.json` の `window_opacity` (0〜1、既定 0.85) |
+| フォントファイル | `config/ui.json` の `font_file` (相対パスは実行ファイルのフォルダーから。既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`)。環境変数 `LOCALLLM_FONT` があればそちらを優先 |
+| フォントサイズ | `config/ui.json` の `font_size` (ピクセル、既定 18) |
+| フォントサイズ (Python 版) | `config/ui.json` の `python_font_size` (ポイント、既定 14) |
 
-```bash
-LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
+```json
+{
+  "window_opacity": 0.85,
+  "font_file": "Asset/MPLUSRounded1c-Bold.ttf",
+  "font_size": 18,
+  "python_font_size": 14
+}
 ```
+
+`ui.json` が無い、または値が正しくない項目は、ログに書いて既定値で起動します。
 
 背景が透けない場合は、デスクトップ環境がウィンドウの透過に対応していない可能性があります。
 
@@ -129,7 +138,7 @@ Python 3.10 以上と、Tk が使える Python が必要です (macOS の Homebr
 python3 python/main.py
 ```
 
-- 操作と設定は C++ 版と同じです (サーバーの URL とシステムプロンプトはリポジトリの `config/` を読みます。フォントサイズは `python/chat_ui.py` の `FONT_SIZE`)。
+- 操作と設定は C++ 版と同じです (設定はリポジトリの `config/` を読みます。フォントサイズは `config/ui.json` の `python_font_size`)。
 - RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
 - フォントは OS の標準フォントを使います。背景の半透明には対応していません。
 

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
 
+import config
 import rag
 from chat import ChatState, RagMode, send_prompt
 
-FONT_SIZE = 14
+# 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
+# (font_size は C++ 版のピクセル数なので別にしている)
+DEFAULT_FONT_SIZE = 14
 
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
 POLL_INTERVAL_MS = 30
@@ -22,6 +26,19 @@ ERROR_COLOR = "#e05555"
 
 # 画面に表示した1件分 (変わった所から下だけを描き直す)
 _Rendered = tuple[str, str, str, str, bool]
+
+
+def _font_size(ui: dict) -> int:
+    """config/ui.json の python_font_size (無い・正しくないときは既定値)"""
+
+    size = ui.get("python_font_size", DEFAULT_FONT_SIZE)
+
+    if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
+        print("python_font_size が正しくありません (既定値を使います)",
+              file=sys.stderr)
+        return DEFAULT_FONT_SIZE
+
+    return round(size)
 
 
 class ChatApp:
@@ -42,10 +59,11 @@ class ChatApp:
         root.minsize(480, 360)
         root.protocol("WM_DELETE_WINDOW", self._close)
 
+        font_size = _font_size(config.load_or_empty("ui.json"))
         base = tkfont.nametofont("TkDefaultFont").actual()["family"]
-        self.font = tkfont.Font(family=base, size=FONT_SIZE)
-        self.bold = tkfont.Font(family=base, size=FONT_SIZE, weight="bold")
-        self.small = tkfont.Font(family=base, size=FONT_SIZE - 3)
+        self.font = tkfont.Font(family=base, size=font_size)
+        self.bold = tkfont.Font(family=base, size=font_size, weight="bold")
+        self.small = tkfont.Font(family=base, size=max(font_size - 3, 1))
 
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)

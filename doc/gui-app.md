@@ -73,8 +73,8 @@ SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskL
    - `io.IniFilename = nullptr` で、ウィンドウ配置を保存する `imgui.ini` を作らないようにします。
    - キーボードでのフォーカス移動 (`NavEnableKeyboard`) を有効にします。
    - ダークテーマを使い、余白などの大きさとフォントを拡大率に合わせます (`ScaleAllSizes`、`FontScaleDpi`)。
-   - ウィンドウ背景の不透明度を `WINDOW_OPACITY` にします。
-8. 日本語フォントを読み込みます (`LoadFont`)。
+   - `config/ui.json` を読み (`LoadConfigOrEmpty`)、ウィンドウ背景の不透明度を `window_opacity` にします。読めない項目は `main.cpp` の `DEFAULT_*` を使います。
+8. 日本語フォントを読み込みます (`LoadFont`。ファイルと大きさは `ui.json` の `font_file` / `font_size`)。
 9. ImGui の SDL3 用・SDL_Renderer 用のバックエンドを初期化します。
 10. `InstallImeHook()` で、IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
 
@@ -83,7 +83,7 @@ SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskL
 ImGui に入っている標準フォントには日本語の文字がないため、次の順でフォントを探します。
 
 1. 環境変数 `LOCALLLM_FONT` で指定されたフォント
-2. 同梱フォント `Asset/MPLUSRounded1c-Bold.ttf` (実行ファイルのあるフォルダーからの相対パス。`SDL_GetBasePath()` で取得)
+2. `config/ui.json` の `font_file` (既定は同梱フォント `Asset/MPLUSRounded1c-Bold.ttf`。相対パスは実行ファイルのあるフォルダーから。`SDL_GetBasePath()` で取得)
 3. OS の日本語フォント (`SYSTEM_FONT_PATHS`。Windows は游ゴシックなど、macOS はヒラギノ、Linux は Noto Sans CJK)
 
 1 か 2 で読み込めた場合でも、3 の OS フォントを **マージモード** (`ImFontConfig::MergeMode`) で追加します。
@@ -256,10 +256,11 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 
 | 変えたいもの | 場所 |
 | --- | --- |
-| フォントの大きさ | `font.cpp` の `FONT_SIZE` |
-| 同梱フォント・OS フォントの候補 | `font.cpp` の `BUNDLED_FONT_PATH`、`SYSTEM_FONT_PATHS` |
-| 背景の不透明度 | `main.cpp` の `WINDOW_OPACITY` |
+| フォントの大きさ | `config/ui.json` の `font_size` |
+| フォントファイル | `config/ui.json` の `font_file` |
+| OS フォントの候補 | `font.cpp` の `SYSTEM_FONT_PATHS` |
+| 背景の不透明度 | `config/ui.json` の `window_opacity` |
 | ウィンドウの初期サイズ | `main.cpp` の `SDL_CreateWindow` (900×700) |
 | 入力欄の高さ | `chat_ui.cpp` の `DrawUI` の `inputHeight` (4 行分) |
 | 送信者名の色 | `chat_ui.cpp` の `DrawMessages` の `TextColored` |
-| 接続先や system プロンプト | [src/llm_client.cpp](../src/llm_client.cpp) ([llm-client.md](llm-client.md) を参照) |
+| 接続先や system プロンプト | `config/server.json`、`config/agents.json` ([llm-client.md](llm-client.md)、[agent.md](agent.md) を参照) |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,17 @@ def load(file_name: str) -> dict[str, Any]:
         raise ConfigError(f"設定ファイルを JSON として読めません: {path}")
 
     return data
+
+
+def load_or_empty(file_name: str) -> dict[str, Any]:
+    """設定ファイルを読む。読めなければ表示して空の dict を返す
+    (画面の設定など、読めなくても既定値で動かしたいもの向け)"""
+
+    try:
+        return load(file_name)
+    except ConfigError as e:
+        print(f"{e} (既定値を使います)", file=sys.stderr)
+        return {}
 
 
 def get_string(file_name: str, key: str) -> str:

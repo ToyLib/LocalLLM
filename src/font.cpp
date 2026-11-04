@@ -7,10 +7,6 @@
 namespace
 {
 
-// 同梱フォント (実行ファイルからの相対パス)
-constexpr const char* BUNDLED_FONT_PATH =
-    "Asset/MPLUSRounded1c-Bold.ttf";
-
 // OSの日本語フォントの候補 (同梱フォントに無い文字の補完用)
 constexpr const char* SYSTEM_FONT_PATHS[] = {
 #if defined(_WIN32)
@@ -26,27 +22,37 @@ constexpr const char* SYSTEM_FONT_PATHS[] = {
 #endif
 };
 
-constexpr float FONT_SIZE = 18.0f;
-
 // フォントを読み込む (パスはUTF-8)
-bool TryLoadFont(ImGuiIO& io, const char* path, bool merge = false)
+bool TryLoadFont(ImGuiIO& io, const char* path, float size, bool merge = false)
 {
     ImFontConfig config;
     config.MergeMode = merge;
 
     return SDL_GetPathInfo(path, nullptr) &&
-        io.Fonts->AddFontFromFileTTF(path, FONT_SIZE, &config);
+        io.Fonts->AddFontFromFileTTF(path, size, &config);
+}
+
+bool IsAbsolutePath(const std::string& path)
+{
+    if (path.empty())
+    {
+        return false;
+    }
+
+    // "/..." と、Windows の "C:/..." "\\server\..."
+    return path[0] == '/' || path[0] == '\\' ||
+        (path.size() > 1 && path[1] == ':');
 }
 
 } // namespace
 
-void LoadFont(ImGuiIO& io)
+void LoadFont(ImGuiIO& io, const std::string& fontFile, float fontSize)
 {
     bool loaded = false;
 
     if (const char* env = SDL_getenv("LOCALLLM_FONT"))
     {
-        loaded = TryLoadFont(io, env);
+        loaded = TryLoadFont(io, env, fontSize);
 
         if (!loaded)
         {
@@ -54,24 +60,25 @@ void LoadFont(ImGuiIO& io)
         }
     }
 
-    if (!loaded)
+    if (!loaded && !fontFile.empty())
     {
         const char* basePath = SDL_GetBasePath();
-        const std::string bundled =
-            std::string(basePath ? basePath : "") + BUNDLED_FONT_PATH;
+        const std::string path = IsAbsolutePath(fontFile)
+            ? fontFile
+            : std::string(basePath ? basePath : "") + fontFile;
 
-        loaded = TryLoadFont(io, bundled.c_str());
+        loaded = TryLoadFont(io, path.c_str(), fontSize);
 
         if (!loaded)
         {
-            SDL_Log("Font not found: %s", bundled.c_str());
+            SDL_Log("Font not found: %s", path.c_str());
         }
     }
 
     // 先に読めたフォントがあれば、OSのフォントは補完として合成する
     for (const char* path : SYSTEM_FONT_PATHS)
     {
-        if (TryLoadFont(io, path, loaded))
+        if (TryLoadFont(io, path, fontSize, loaded))
         {
             return;
         }
