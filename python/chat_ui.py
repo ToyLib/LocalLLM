@@ -47,9 +47,11 @@ class ChatApp:
         self.bold = tkfont.Font(family=base, size=FONT_SIZE, weight="bold")
         self.small = tkfont.Font(family=base, size=FONT_SIZE - 3)
 
+        # 入力欄は会話表示より先に下から詰める
+        # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
-        self._build_messages()
         self._build_input()
+        self._build_messages()
 
         rag.start_indexing(self.rag)
         self._dirty.set()
@@ -121,10 +123,12 @@ class ChatApp:
         self.error_label = ttk.Label(
             self.root, foreground=ERROR_COLOR, padding=(8, 4, 8, 0),
             wraplength=860)
-        self.error_label.pack(side="top", fill="x")
 
         frame = ttk.Frame(self.root, padding=8)
-        frame.pack(side="top", fill="x")
+        frame.pack(side="bottom", fill="x")
+
+        # エラーは入力欄のすぐ上
+        self.error_label.pack(side="bottom", fill="x")
 
         buttons = ttk.Frame(frame)
         buttons.pack(side="right", fill="y", padx=(8, 0))
