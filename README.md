@@ -130,7 +130,7 @@ Python 版は、初めて起動したときに `config/` をリポジトリの `
 | --- | --- |
 | サーバーの URL | `config/server.json` の `chat_url` |
 | 埋め込みサーバーの URL (RAG) | `config/server.json` の `embed_url` |
-| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general` / `cloud` / `rewriter`、[説明](doc/agent.md)) |
+| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general` / `cloud` / `rewriter` / `comparer`、[説明](doc/agent.md)) |
 | ChatGPT の接続先・モデル | `config/server.json` の `cloud` ([説明](doc/chatgpt.md)) |
 | ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)。何が送られるかは [doc/privacy.md](doc/privacy.md)) |
 | 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |

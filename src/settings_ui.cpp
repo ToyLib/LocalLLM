@@ -83,6 +83,7 @@ constexpr AgentEntry AGENT_ENTRIES[] = {
     {"general", "資料なしの回答役"},
     {"cloud", "ChatGPT"},
     {"rewriter", "口調の書き直し"},
+    {"comparer", "違いのまとめ"},
 };
 
 bool IsAnswerer(const std::string& key)
@@ -591,6 +592,11 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         {
             ImGui::TextDisabled(
                 "ChatGPT の回答を書き直すとき、回答役の system プロンプトの後ろに付ける指示です。");
+        }
+        else if (agent.key == "comparer")
+        {
+            ImGui::TextDisabled(
+                "ChatGPT に聞き直した後、聞き直す前の回答との違いをローカルの LLM でまとめるときの指示です。");
         }
         else
         {

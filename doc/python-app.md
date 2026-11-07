@@ -96,7 +96,7 @@ UI スレッド (ChatApp._poll、30 ミリ秒ごとに root.after で呼ばれ�
 ```
 
 - 部品は、RAG の行 → 入力欄 (下から詰める) → 会話の表示 の順に `pack` します。ウィンドウを小さくしたときに、入力欄やボタンではなく会話の表示が縮むようにするためです。
-- 文字の色や太さは `Text` のタグ (`user` / `ai` / `note` / `superseded` / `toggle` など) で付けます。
+- 文字の色や太さは `Text` のタグ (`user` / `ai` / `note` / `superseded` / `toggle` / `comparison` / `conflict` など) で付けます。違いのまとめの「食い違いあり」は `conflict` タグでエラーの色にします。
 
 ### ImGui との違い
 

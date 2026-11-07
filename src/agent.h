@@ -59,7 +59,27 @@ std::string RewriteAnswer(
     const DeltaCallback& onDelta,
     const std::atomic<bool>& cancel);
 
-// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter のみ。ほかは空)
+// ローカルの回答と聞き直した回答の違いのまとめ (ローカルの LLM が作る目安)
+struct Comparison
+{
+    // ほぼ同じ / 情報が増えた / 食い違いあり
+    std::string verdict;
+
+    // 違いの要点 (最大3つ)
+    std::vector<std::string> points;
+};
+
+// 同じ質問へのローカルの回答 localAnswer と、クラウドの回答 cloudAnswer の違いを
+// ローカルの LLM でまとめる。指示は agents.json の comparer (無ければ既定のもの)
+// onDelta には受け取った JSON の断片が来る (進み具合の表示に使う)
+Comparison CompareAnswers(
+    const std::string& question,
+    const std::string& localAnswer,
+    const std::string& cloudAnswer,
+    const DeltaCallback& onDelta,
+    const std::atomic<bool>& cancel);
+
+// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter / comparer のみ。ほかは空)
 std::string DefaultAgentName(const std::string& key);
 std::string DefaultAgentPrompt(const std::string& key);
 

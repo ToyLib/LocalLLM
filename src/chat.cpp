@@ -364,6 +364,60 @@ bool IsBlank(const std::string& text)
     return text.find_first_not_of(" \t\r\n") == std::string::npos;
 }
 
+// 聞き直す前のローカルの回答と、クラウドの回答 (書き直す前) の違いをまとめて、
+// 最新の回答に添える (ワーカースレッドから呼ぶ)
+// 失敗しても回答はそのまま残し、補足に理由を出す。中断したら何も添えない
+void CompareWithLocal(
+    ChatState& state,
+    const std::string& question,
+    const std::string& localAnswer,
+    const std::string& cloudAnswer)
+{
+    if (IsBlank(localAnswer))
+    {
+        return;
+    }
+
+    {
+        std::lock_guard lock(state.mutex);
+        SetStatus(state.messages.back(), "聞き直す前の回答と比べ中…");
+    }
+    WakeUI();
+
+    try
+    {
+        const Comparison comparison = CompareAnswers(
+            question,
+            localAnswer,
+            cloudAnswer,
+            [&state](std::string_view text) {
+                {
+                    std::lock_guard lock(state.mutex);
+                    state.messages.back().receivedChars += CountChars(text);
+                }
+                WakeUI();
+            },
+            state.cancel);
+
+        std::lock_guard lock(state.mutex);
+        Message& answer = state.messages.back();
+        answer.status.clear();
+        answer.compareVerdict = comparison.verdict;
+        answer.comparePoints = comparison.points;
+    }
+    catch (const std::exception& e)
+    {
+        std::lock_guard lock(state.mutex);
+        Message& answer = state.messages.back();
+        answer.status.clear();
+
+        if (!state.cancel)
+        {
+            answer.note += std::string("\n違いのまとめを作れませんでした: ") + e.what();
+        }
+    }
+}
+
 } // namespace
 
 std::string FormatStatus(const Message& message)
@@ -391,7 +445,8 @@ std::string FormatStatus(const Message& message)
 
     text += " (" + std::to_string(seconds) + " 秒)";
 
-    if (seconds >= SLOW_SECONDS && message.receivedChars == 0)
+    // 本文がまだ無いときだけ (違いのまとめを作っている間は、止めても回答は残る)
+    if (seconds >= SLOW_SECONDS && message.receivedChars == 0 && message.content.empty())
     {
         text += "\n時間がかかっています。中断ボタンで止めると、元の回答に戻ります。";
     }
@@ -433,6 +488,7 @@ void AskCloud(ChatState& state)
     json history;
     std::string question;
     std::string agentKey;
+    std::string localAnswer;
 
     {
         std::lock_guard lock(state.mutex);
@@ -449,6 +505,7 @@ void AskCloud(ChatState& state)
         history = BuildCloudHistory(state.messages, lastUser);
         question = user.content;
         agentKey = previous.agentKey;
+        localAnswer = previous.content;
 
         // 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
         const bool sendRag = previous.usedRag && !user.ragPrompt.empty();
@@ -475,7 +532,7 @@ void AskCloud(ChatState& state)
 
     state.cancel = false;
 
-    state.worker = std::thread([&state, history, question, agentKey]() {
+    state.worker = std::thread([&state, history, question, agentKey, localAnswer]() {
         std::string cloudAnswer;
 
         try
@@ -584,6 +641,11 @@ void AskCloud(ChatState& state)
                 {
                     answer.note += "\n書き直しが途中で止まりました: " + failure;
                 }
+            }
+
+            if (!state.cancel)
+            {
+                CompareWithLocal(state, question, localAnswer, cloudAnswer);
             }
         }
         catch (const std::exception& e)

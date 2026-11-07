@@ -10,7 +10,7 @@ import config
 from llm_client import (
     CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm, load_cloud_settings)
 
-# agents.json に cloud / rewriter が無いとき (前の版の設定ファイル) に使う名前と system プロンプト
+# agents.json に cloud / rewriter / comparer が無いとき (前の版の設定ファイル) に使う名前と system プロンプト
 DEFAULT_AGENTS = {
     "cloud": (
         "ChatGPT",
@@ -23,7 +23,28 @@ DEFAULT_AGENTS = {
         "コードやコマンドはそのまま書き写します。"
         "言い直した回答だけを書き、前置きや説明は付けないでください。",
     ),
+    "comparer": (
+        "違いのまとめ",
+        "同じ質問への「ローカルの回答」と「聞き直した回答」を比べて、内容の違いを短くまとめてください。"
+        "口調・言い回し・長さ・書き方の違いは書かず、内容の違いだけを書きます。"
+        "points には違いを最大3つ、1つ40文字くらいで書きます。"
+        "食い違いは「ローカルは〜、聞き直した回答は〜」、片方にだけある情報は「聞き直した回答だけ: 〜」のように、どちらの回答の話かが分かるように書きます。"
+        "聞き直した回答にだけある情報、数値や事実の食い違いを優先します。"
+        "違いが無ければ「内容の違いはありません」とだけ書きます。"
+        "回答に書いていないことを推測で書かないでください。"
+        "verdict は、食い違う点が1つでもあれば「食い違いあり」、"
+        "食い違いは無く、聞き直した回答のほうが情報が多ければ「情報が増えた」、"
+        "内容がほぼ同じなら「ほぼ同じ」にします。",
+    ),
 }
+
+# 違いのまとめの判定
+VERDICTS = ("ほぼ同じ", "情報が増えた", "食い違いあり")
+
+# 違いのまとめで、1つの回答と質問を見せる最大の長さ (バイト。回答は日本語で 1,200 文字くらい)
+# llama-server のコンテキスト (既定 4096 トークン) に2つの回答が収まるように
+COMPARE_ANSWER_BYTES = 3600
+COMPARE_QUESTION_BYTES = 600
 
 # 書き直しの最大トークン数 (ChatGPT の長い回答も入るように)
 REWRITE_MAX_TOKENS = 4096
@@ -47,6 +68,17 @@ class Agent:
 
     # ChatGPT に聞き直した回答を、この回答役の口調で書き直すか (agents.json の rewrite)
     rewrite: bool = True
+
+
+@dataclass
+class Comparison:
+    """ローカルの回答と聞き直した回答の違いのまとめ (ローカルの LLM が作る目安)"""
+
+    # ほぼ同じ / 情報が増えた / 食い違いあり
+    verdict: str
+
+    # 違いの要点 (最大3つ)
+    points: list[str]
 
 
 @dataclass
@@ -188,6 +220,64 @@ def rewrite_answer(
 
     content = f"## 質問\n{question}\n\n## 回答\n{answer}"
     return run_agent(agent, [{"role": "user", "content": content}], on_delta, cancel)
+
+
+def compare_answers(
+    question: str,
+    local_answer: str,
+    cloud_answer: str,
+    on_delta: DeltaCallback | None,
+    cancel: CancelToken,
+) -> Comparison:
+    """同じ質問へのローカルの回答 local_answer と、クラウドの回答 cloud_answer の違いを
+    ローカルの LLM でまとめる。指示は agents.json の comparer (無ければ既定のもの)
+    on_delta には受け取った JSON の断片が来る (進み具合の表示に使う)"""
+
+    agent = _load_agent_or_default("comparer")
+    agent.options = LLMOptions(
+        max_tokens=512,
+        temperature=0.0,
+        disable_thinking=True,
+        # 先に違いを書かせてから判定させる
+        # 空の配列だけ返すことがあるので、少なくとも1つは書かせる
+        schema={
+            "type": "object",
+            "properties": {
+                "points": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "minItems": 1,
+                    "maxItems": 3,
+                },
+                "verdict": {"type": "string", "enum": list(VERDICTS)},
+            },
+            "required": ["points", "verdict"],
+        },
+    )
+
+    content = (
+        f"## 質問\n{_truncate(question, COMPARE_QUESTION_BYTES)}\n\n"
+        f"## ローカルの回答\n{_truncate(local_answer, COMPARE_ANSWER_BYTES)}\n\n"
+        f"## 聞き直した回答\n{_truncate(cloud_answer, COMPARE_ANSWER_BYTES)}")
+
+    answer = run_agent(agent, [{"role": "user", "content": content}], on_delta, cancel)
+
+    try:
+        result = json.loads(answer)
+    except json.JSONDecodeError:
+        result = None
+
+    if not isinstance(result, dict) or not isinstance(result.get("verdict"), str):
+        raise LLMError("違いのまとめを JSON として読めませんでした")
+
+    points = result.get("points")
+    points = points if isinstance(points, list) else []
+
+    # 要点の途中に改行が入ることがあるので、1行にまとめる
+    points = [" ".join(p.split()) for p in points if isinstance(p, str)]
+    points = [p for p in points if p]
+
+    return Comparison(result["verdict"], points)
 
 
 def run_agent(

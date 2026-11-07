@@ -61,7 +61,7 @@ main()                         … main.cpp
  └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
 
 SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドでルーター → 回答役 (RunAgent → AskLLM) を実行 (chat.cpp)
-AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッドで ChatGPT → 書き直しを実行 (chat.cpp)
+AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッドで ChatGPT → 書き直し → 違いのまとめを実行 (chat.cpp)
 ```
 
 ## 起動処理 (main.cpp の main の前半)
@@ -150,6 +150,7 @@ UI スレッドとワーカースレッドで共有するデータを 1 つの�
 | `usedRag` | assistant: 資料を使って答えたか (ChatGPT 宛ての履歴から除く印) |
 | `superseded` | assistant: 聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する) |
 | `cloudOriginal` | assistant: 書き直す前の ChatGPT の回答 (折りたたんで表示する) |
+| `compareVerdict` / `comparePoints` | assistant: 聞き直す前の回答との違いのまとめ (判定と要点。まとめていなければ空) |
 | `status` / `statusSince` / `receivedChars` / `totalChars` | 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)。`FormatStatus` で経過時間と文字数を添えて表示する |
 
 ### SendPrompt: 質問の送信
@@ -225,6 +226,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 - 受信中で回答がまだ空のときは「考え中...」と表示します。`status` があるとき (ChatGPT に聞き直している間) は、代わりに `FormatStatus` の結果 (段階・文字数・経過時間) を出します。
 - `superseded` の回答は、名前に「(聞き直す前の回答)」を付けて、本文ごと `TextDisabled` で薄く表示します。
 - `cloudOriginal` があれば、「ChatGPT の元の回答」を `TreeNode` で折りたたんで表示します。
+- `compareVerdict` があれば、聞き直す前の回答との違いのまとめを出します。「食い違いあり」はエラーの色、要点は `Bullet` を付けて薄く表示します。
 - `note` (ルーターの判断や参照した資料) は本文の下に薄く表示します。
 - 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときと、資料も送ることになるときは `SetItemTooltip` で理由を出します。資料を使った回答なら、確認ダイアログで「送る」を選んだときだけ `AskCloud` を呼びます。
 - メッセージを右クリックすると「コピー」のメニューが出て、本文をクリップボードにコピーできます。

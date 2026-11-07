@@ -5,12 +5,12 @@ from __future__ import annotations
 import enum
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import rag
 from agent import (
-    create_answerer, create_assistant, create_cloud, create_general,
+    compare_answers, create_answerer, create_assistant, create_cloud, create_general,
     rewrite_answer, route_question, run_agent)
 from llm_client import CancelToken, LLMError, has_cloud_api_key, load_cloud_settings
 
@@ -49,6 +49,11 @@ class Message:
 
     # assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     cloud_original: str = ""
+
+    # assistant: 聞き直す前のローカルの回答との違いのまとめ (ローカルの LLM が作る目安)
+    # compare_verdict が空なら、まとめていない
+    compare_verdict: str = ""
+    compare_points: list[str] = field(default_factory=list)
 
     # assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
     # 画面には format_status で、経過時間と受け取った文字数を添えて出す
@@ -92,7 +97,8 @@ def format_status(message: Message) -> str:
 
     text += f" ({seconds} 秒)"
 
-    if seconds >= SLOW_SECONDS and not message.received_chars:
+    # 本文がまだ無いときだけ (違いのまとめを作っている間は、止めても回答は残る)
+    if seconds >= SLOW_SECONDS and not message.received_chars and not message.content:
         text += "\n時間がかかっています。中断ボタンで止めると、元の回答に戻ります。"
 
     return text
@@ -321,6 +327,43 @@ def _build_cloud_history(
     return history
 
 
+def _compare_with_local(
+        state: ChatState, question: str, local_answer: str, cloud_answer: str) -> None:
+    """聞き直す前のローカルの回答と、クラウドの回答 (書き直す前) の違いをまとめて、
+    最新の回答に添える (ワーカースレッドから呼ぶ)
+    失敗しても回答はそのまま残し、補足に理由を出す。中断したら何も添えない"""
+
+    if not local_answer.strip():
+        return
+
+    with state.lock:
+        _set_status(state.messages[-1], "聞き直す前の回答と比べ中…")
+    state.notify()
+
+    def on_delta(text: str) -> None:
+        with state.lock:
+            state.messages[-1].received_chars += len(text)
+        state.notify()
+
+    try:
+        comparison = compare_answers(
+            question, local_answer, cloud_answer, on_delta, state.cancel)
+    except Exception as e:
+        with state.lock:
+            answer = state.messages[-1]
+            answer.status = ""
+
+            if not state.cancel.is_set():
+                answer.note += f"\n違いのまとめを作れませんでした: {e}"
+        return
+
+    with state.lock:
+        answer = state.messages[-1]
+        answer.status = ""
+        answer.compare_verdict = comparison.verdict
+        answer.compare_points = comparison.points
+
+
 def refresh_cloud_status(state: ChatState) -> None:
     """クラウドの API キーの有無と名前を調べ直す (UIスレッドから呼ぶ)"""
 
@@ -360,6 +403,7 @@ def ask_cloud(state: ChatState) -> None:
         history = _build_cloud_history(state.messages, last_user)
         question = user.content
         agent_key = previous.agent_key
+        local_answer = previous.content
 
         # 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
         send_rag = previous.used_rag and bool(user.rag_prompt)
@@ -456,6 +500,9 @@ def ask_cloud(state: ChatState) -> None:
                             (f": {failure}" if failure else ""))
                     elif failure and not state.cancel.is_set():
                         answer.note += f"\n書き直しが途中で止まりました: {failure}"
+
+            if not state.cancel.is_set():
+                _compare_with_local(state, question, local_answer, cloud_answer)
         except Exception as e:
             # ChatGPT に聞けなかった: 聞き直す前の回答に戻す
             with state.lock:

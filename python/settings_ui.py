@@ -52,6 +52,7 @@ AGENT_ENTRIES = (
     ("general", "資料なしの回答役"),
     ("cloud", "ChatGPT"),
     ("rewriter", "口調の書き直し"),
+    ("comparer", "違いのまとめ"),
 )
 
 # 回答役 (人格のテンプレートと、ChatGPT の回答の書き直しを選べる)
@@ -310,7 +311,7 @@ class SettingsDialog:
             entry = self.agents_json.get(key)
 
             if not isinstance(entry, dict):
-                # 前の版の設定ファイルに無いもの (cloud / rewriter) は、既定のプロンプトから始める
+                # 前の版の設定ファイルに無いもの (cloud / rewriter / comparer) は、既定のプロンプトから始める
                 default = DEFAULT_AGENTS.get(key)
                 entry = ({"name": default[0], "system_prompt": [default[1]]}
                          if default else {})
@@ -336,6 +337,11 @@ class SettingsDialog:
                 ttk.Label(
                     page, foreground=NOTE_COLOR,
                     text="ChatGPT の回答を書き直すとき、回答役の system プロンプトの後ろに付ける指示です。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            elif key == "comparer":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="ChatGPT に聞き直した後、聞き直す前の回答との違いをローカルの LLM でまとめるときの指示です。",
                 ).pack(side="top", fill="x", pady=(0, 6))
             else:
                 row = ttk.Frame(page)

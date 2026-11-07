@@ -17,6 +17,26 @@ constexpr const char* DEFAULT_REWRITER_PROMPT =
     "コードやコマンドはそのまま書き写します。"
     "言い直した回答だけを書き、前置きや説明は付けないでください。";
 
+constexpr const char* DEFAULT_COMPARER_PROMPT =
+    "同じ質問への「ローカルの回答」と「聞き直した回答」を比べて、内容の違いを短くまとめてください。"
+    "口調・言い回し・長さ・書き方の違いは書かず、内容の違いだけを書きます。"
+    "points には違いを最大3つ、1つ40文字くらいで書きます。"
+    "食い違いは「ローカルは〜、聞き直した回答は〜」、片方にだけある情報は「聞き直した回答だけ: 〜」のように、どちらの回答の話かが分かるように書きます。"
+    "聞き直した回答にだけある情報、数値や事実の食い違いを優先します。"
+    "違いが無ければ「内容の違いはありません」とだけ書きます。"
+    "回答に書いていないことを推測で書かないでください。"
+    "verdict は、食い違う点が1つでもあれば「食い違いあり」、"
+    "食い違いは無く、聞き直した回答のほうが情報が多ければ「情報が増えた」、"
+    "内容がほぼ同じなら「ほぼ同じ」にします。";
+
+// 違いのまとめの判定
+constexpr const char* VERDICTS[] = {"ほぼ同じ", "情報が増えた", "食い違いあり"};
+
+// 違いのまとめで、1つの回答を見せる最大の長さ (バイト。日本語で 1,200 文字くらい)
+// llama-server のコンテキスト (既定 4096 トークン) に2つの回答が収まるように
+constexpr size_t COMPARE_ANSWER_BYTES = 3600;
+constexpr size_t COMPARE_QUESTION_BYTES = 600;
+
 // 書き直しの最大トークン数 (ChatGPT の長い回答も入るように)
 constexpr int REWRITE_MAX_TOKENS = 4096;
 
@@ -109,6 +129,33 @@ std::string Truncate(const std::string& text, size_t maxBytes)
     return text.substr(0, end) + "…";
 }
 
+// 改行やタブを空白にして、続く空白を1つにまとめ、前後の空白を取る
+// (違いのまとめの要点の途中に改行が入ることがあるので)
+std::string ToSingleLine(const std::string& text)
+{
+    std::string line;
+    bool space = false;
+
+    for (const char c : text)
+    {
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+        {
+            space = !line.empty();
+            continue;
+        }
+
+        if (space)
+        {
+            line += ' ';
+            space = false;
+        }
+
+        line += c;
+    }
+
+    return line;
+}
+
 Agent CreateRouter()
 {
     Agent agent = LoadAgent("router");
@@ -140,6 +187,11 @@ std::string DefaultAgentName(const std::string& key)
         return "ChatGPT";
     }
 
+    if (key == "comparer")
+    {
+        return "違いのまとめ";
+    }
+
     return key == "rewriter" ? "書き直し" : "";
 }
 
@@ -148,6 +200,11 @@ std::string DefaultAgentPrompt(const std::string& key)
     if (key == "cloud")
     {
         return DEFAULT_CLOUD_PROMPT;
+    }
+
+    if (key == "comparer")
+    {
+        return DEFAULT_COMPARER_PROMPT;
     }
 
     return key == "rewriter" ? DEFAULT_REWRITER_PROMPT : "";
@@ -208,6 +265,80 @@ std::string RewriteAnswer(
         json::array({{{"role", "user"}, {"content", content}}}),
         onDelta,
         cancel);
+}
+
+Comparison CompareAnswers(
+    const std::string& question,
+    const std::string& localAnswer,
+    const std::string& cloudAnswer,
+    const DeltaCallback& onDelta,
+    const std::atomic<bool>& cancel)
+{
+    Agent agent = LoadAgentOr(
+        "comparer", DefaultAgentName("comparer"), DefaultAgentPrompt("comparer"));
+
+    agent.options.maxTokens = 512;
+    agent.options.temperature = 0.0f;
+    agent.options.disableThinking = true;
+    agent.options.cloud = false;
+
+    // 先に違いを書かせてから判定させる
+    agent.options.schema = {
+        {"type", "object"},
+        {"properties", {
+            {"points", {
+                {"type", "array"},
+                {"items", {{"type", "string"}, {"minLength", 1}}},
+                // 空の配列だけ返すことがあるので、少なくとも1つは書かせる
+                {"minItems", 1},
+                {"maxItems", 3}
+            }},
+            {"verdict", {{"type", "string"}, {"enum", VERDICTS}}}
+        }},
+        {"required", {"points", "verdict"}}
+    };
+
+    const std::string content =
+        "## 質問\n" + Truncate(question, COMPARE_QUESTION_BYTES) +
+        "\n\n## ローカルの回答\n" + Truncate(localAnswer, COMPARE_ANSWER_BYTES) +
+        "\n\n## 聞き直した回答\n" + Truncate(cloudAnswer, COMPARE_ANSWER_BYTES);
+
+    const std::string answer = RunAgent(
+        agent,
+        json::array({{{"role", "user"}, {"content", content}}}),
+        onDelta,
+        cancel);
+
+    const json result = json::parse(answer, nullptr, false);
+
+    if (result.is_discarded() || !result.is_object() ||
+        !result.contains("verdict") || !result["verdict"].is_string())
+    {
+        throw std::runtime_error("違いのまとめを JSON として読めませんでした");
+    }
+
+    Comparison comparison;
+    comparison.verdict = result["verdict"].get<std::string>();
+
+    if (result.contains("points") && result["points"].is_array())
+    {
+        for (const auto& point : result["points"])
+        {
+            if (!point.is_string())
+            {
+                continue;
+            }
+
+            const std::string line = ToSingleLine(point.get<std::string>());
+
+            if (!line.empty())
+            {
+                comparison.points.push_back(line);
+            }
+        }
+    }
+
+    return comparison;
 }
 
 std::string RunAgent(

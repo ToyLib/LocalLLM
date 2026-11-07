@@ -44,6 +44,11 @@ struct Message
     // assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     std::string cloudOriginal;
 
+    // assistant: 聞き直す前のローカルの回答との違いのまとめ (ローカルの LLM が作る目安)
+    // compareVerdict が空なら、まとめていない
+    std::string compareVerdict;
+    std::vector<std::string> comparePoints;
+
     // assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
     // 画面には FormatStatus で、経過時間と受け取った文字数を添えて出す
     std::string status;

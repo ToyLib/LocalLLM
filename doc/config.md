@@ -75,6 +75,7 @@
 | `assistant` / `general` | `name`、`system_prompt`、`rewrite` | エラーを表示 |
 | `cloud` | `name`、`system_prompt` | 既定のプロンプト (名前は `server.json` の `cloud.name`) |
 | `rewriter` | `name`、`system_prompt` | 既定のプロンプト |
+| `comparer` | `name`、`system_prompt` | 既定のプロンプト |
 
 `system_prompt` は文字列か、文字列の配列 (区切りなしでつなげる) です。ルーターの `maxTokens` / `temperature` / JSON スキーマなど、コードと結びついた設定は `agent.cpp` / `agent.py` にあります。
 
@@ -126,6 +127,7 @@ macOS では、Finder から起動したアプリはシェルの環境変数を�
 | ローカルの回答の最大トークン数 (1024) | `llm_client.h` の `LLMOptions::maxTokens` |
 | ルーターの設定 (128 トークン、temperature 0、スキーマ) | `agent.cpp` の `CreateRouter` |
 | 書き直しの最大トークン数 (4096) | `agent.cpp` の `REWRITE_MAX_TOKENS` |
+| 違いのまとめの設定 (512 トークン、temperature 0、スキーマ、1 つの回答は 3,600 バイトまで) | `agent.cpp` の `CompareAnswers` / `COMPARE_ANSWER_BYTES` |
 | チャンクの大きさ・添える資料の数・類似度の下限 | `rag.cpp` の `MAX_CHUNK_CHARS` / `TOP_K` / `MIN_SCORE` |
 | ウィンドウの初期サイズ (900×700) | `main.cpp` / `chat_ui.py` |
 

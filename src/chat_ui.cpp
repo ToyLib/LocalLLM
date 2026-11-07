@@ -111,6 +111,31 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
             ImGui::TreePop();
         }
 
+        // 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安)
+        if (!message.compareVerdict.empty() && !message.superseded)
+        {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("聞き直す前の回答との違い (ローカルの LLM による目安):");
+            ImGui::SameLine();
+
+            if (message.compareVerdict == "食い違いあり")
+            {
+                ImGui::TextColored(colors.error, "%s", message.compareVerdict.c_str());
+            }
+            else
+            {
+                ImGui::TextUnformatted(message.compareVerdict.c_str());
+            }
+
+            for (const auto& point : message.comparePoints)
+            {
+                ImGui::Bullet();
+                ImGui::TextDisabled("%s", point.c_str());
+            }
+
+            ImGui::PopTextWrapPos();
+        }
+
         if (!message.note.empty())
         {
             ImGui::PushTextWrapPos(0.0f);

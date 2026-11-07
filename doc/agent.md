@@ -9,12 +9,13 @@
 | アシスタント (`assistant`) | 資料を参照する質問に、資料に基づいて答える | 普通の丁寧な口調 |
 | 侍 (`general`) | 資料の要らない質問 (雑談や一般的な質問) に答える | 時代劇の侍の口調 (「拙者」「〜でござる」) |
 
-「ChatGPT に聞き直す」ボタンを押したときは、さらに次の 2 つが働きます ([ChatGPT に聞き直す](chatgpt.md))。
+「ChatGPT に聞き直す」ボタンを押したときは、さらに次の 3 つが働きます ([ChatGPT に聞き直す](chatgpt.md))。
 
 | エージェント (キー) | 役割 | 接続先 |
 | --- | --- | --- |
 | ChatGPT (`cloud`) | 最新の質問に答え直す | クラウド (`server.json` の `cloud`) |
 | 書き直し (`rewriter`) | ChatGPT の回答を、元の回答役の口調で言い直す。独立したエージェントではなく、回答役の system プロンプトの後ろに指示を足して使う | ローカル |
+| 違いのまとめ (`comparer`) | 聞き直す前の回答と ChatGPT の回答の違いを、短くまとめる (目安) | ローカル |
 
 回答役の 2 つは口調を変えてあるので、ルーターがどちらに振り分けたかが回答を見るだけで分かります。
 回答の上には、答えたエージェントの名前 (`アシスタント` / `侍`。聞き直したときは `侍 (ChatGPT → ローカルで書き直し)` など) も表示されます。
@@ -35,10 +36,10 @@
 }
 ```
 
-- キーは `router` / `assistant` / `general` / `cloud` / `rewriter` の 5 つです。`general` は資料の要らない質問に答える汎用の回答役で、既定のプロンプトでは侍の口調にしています。
+- キーは `router` / `assistant` / `general` / `cloud` / `rewriter` / `comparer` の 6 つです。`general` は資料の要らない質問に答える汎用の回答役で、既定のプロンプトでは侍の口調にしています。
 - `system_prompt` は文字列か、文字列の配列です。配列は区切りなしでつなげて 1 つのプロンプトにします。
 - 回答役 (`assistant` / `general`) には `rewrite` (true / false) も書けます。ChatGPT に聞き直した回答をこの回答役の口調で書き直すかどうかです (既定: アシスタントは `false`、侍は `true`)。
-- `cloud` / `rewriter` は無くても既定のプロンプト (`agent.cpp` の `DefaultAgentPrompt`) で動きます。`cloud` の表示名は `agents.json` ではなく `server.json` の `cloud.name` を使います。
+- `cloud` / `rewriter` / `comparer` は無くても既定のプロンプト (`agent.cpp` の `DefaultAgentPrompt`) で動きます。`cloud` の表示名は `agents.json` ではなく `server.json` の `cloud.name` を使います。
 - 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても次の質問から反映されます。
 - アプリの「設定」ボタンから開く設定画面の「システムプロンプト」タブでも編集できます。1 行が配列の 1 要素になります (元が文字列なら文字列のまま保存します)。
 - 回答役 (`assistant` / `general`) のタブでは、人格のテンプレートを選んで名前とプロンプトに読み込めます (下の「人格のテンプレート」)。
@@ -114,9 +115,12 @@
     → 全部受け取るまで画面には流さない
   回答役の rewrite が true なら、RewriteAnswer で回答役がローカルで言い直す (ストリーミング表示)
   false なら ChatGPT の回答をそのまま表示する
+  最後に CompareAnswers で、聞き直す前の回答と ChatGPT の元の回答の違いをまとめて添える
 ```
 
 書き直しでは、回答役の system プロンプトの後ろに `rewriter` の指示を足し、「## 質問」「## 回答」をまとめた 1 つの user メッセージだけを送ります (会話履歴は送りません)。`maxTokens` は 4096 (`REWRITE_MAX_TOKENS`)、`disableThinking` は true です。
+
+違いのまとめでは、`comparer` の system プロンプトに、「## 質問」「## ローカルの回答」「## 聞き直した回答」をまとめた 1 つの user メッセージを送ります。回答はそれぞれ 3,600 バイト (`COMPARE_ANSWER_BYTES`) までに縮めます。ルーターと同じく JSON スキーマで形を決め (`points`: 1〜3 個の文字列、`verdict`: 「ほぼ同じ / 情報が増えた / 食い違いあり」のどれか)、先に違いを書かせてから判定させます。`maxTokens` は 512、`temperature` は 0、`disableThinking` は true です。`points` に `minItems: 1` を付けているのは、付けないと空の配列だけを返しがちだったためです。
 
 ### 小さいモデルでも JSON を崩さないために
 
@@ -167,7 +171,8 @@ RouteDecision RouteQuestion(const json& history, const std::string& question,
 | `CreateAssistant()` / `CreateGeneral()` / `CreateAnswerer(key)` | 回答役のエージェントを作る |
 | `CreateCloud()` | ChatGPT に聞き直すエージェントを作る (`options.cloud = true`) |
 | `RewriteAnswer()` | クラウドの回答を、回答役 `persona` の口調でローカルの LLM に書き直させる |
-| `DefaultAgentName()` / `DefaultAgentPrompt()` | `agents.json` に `cloud` / `rewriter` が無いときの既定値 |
+| `CompareAnswers()` | ローカルの回答とクラウドの回答の違いを、ローカルの LLM にまとめさせる (`Comparison`) |
+| `DefaultAgentName()` / `DefaultAgentPrompt()` | `agents.json` に `cloud` / `rewriter` / `comparer` が無いときの既定値 |
 | `RouteQuestion()` | ルーターを作って呼び、資料が必要かの判断 (`RouteDecision`) を返す |
 
 どれも `AskLLM` と同じくブロッキングなので、ワーカースレッドから呼びます。

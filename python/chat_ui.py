@@ -53,6 +53,10 @@ class _Rendered(NamedTuple):
     cloud_original: str = ""
     original_open: bool = False
 
+    # 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安。まとめていなければ空)
+    compare_verdict: str = ""
+    compare_points: tuple[str, ...] = ()
+
     # 「ChatGPT に聞き直す」ボタン (最新の回答だけ): 出すか、押せるか、資料を使ったか
     cloud_button: bool = False
     cloud_enabled: bool = False
@@ -213,6 +217,9 @@ class ChatApp:
         self.text.tag_configure("superseded", spacing3=4)
         self.text.tag_configure("toggle", font=self.small, underline=True)
         self.text.tag_configure(
+            "comparison", font=self.small, lmargin1=12, lmargin2=24)
+        self.text.tag_configure("conflict", font=self.small)
+        self.text.tag_configure(
             "original", font=self.small, lmargin1=12, lmargin2=12, spacing3=4)
         self.text.tag_bind("toggle", "<Button-1>", self._toggle_original)
         self.text.tag_bind(
@@ -281,8 +288,11 @@ class ChatApp:
         self.text.tag_configure("user", foreground=colors["user"])
         self.text.tag_configure("ai", foreground=colors["ai"])
 
-        for tag in ("thinking", "note", "separator", "superseded", "toggle"):
+        for tag in ("thinking", "note", "separator", "superseded", "toggle", "comparison"):
             self.text.tag_configure(tag, foreground=colors["sub_text"])
+
+        # 違いのまとめの「食い違いあり」は目立たせる
+        self.text.tag_configure("conflict", foreground=colors["error"])
 
         self.rag_status.configure(foreground=colors["sub_text"])
         self.error_label.configure(foreground=colors["error"])
@@ -428,6 +438,8 @@ class ChatApp:
                     superseded=m.superseded,
                     cloud_original="" if m.superseded else m.cloud_original,
                     original_open=i in self._open_originals,
+                    compare_verdict="" if m.superseded else m.compare_verdict,
+                    compare_points=tuple(m.compare_points),
                     cloud_button=(i == last and m.role == "assistant" and
                                   bool(m.agent_key) and not m.superseded),
                     cloud_enabled=i == last and cloud_enabled,
@@ -532,6 +544,17 @@ class ChatApp:
             if message.original_open:
                 text.insert(
                     "end", message.cloud_original + "\n", ("original", tag))
+
+        # 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安)
+        if message.compare_verdict:
+            text.insert(
+                "end", "聞き直す前の回答との違い (ローカルの LLM による目安): ",
+                ("comparison", tag))
+            verdict_tag = "conflict" if message.compare_verdict == "食い違いあり" else "comparison"
+            text.insert("end", message.compare_verdict + "\n", (verdict_tag, tag))
+
+            for point in message.compare_points:
+                text.insert("end", f"・{point}\n", ("comparison", tag))
 
         if message.note:
             text.insert("end", message.note + "\n", ("note", tag))
