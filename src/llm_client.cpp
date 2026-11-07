@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <functional>
 
 namespace
 {
@@ -133,7 +134,7 @@ size_t WriteCallback(
 
         if (context->raw.size() < MAX_RAW)
         {
-            context->raw.append(data, std::min(bytes, MAX_RAW - context->raw.size()));
+            context->raw.append(data, (std::min)(bytes, MAX_RAW - context->raw.size()));
         }
 
         context->buffer.append(data, bytes);
