@@ -1,7 +1,7 @@
 # LocalLLM GUI — 環境構築手順 (macOS)
 
 macOS 上で、Homebrew を使って開発環境を構築する手順。
-Ubuntu の手順は [SETUP.md](SETUP.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
+Ubuntu の手順は [SETUP.md](SETUP.md)、CachyOS など Arch 系の手順は [SETUP-Arch.md](SETUP-Arch.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
 
 アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP.md](SETUP.md) の「9. GUI クライアントの構成」を参照。
 

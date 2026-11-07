@@ -4,7 +4,7 @@ Windows 上で、Visual Studio (MSVC) と vcpkg を使って開発環境を構�
 ビルドには Visual Studio のジェネレーターを使うので、Ninja や開発者用のシェル (Developer PowerShell for VS) は不要。
 vcpkg の場所は環境変数 `VCPKG_ROOT` で指定する (この手順では例として `C:\tools\vcpkg` にインストールする)。
 
-Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md) を参照。
+Ubuntu の手順は [SETUP.md](SETUP.md)、CachyOS など Arch 系の手順は [SETUP-Arch.md](SETUP-Arch.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md) を参照。
 
 アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP.md](SETUP.md) の「9. GUI クライアントの構成」を参照。
 

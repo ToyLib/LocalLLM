@@ -19,11 +19,12 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 
 ## 必要なもの
 
-Linux (Ubuntu)、macOS、Windows でビルドできます。詳しい環境構築手順 (llama.cpp のビルドやモデル別の起動方法を含む) は OS ごとの手順書を参照してください。
+Linux (Ubuntu / CachyOS などの Arch 系)、macOS、Windows でビルドできます。詳しい環境構築手順 (llama.cpp のビルドやモデル別の起動方法を含む) は OS ごとの手順書を参照してください。
 
 | OS | 手順書 | パッケージ管理 | ビルド・実行を確認した環境 |
 | --- | --- | --- | --- |
 | Ubuntu | [SETUP.md](SETUP.md) | APT | Ubuntu 26.x |
+| CachyOS / Arch Linux | [SETUP-Arch.md](SETUP-Arch.md) | pacman | CachyOS |
 | macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew | macOS 27 |
 | Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (場所は環境変数 `VCPKG_ROOT`) | Windows 11 + Visual Studio 2026 |
 
@@ -174,7 +175,7 @@ python3 python/main.py
 | `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
-| `SETUP.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / macOS / Windows) |
+| `SETUP.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |
 | `scripts/` | llama-server の起動スクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
