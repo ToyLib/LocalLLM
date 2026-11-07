@@ -6,11 +6,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 import tkinter as tk
 import tkinter.font as tkfont
 from collections.abc import Callable
-from tkinter import colorchooser
+from tkinter import colorchooser, messagebox
 from tkinter import ttk
 from typing import Any
 
@@ -81,6 +82,7 @@ class SettingsDialog:
     colors: 適用中の色 (COLOR_ENTRIES のキー → "#RRGGBB")
     default_colors: 「色を既定に戻す」で使う色
     apply_colors: 色を画面に反映する (変えるたびに呼ぶ)
+    on_reset: 設定を既定値に戻したあとに呼ぶ (画面の設定を読み直して、設定画面を開き直す)
     """
 
     def __init__(
@@ -92,6 +94,7 @@ class SettingsDialog:
         colors: dict[str, str],
         default_colors: dict[str, str],
         apply_colors: Callable[[dict[str, str]], None],
+        on_reset: Callable[[], None],
     ) -> None:
         self.parent = parent
         self.font = font
@@ -100,6 +103,7 @@ class SettingsDialog:
         self.initial_colors = dict(colors)
         self.default_colors = default_colors
         self.apply_colors = apply_colors
+        self.on_reset = on_reset
 
         self.window = tk.Toplevel(parent)
         self.window.title("設定")
@@ -162,6 +166,11 @@ class SettingsDialog:
         frame = ttk.Frame(self.window, padding=8)
         frame.pack(fill="both", expand=True)
 
+        ttk.Label(
+            frame, foreground=NOTE_COLOR,
+            text=f"保存先: {config.config_directory()}",
+        ).pack(side="top", fill="x", pady=(0, 6))
+
         if self.load_error:
             ttk.Label(
                 frame, text=self.load_error, foreground=ERROR_COLOR,
@@ -178,6 +187,13 @@ class SettingsDialog:
 
         if self.load_error:
             save_button.state(["disabled"])
+
+        # LOCALLLM_CONFIG_DIR を指定しているときは、そのフォルダが既定値なので戻せない
+        # (読めないファイルがあるときも、既定値に戻せば直せる)
+        if not os.environ.get("LOCALLLM_CONFIG_DIR"):
+            ttk.Button(
+                footer, text="すべて既定に戻す", command=self._reset,
+            ).pack(side="left", padx=(0, 8))
 
         self.save_error = ttk.Label(footer, foreground=ERROR_COLOR)
         self.save_error.pack(side="left", fill="x", expand=True)
@@ -465,6 +481,26 @@ class SettingsDialog:
         self.apply_font_size(size)
         self.apply_colors(colors)
         self._close()
+
+    def _reset(self) -> None:
+        """user-config/ を config/ の内容で上書きする"""
+
+        if not messagebox.askyesno(
+                "既定に戻す",
+                "画面の設定・システムプロンプト・サーバーの URL・人格のテンプレートを、"
+                "すべて既定値 (config/ の内容) に戻します。\n"
+                "保存した設定は消えて、元に戻せません。よろしいですか？",
+                icon="warning", default="no", parent=self.window):
+            return
+
+        try:
+            config.reset_to_defaults()
+        except config.ConfigError as e:
+            self.save_error.configure(text=str(e))
+            return
+
+        self._close()
+        self.on_reset()
 
     def _cancel(self) -> None:
         # 見ながら変えた文字の大きさと色を元に戻す

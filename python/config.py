@@ -1,28 +1,81 @@
-"""config/ の設定ファイル (JSON) の読み込み"""
+"""設定ファイル (JSON) の読み込みと保存
+
+既定値はリポジトリの config/ (git で管理し、アプリからは書き換えない)。
+初めて使うときに、git で無視する user-config/ へコピーして、以後はそちらを読み書きする。
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
 # リポジトリのフォルダ (このスクリプトの1つ上)
 BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 
+# 既定値の設定ファイル
+DEFAULT_DIRECTORY = BASE_DIRECTORY / "config"
+
+# 設定画面で書き換える設定ファイル (.gitignore で除外している)
+USER_DIRECTORY = BASE_DIRECTORY / "user-config"
+
+_copy_lock = threading.Lock()
+_copied = False
+
 
 class ConfigError(Exception):
     pass
 
 
+def _copy_defaults(overwrite: bool) -> None:
+    """config/ の設定ファイルを user-config/ にコピーする
+    overwrite が False なら、user-config/ に無いファイルだけをコピーする
+    (あとから config/ に増えたファイルも、次の起動でコピーされる)"""
+
+    try:
+        USER_DIRECTORY.mkdir(exist_ok=True)
+
+        for source in sorted(DEFAULT_DIRECTORY.glob("*.json")):
+            destination = USER_DIRECTORY / source.name
+
+            if overwrite or not destination.exists():
+                shutil.copyfile(source, destination)
+    except OSError as e:
+        raise ConfigError(
+            f"設定ファイルを {USER_DIRECTORY} にコピーできません") from e
+
+
 def config_directory() -> Path:
-    """環境変数 LOCALLLM_CONFIG_DIR、無ければリポジトリの config/"""
+    """環境変数 LOCALLLM_CONFIG_DIR、無ければリポジトリの user-config/
+    (user-config/ は初めて使うときに config/ からコピーして作る)"""
+
+    global _copied
 
     if env := os.environ.get("LOCALLLM_CONFIG_DIR"):
         return Path(env)
 
-    return BASE_DIRECTORY / "config"
+    # ワーカースレッドからも呼ばれるので、コピーは1回だけ
+    with _copy_lock:
+        if not _copied:
+            _copy_defaults(overwrite=False)
+            _copied = True
+
+    return USER_DIRECTORY
+
+
+def reset_to_defaults() -> None:
+    """設定を既定値 (config/) に戻す
+    LOCALLLM_CONFIG_DIR を指定しているときは、そのフォルダが既定値なので何もしない"""
+
+    if os.environ.get("LOCALLLM_CONFIG_DIR"):
+        return
+
+    with _copy_lock:
+        _copy_defaults(overwrite=True)
 
 
 def load(file_name: str) -> dict[str, Any]:

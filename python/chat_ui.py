@@ -244,7 +244,16 @@ class ChatApp:
     def _open_settings(self) -> None:
         SettingsDialog(
             self.root, self.font, self.font_size, self._apply_font_size,
-            self.colors, self.default_colors, self._apply_colors)
+            self.colors, self.default_colors, self._apply_colors,
+            self._on_settings_reset)
+
+    def _on_settings_reset(self) -> None:
+        """設定を既定値に戻したあと、画面の設定を読み直して設定画面を開き直す"""
+
+        ui = config.load_or_empty("ui.json")
+        self._apply_font_size(_font_size(ui))
+        self._apply_colors(_colors(ui, self.default_colors))
+        self._open_settings()
 
     def _on_rag_mode(self) -> None:
         self.state.rag_mode = RagMode(self.rag_mode.get())
