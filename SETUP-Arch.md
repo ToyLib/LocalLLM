@@ -189,5 +189,5 @@ curl http://127.0.0.1:8080/health
 ## 7. 注意事項
 
 - Arch 系はローリングリリースのため、`sudo pacman -Syu` でシステムを更新した後は、ライブラリのバージョンが変わって LocalLLM や llama.cpp が起動しなくなることがある。そのときは `build/` を削除してビルドし直す。
-- AUR の `llama.cpp-vulkan` などでも llama-server は入るが、この手順ではソースからビルドしたものを使う。AUR 版を使う場合は `LLAMA_SERVER` でパスを指定する。
+- pacman の `llama-cpp` や AUR の `llama.cpp-vulkan` などでも llama-server は入る。起動スクリプトは `~/Repos/llama.cpp` にビルドしたものを優先し、無い場合は PATH 上の `llama-server` (`/usr/bin/llama-server` など) を使う。パッケージ版が Vulkan に対応しているかはパッケージによるので、GPU を使うにはこの手順のようにソースからビルドするのが確実。
 - 背景の半透明表示は `SDL_WINDOW_TRANSPARENT` を使う。デスクトップ環境 (KDE Plasma など) が透過に対応していない場合は透けない。

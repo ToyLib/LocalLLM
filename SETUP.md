@@ -309,7 +309,15 @@ AMD Radeon 760M が Vulkan デバイスとして認識されることを確認�
 
 あわせて RAG 用の埋め込みサーバー (BGE-M3、`127.0.0.1:8081`、初回は約 600 MB をダウンロード) を裏で起動し、チャット用のサーバーを止めると一緒に止める。RAG を使わないときは `--no-embed` を付ける。詳しくは [doc/rag.md](doc/rag.md) を参照。
 
-llama-server は既定で `~/Repos/llama.cpp/build/bin/llama-server` を使う。場所が違う場合は環境変数で指定する。
+llama-server は次の順に探す。
+
+1. 環境変数 `LLAMA_SERVER` で指定したファイル
+2. `$LLAMA_DIR/build/bin/llama-server` (ソースからビルドしたもの。`LLAMA_DIR` の既定は `~/Repos/llama.cpp`)
+3. PATH 上の `llama-server` (APT や pacman で入れた `/usr/bin/llama-server` など)
+
+ソースからビルドしたものがあればそれを優先し、無い場合はパッケージで入れたものを使う。どれを使うかは起動時に `Server` の行に表示される。
+
+ビルドした場所が違う場合や、特定のファイルを使いたい場合は環境変数で指定する。
 
 ```bash
 LLAMA_DIR=/path/to/llama.cpp ./scripts/llama-server-linux.sh

@@ -14,13 +14,23 @@ set -euo pipefail
 #   llama-server-linux.sh             chat + embedding server
 #   llama-server-linux.sh --no-embed  chat server only (no RAG)
 #
-# Override paths with environment variables:
-#   LLAMA_DIR    llama.cpp directory (default: ~/Repos/llama.cpp)
-#   LLAMA_SERVER llama-server executable
+# llama-server is searched in this order:
+#   1. LLAMA_SERVER environment variable
+#   2. $LLAMA_DIR/build/bin/llama-server (built from source)
+#   3. llama-server in PATH (installed with apt or pacman, e.g. /usr/bin)
+#
+# LLAMA_DIR defaults to ~/Repos/llama.cpp
 # --------------------------------------------------
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/Repos/llama.cpp}"
-SERVER="${LLAMA_SERVER:-$LLAMA_DIR/build/bin/llama-server}"
+
+if [[ -n "${LLAMA_SERVER:-}" ]]; then
+    SERVER="$LLAMA_SERVER"
+elif [[ -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
+    SERVER="$LLAMA_DIR/build/bin/llama-server"
+else
+    SERVER="$(command -v llama-server || true)"
+fi
 
 HOST="127.0.0.1"
 PORT=8080
@@ -51,8 +61,10 @@ for arg in "$@"; do
     esac
 done
 
-if [[ ! -x "$SERVER" ]]; then
-    echo "Error: llama-server not found: $SERVER"
+if [[ -z "$SERVER" || ! -x "$SERVER" ]]; then
+    echo "Error: llama-server not found."
+    echo "Build it in $LLAMA_DIR, install it with apt or pacman,"
+    echo "or set LLAMA_SERVER to its path."
     exit 1
 fi
 
@@ -93,6 +105,7 @@ esac
 echo
 echo "----------------------------------"
 echo " Model      : $NAME"
+echo " Server     : $SERVER"
 echo " Backend    : Vulkan"
 echo " GPU layers : $GPU_LAYERS"
 echo " Context    : $CONTEXT"
