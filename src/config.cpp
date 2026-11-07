@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -32,6 +33,20 @@ fs::path ConfigDirectory()
 
     const char* basePath = SDL_GetBasePath();
     return Utf8ToPath(basePath ? basePath : "") / "config";
+}
+
+// ファイルを読む。開けなければ false
+bool ReadFile(const fs::path& path, std::string& text)
+{
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file)
+    {
+        return false;
+    }
+
+    text.assign(std::istreambuf_iterator<char>(file), {});
+    return true;
 }
 
 } // namespace
@@ -115,4 +130,64 @@ std::string ConfigString(const std::string& fileName, const std::string& key)
     }
 
     return config[key].get<std::string>();
+}
+
+nlohmann::ordered_json LoadConfigForEdit(const std::string& fileName)
+{
+    const fs::path path = ConfigDirectory() / Utf8ToPath(fileName);
+
+    if (!fs::exists(path))
+    {
+        return nlohmann::ordered_json::object();
+    }
+
+    std::string text;
+
+    if (!ReadFile(path, text))
+    {
+        throw std::runtime_error(
+            "設定ファイルを開けません: " + PathToUtf8(path));
+    }
+
+    nlohmann::ordered_json config =
+        nlohmann::ordered_json::parse(text, nullptr, false);
+
+    if (config.is_discarded() || !config.is_object())
+    {
+        throw std::runtime_error(
+            "設定ファイルを JSON として読めません: " + PathToUtf8(path));
+    }
+
+    return config;
+}
+
+void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& config)
+{
+    const fs::path directory = ConfigDirectory();
+    const fs::path path = directory / Utf8ToPath(fileName);
+    fs::path temporary = path;
+    temporary += ".tmp";
+
+    std::error_code error;
+    fs::create_directories(directory, error);
+
+    {
+        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+        file << config.dump(2) << "\n";
+
+        if (!file)
+        {
+            throw std::runtime_error(
+                "設定ファイルを書けません: " + PathToUtf8(temporary));
+        }
+    }
+
+    fs::rename(temporary, path, error);
+
+    if (error)
+    {
+        fs::remove(temporary, error);
+        throw std::runtime_error(
+            "設定ファイルを置き換えられません: " + PathToUtf8(path));
+    }
 }

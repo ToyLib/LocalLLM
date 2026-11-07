@@ -4,6 +4,7 @@
 #include "font.h"
 #include "ime.h"
 #include "rag.h"
+#include "settings_ui.h"
 
 #include <SDL3/SDL.h>
 #include <curl/curl.h>
@@ -15,23 +16,7 @@
 #include "macos_window.h"
 #endif
 
-#include <algorithm>
 #include <string>
-
-namespace
-{
-
-// 画面の設定は config/ui.json に書く (起動時に1回だけ読む)
-// 書いていない・読めない項目は次の既定値を使う
-
-// チャット画面の背景の不透明度 (0〜1、文字は不透明のまま)
-constexpr float DEFAULT_WINDOW_OPACITY = 0.85f;
-
-// 同梱フォント (実行ファイルからの相対パス) と大きさ
-constexpr const char* DEFAULT_FONT_FILE = "Asset/MPLUSRounded1c-Bold.ttf";
-constexpr float DEFAULT_FONT_SIZE = 18.0f;
-
-} // namespace
 
 int main(int, char**)
 {
@@ -99,20 +84,12 @@ int main(int, char**)
     style.ScaleAllSizes(scale);
     style.FontScaleDpi = scale;
 
-    const nlohmann::json ui = LoadConfigOrEmpty("ui.json");
+    // 画面の設定は config/ui.json に書く (設定画面からも変えられる)
+    SettingsState settings;
+    settings.current = ReadUiSettings(LoadConfigOrEmpty("ui.json"));
 
-    style.Colors[ImGuiCol_WindowBg].w = std::clamp(
-        ConfigNumberOr(ui, "window_opacity", DEFAULT_WINDOW_OPACITY), 0.0f, 1.0f);
-
-    float fontSize = ConfigNumberOr(ui, "font_size", DEFAULT_FONT_SIZE);
-
-    if (fontSize <= 0.0f)
-    {
-        SDL_Log("Config font_size must be positive (using default)");
-        fontSize = DEFAULT_FONT_SIZE;
-    }
-
-    LoadFont(io, ConfigStringOr(ui, "font_file", DEFAULT_FONT_FILE), fontSize);
+    LoadFont(io, settings.current.fontFile, settings.current.fontSize);
+    ApplyUiSettings(settings.current);
 
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -175,7 +152,7 @@ int main(int, char**)
         const float topInset = 0.0f;
 #endif
 
-        DrawUI(state, rag, input, focusInput, topInset);
+        DrawUI(state, rag, settings, input, focusInput, topInset);
 
         ImGui::Render();
         SDL_SetRenderScale(

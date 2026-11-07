@@ -64,3 +64,33 @@ def get_string(file_name: str, key: str) -> str:
         raise ConfigError(f"設定ファイル {file_name} に {key} (文字列) がありません")
 
     return value
+
+
+def load_for_edit(file_name: str) -> dict[str, Any]:
+    """設定画面で書き換えるために読む
+    ファイルが無ければ空の dict、JSON のオブジェクトとして読めなければ ConfigError
+    (壊れたファイルを上書きして中身を消さないように、読めないときは保存させない)"""
+
+    if not (config_directory() / file_name).exists():
+        return {}
+
+    return load(file_name)
+
+
+def save(file_name: str, data: dict[str, Any]) -> None:
+    """設定ファイルに書く
+    一時ファイルに書いてから置き換えるので、途中で失敗しても元のファイルは残る"""
+
+    directory = config_directory()
+    path = directory / file_name
+    temporary = path.with_name(path.name + ".tmp")
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8", newline="\n")
+        os.replace(temporary, path)
+    except OSError as e:
+        temporary.unlink(missing_ok=True)
+        raise ConfigError(f"設定ファイルを書けません: {path}") from e

@@ -11,6 +11,7 @@ from tkinter import ttk
 import config
 import rag
 from chat import ChatState, RagMode, send_prompt
+from settings_ui import SettingsDialog
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
 # (font_size は C++ 版のピクセル数なので別にしている)
@@ -59,11 +60,11 @@ class ChatApp:
         root.minsize(480, 360)
         root.protocol("WM_DELETE_WINDOW", self._close)
 
-        font_size = _font_size(config.load_or_empty("ui.json"))
         base = tkfont.nametofont("TkDefaultFont").actual()["family"]
-        self.font = tkfont.Font(family=base, size=font_size)
-        self.bold = tkfont.Font(family=base, size=font_size, weight="bold")
-        self.small = tkfont.Font(family=base, size=max(font_size - 3, 1))
+        self.font = tkfont.Font(family=base)
+        self.bold = tkfont.Font(family=base, weight="bold")
+        self.small = tkfont.Font(family=base)
+        self._apply_font_size(_font_size(config.load_or_empty("ui.json")))
 
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
@@ -98,6 +99,9 @@ class ChatApp:
         self.reload_button = ttk.Button(
             bar, text="再読込", command=lambda: rag.start_indexing(self.rag))
         self.reload_button.pack(side="left", padx=(12, 0))
+
+        ttk.Button(bar, text="設定", command=self._open_settings).pack(
+            side="right")
 
         self.rag_status = ttk.Label(bar, foreground=NOTE_COLOR)
         self.rag_status.pack(side="left", padx=(8, 0))
@@ -169,6 +173,18 @@ class ChatApp:
         self.input.focus_set()
 
     # ---- 操作 ----
+
+    def _apply_font_size(self, size: int) -> None:
+        """文字の大きさを変える (フォントを使っている所はすべて描き直される)"""
+
+        self.font_size = size
+        self.font.configure(size=size)
+        self.bold.configure(size=size)
+        self.small.configure(size=max(size - 3, 1))
+
+    def _open_settings(self) -> None:
+        SettingsDialog(
+            self.root, self.font, self.font_size, self._apply_font_size)
 
     def _on_rag_mode(self) -> None:
         self.state.rag_mode = RagMode(self.rag_mode.get())

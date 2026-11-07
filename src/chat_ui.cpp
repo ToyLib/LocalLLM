@@ -5,6 +5,8 @@
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
+#include <algorithm>
+
 namespace
 {
 
@@ -72,7 +74,7 @@ void DrawMessages(ChatState& state)
 }
 
 // RAG のオン/オフとインデックスの状態
-void DrawRagBar(ChatState& state, RagState& rag)
+void DrawRagBar(ChatState& state, RagState& rag, SettingsState& settings)
 {
     bool building;
     std::string status;
@@ -113,6 +115,18 @@ void DrawRagBar(ChatState& state, RagState& rag)
 
     ImGui::SameLine();
     ImGui::TextDisabled("%s", status.c_str());
+
+    // 設定ボタンは右端
+    const float buttonWidth = ImGui::CalcTextSize("設定").x +
+        ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SameLine(std::max(
+        ImGui::GetCursorPosX(),
+        ImGui::GetContentRegionMax().x - buttonWidth));
+
+    if (ImGui::SmallButton("設定"))
+    {
+        settings.requestOpen = true;
+    }
 }
 
 } // namespace
@@ -120,6 +134,7 @@ void DrawRagBar(ChatState& state, RagState& rag)
 void DrawUI(
     ChatState& state,
     RagState& rag,
+    SettingsState& settings,
     std::string& input,
     bool& focusInput,
     float topInset)
@@ -159,7 +174,7 @@ void DrawUI(
     // 背景はタイトルバーの下まで塗り、中身はその下から並べる
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topInset);
 
-    DrawRagBar(state, rag);
+    DrawRagBar(state, rag, settings);
 
     // 会話表示 (高さは残りから入力欄などの分を引いたもの)
     ImGui::BeginChild(
@@ -236,6 +251,8 @@ void DrawUI(
         input.clear();
         focusInput = true;
     }
+
+    DrawSettings(settings);
 
     ImGui::End();
 }

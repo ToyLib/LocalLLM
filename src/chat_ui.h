@@ -2,6 +2,7 @@
 
 #include "chat.h"
 #include "rag.h"
+#include "settings_ui.h"
 
 #include <string>
 
@@ -10,6 +11,7 @@
 void DrawUI(
     ChatState& state,
     RagState& rag,
+    SettingsState& settings,
     std::string& input,
     bool& focusInput,
     float topInset);

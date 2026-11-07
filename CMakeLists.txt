@@ -79,6 +79,7 @@ add_executable(LocalLLM
     src/ime.cpp
     src/llm_client.cpp
     src/rag.cpp
+    src/settings_ui.cpp
 )
 
 # macOS ではタイトルバーの設定に AppKit を使う (Objective-C++)
@@ -125,10 +126,12 @@ add_dependencies(LocalLLM sync_rag)
 
 # 設定ファイル (config/ のサーバーの URL や system プロンプト) を実行ファイルの隣に同期する
 # 設定だけを変えたときも反映されるように、ビルドのたびに実行する
+# 設定画面で保存したファイルは上書きしない (コピー元のほうが新しいときだけコピーする)
 add_custom_target(sync_config ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/config
-        $<TARGET_FILE_DIR:LocalLLM>/config
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}/config
+        -DDESTINATION_DIR=$<TARGET_FILE_DIR:LocalLLM>/config
+        -P ${CMAKE_SOURCE_DIR}/cmake/sync_config.cmake
     VERBATIM
 )
 add_dependencies(LocalLLM sync_config)

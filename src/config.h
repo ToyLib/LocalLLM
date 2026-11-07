@@ -21,3 +21,12 @@ std::string ConfigStringOr(
 
 // 設定ファイルの key の文字列を読む (無い・文字列でないときは std::runtime_error)
 std::string ConfigString(const std::string& fileName, const std::string& key);
+
+// 設定画面で書き換えるために、項目の順番を保ったまま読む
+// ファイルが無ければ空のオブジェクト、JSON のオブジェクトとして読めなければ std::runtime_error
+// (壊れたファイルを上書きして中身を消さないように、読めないときは保存させない)
+nlohmann::ordered_json LoadConfigForEdit(const std::string& fileName);
+
+// 設定ファイルに書く (一時ファイルに書いてから置き換えるので、途中で失敗しても元のファイルは残る)
+// 失敗したら std::runtime_error
+void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& config);

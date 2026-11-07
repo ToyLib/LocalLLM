@@ -49,7 +49,8 @@ main()                         … main.cpp
  │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
  │   │   ├ DrawMessages()    … 会話の一覧
  │   │   ├ 入力欄・送信/中断・クリアのボタン
- │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
+ │   │   ├ DrawComposition() … IME の変換中の文字列 (ime.cpp)
+ │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)
  │   └ 描画して画面に表示
  └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
 
@@ -73,7 +74,7 @@ SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskL
    - `io.IniFilename = nullptr` で、ウィンドウ配置を保存する `imgui.ini` を作らないようにします。
    - キーボードでのフォーカス移動 (`NavEnableKeyboard`) を有効にします。
    - ダークテーマを使い、余白などの大きさとフォントを拡大率に合わせます (`ScaleAllSizes`、`FontScaleDpi`)。
-   - `config/ui.json` を読み (`LoadConfigOrEmpty`)、ウィンドウ背景の不透明度を `window_opacity` にします。読めない項目は `main.cpp` の `DEFAULT_*` を使います。
+   - `config/ui.json` を読み (`LoadConfigOrEmpty`)、ウィンドウ背景の不透明度を `window_opacity` にします。読めない項目は `settings_ui.h` の `UiSettings` の既定値を使います。
 8. 日本語フォントを読み込みます (`LoadFont`。ファイルと大きさは `ui.json` の `font_file` / `font_size`)。
 9. ImGui の SDL3 用・SDL_Renderer 用のバックエンドを初期化します。
 10. `InstallImeHook()` で、IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
@@ -252,7 +253,18 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 - 変換中の文字列は入力欄の右端で折り返さないため、長い文を変換すると入力欄からはみ出します。
 - 変換中の文字列は、カーソルより後ろの文字の上に重ねて描きます。文の途中で入力すると、その部分が一時的に隠れます (確定すれば正しく表示されます)。
 
+## 設定画面 (settings_ui.cpp)
+
+RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を立て、`DrawSettings()` が次のフレームで `ui.json` / `server.json` / `agents.json` を読み直してモーダル (`BeginPopupModal`) を開きます。
+
+- ファイルは `LoadConfigForEdit()` で `nlohmann::ordered_json` として読みます。項目の順番を保ち、設定画面で扱わない項目 (`python_font_size` など) もそのまま残して保存するためです。読めないファイルがあるときは、上書きして中身を消さないように保存ボタンを無効にします。
+- 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。
+- 背景の不透明度と文字の大きさは、スライダーを動かすたびに `ApplyUiSettings()` で反映します。文字の大きさはフレームの途中で `style.FontSizeBase` を変えても戻されるので、`style._NextFrameFontSizeBase` で次のフレームの始めに変えます (ImGui 1.92 のフォントは大きさを後から変えられます)。キャンセルすると開く前の値 (`SettingsState::current`) に戻します。
+- フォントファイルは起動時に読み込むので、変えても再起動するまで反映されません。
+
 ## 設定を変えたいとき
+
+画面・system プロンプト・サーバーの URL はアプリの設定画面でも変えられます。
 
 | 変えたいもの | 場所 |
 | --- | --- |
