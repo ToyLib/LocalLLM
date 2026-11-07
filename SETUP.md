@@ -1,6 +1,6 @@
 # LocalLLM GUI — 環境構築手順 (Ubuntu)
 
-macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
+CachyOS など Arch 系の手順は [SETUP-Arch.md](SETUP-Arch.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
 
 ## 1. 概要
 
@@ -76,6 +76,7 @@ LocalLLM/
 ├── CMakePresets.json   (OS 別のビルド設定)
 ├── README.md
 ├── SETUP.md            (Ubuntu)
+├── SETUP-Arch.md       (CachyOS / Arch Linux)
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md
 ├── LICENSE
@@ -234,7 +235,46 @@ llama.cpp はクライアントとは独立して起動する。
 ~/Repos/llama.cpp/
 ```
 
-Vulkan バックエンドでビルドする場合：
+ソースの取得：
+
+```bash
+mkdir -p ~/Repos
+cd ~/Repos
+git clone https://github.com/ggml-org/llama.cpp.git
+```
+
+更新する場合は `cd ~/Repos/llama.cpp && git pull` してからビルドし直す。
+
+### ビルドに必要なパッケージ
+
+Vulkan バックエンドのビルドには、Vulkan の開発パッケージに加えて SPIR-V のヘッダー (`spirv-headers`) が必要。無いと CMake の configure またはシェーダーのビルドで失敗する。
+
+```bash
+sudo apt install -y \
+    libvulkan-dev \
+    vulkan-tools \
+    glslc \
+    spirv-headers \
+    libssl-dev
+```
+
+パッケージの役割：
+
+- `libvulkan-dev`：Vulkan のヘッダーとローダー
+- `vulkan-tools`：`vulkaninfo` などの確認用コマンド
+- `glslc`：シェーダーコンパイラー (ビルド時に GPU 用のシェーダーを SPIR-V にコンパイルする)
+- `spirv-headers`：SPIR-V のヘッダー (`spirv/unified1/spirv.hpp` など)
+- `libssl-dev`：`-DLLAMA_OPENSSL=ON` (HTTPS での `-hf` によるモデル取得) 用
+
+インストール確認：
+
+```bash
+glslc --version
+ls /usr/include/spirv/unified1/spirv.hpp
+vulkaninfo --summary
+```
+
+### Vulkan バックエンドでビルド
 
 ```bash
 cd ~/Repos/llama.cpp
@@ -247,14 +287,7 @@ cmake -S . -B build \
 cmake --build build -j$(nproc)
 ```
 
-Vulkan の開発パッケージが不足する場合：
-
-```bash
-sudo apt install -y \
-    libvulkan-dev \
-    vulkan-tools \
-    glslc
-```
+パッケージを後から入れた場合は、`build/` を削除してから configure し直す。
 
 GPU 認識確認：
 
