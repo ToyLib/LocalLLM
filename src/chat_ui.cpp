@@ -10,9 +10,48 @@
 namespace
 {
 
-void DrawMessages(ChatState& state, const UiColors& colors)
+constexpr const char* CONFIRM_POPUP = "資料を送る確認";
+
+// 会話の欄で押されたボタン (ロックを外してから処理する)
+enum class MessageAction
+{
+    None,
+    AskCloud,
+    ConfirmAskCloud
+};
+
+// 最新の回答の下の「ChatGPT に聞き直す」ボタン
+MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
+{
+    const std::string label = state.cloudName + " に聞き直す";
+    const bool enabled = state.hasCloudKey && CanAskCloud(state);
+
+    ImGui::BeginDisabled(!enabled);
+    const bool pressed = ImGui::SmallButton(label.c_str());
+    ImGui::EndDisabled();
+
+    if (!state.hasCloudKey)
+    {
+        ImGui::SetItemTooltip("設定画面で API キーを登録すると使えます");
+    }
+    else if (enabled && message.usedRag)
+    {
+        ImGui::SetItemTooltip("資料 (rag/) の内容も送ります (送る前に確認します)");
+    }
+
+    if (!pressed || !enabled)
+    {
+        return MessageAction::None;
+    }
+
+    return message.usedRag ? MessageAction::ConfirmAskCloud : MessageAction::AskCloud;
+}
+
+MessageAction DrawMessages(ChatState& state, const UiColors& colors)
 {
     std::lock_guard lock(state.mutex);
+
+    MessageAction action = MessageAction::None;
 
     // 前フレームで一番下までスクロールしていたら追従する
     const bool atBottom =
@@ -30,17 +69,44 @@ void DrawMessages(ChatState& state, const UiColors& colors)
             : message.agent.empty() ? "AI"
             : message.agent.c_str();
 
-        ImGui::TextColored(
-            isUser ? colors.user : colors.ai,
-            "%s", name);
-
-        if (message.content.empty() && state.busy)
+        if (message.superseded)
         {
-            ImGui::TextDisabled("考え中...");
+            // ChatGPT に聞き直す前の回答は、薄く残す
+            ImGui::TextDisabled("%s (聞き直す前の回答)", name);
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("%s", message.content.c_str());
+            ImGui::PopTextWrapPos();
         }
         else
         {
-            ImGui::TextWrapped("%s", message.content.c_str());
+            ImGui::TextColored(
+                isUser ? colors.user : colors.ai,
+                "%s", name);
+
+            if (!message.status.empty())
+            {
+                ImGui::TextDisabled("%s", message.status.c_str());
+            }
+
+            if (message.content.empty() && state.busy)
+            {
+                if (message.status.empty())
+                {
+                    ImGui::TextDisabled("考え中...");
+                }
+            }
+            else
+            {
+                ImGui::TextWrapped("%s", message.content.c_str());
+            }
+        }
+
+        // 書き直す前の ChatGPT の回答 (書き直しで中身が変わっていないか確かめられるように)
+        if (!message.cloudOriginal.empty() && !message.superseded &&
+            ImGui::TreeNode("original", "%s の元の回答", state.cloudName.c_str()))
+        {
+            ImGui::TextWrapped("%s", message.cloudOriginal.c_str());
+            ImGui::TreePop();
         }
 
         if (!message.note.empty())
@@ -59,6 +125,13 @@ void DrawMessages(ChatState& state, const UiColors& colors)
             ImGui::EndPopup();
         }
 
+        // 最新の回答にだけ、ChatGPT に聞き直すボタンを付ける
+        if (i + 1 == state.messages.size() && !isUser &&
+            !message.agentKey.empty() && !message.superseded)
+        {
+            action = DrawAskCloudButton(state, message);
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -70,6 +143,41 @@ void DrawMessages(ChatState& state, const UiColors& colors)
     {
         ImGui::SetScrollHereY(1.0f);
     }
+
+    return action;
+}
+
+// 資料を使った回答を聞き直す前の確認
+void DrawConfirmPopup(ChatState& state)
+{
+    if (!ImGui::BeginPopupModal(
+            CONFIRM_POPUP, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    ImGui::Text("資料 (rag/) の内容が %s に送られます。送りますか？",
+        state.cloudName.c_str());
+    ImGui::TextDisabled("ほかの、資料を使ったやりとりは送りません。");
+    ImGui::Spacing();
+
+    const float buttonWidth = ImGui::CalcTextSize("キャンセル").x * 1.6f;
+
+    if (ImGui::Button("送る", ImVec2(buttonWidth, 0.0f)))
+    {
+        ImGui::CloseCurrentPopup();
+        AskCloud(state);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("キャンセル", ImVec2(buttonWidth, 0.0f)) ||
+        ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }
 
 // RAG のオン/オフとインデックスの状態
@@ -180,8 +288,20 @@ void DrawUI(
         "messages",
         ImVec2(0.0f, -(inputHeight + errorHeight + style.ItemSpacing.y)),
         ImGuiChildFlags_Borders);
-    DrawMessages(state, ActiveUiSettings(settings).colors);
+    const MessageAction action =
+        DrawMessages(state, ActiveUiSettings(settings).colors);
     ImGui::EndChild();
+
+    if (action == MessageAction::AskCloud)
+    {
+        AskCloud(state);
+    }
+    else if (action == MessageAction::ConfirmAskCloud)
+    {
+        ImGui::OpenPopup(CONFIRM_POPUP);
+    }
+
+    DrawConfirmPopup(state);
 
     if (!error.empty())
     {
@@ -252,6 +372,13 @@ void DrawUI(
     }
 
     DrawSettings(settings);
+
+    // 設定を保存したら、API キーの有無を調べ直す
+    if (settings.saved)
+    {
+        settings.saved = false;
+        RefreshCloudStatus(state);
+    }
 
     ImGui::End();
 }

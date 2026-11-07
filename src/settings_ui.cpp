@@ -1,6 +1,8 @@
 #include "settings_ui.h"
 
+#include "agent.h"
 #include "config.h"
+#include "llm_client.h"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -79,7 +81,59 @@ constexpr AgentEntry AGENT_ENTRIES[] = {
     {"router", "ルーター"},
     {"assistant", "資料ありの回答役"},
     {"general", "資料なしの回答役"},
+    {"cloud", "ChatGPT"},
+    {"rewriter", "口調の書き直し"},
 };
+
+bool IsAnswerer(const std::string& key)
+{
+    return key == "assistant" || key == "general";
+}
+
+// API キーの末尾だけを見せる
+std::string MaskKey(const std::string& key)
+{
+    if (key.size() <= 8)
+    {
+        return "…";
+    }
+
+    return "…" + key.substr(key.size() - 4);
+}
+
+// API キーの状態を調べ直す (キーの名前が変わったときだけ)
+void UpdateKeyStatus(SettingsState& settings)
+{
+    if (settings.keyStatusName == settings.cloudKeyName &&
+        !settings.keyStatus.empty())
+    {
+        return;
+    }
+
+    settings.keyStatusName = settings.cloudKeyName;
+    const ApiKey key = FindApiKey(settings.cloudKeyName);
+
+    switch (key.source)
+    {
+    case ApiKeySource::Environment:
+        settings.keyStatus = "設定済み (" + MaskKey(key.value) + ")。環境変数 " +
+            settings.cloudKeyName + " から読んでいます";
+        break;
+    case ApiKeySource::SecretsFile:
+        settings.keyStatus = "設定済み (" + MaskKey(key.value) + ")。秘密ファイルから読んでいます";
+        break;
+    default:
+        settings.keyStatus = "未設定";
+        break;
+    }
+}
+
+// 編集用の API キーを消す (メモリに残さないように)
+void ClearApiKeyInput(SettingsState& settings)
+{
+    std::fill(settings.apiKeyInput.begin(), settings.apiKeyInput.end(), '\0');
+    settings.apiKeyInput.clear();
+}
 
 // system_prompt (文字列か文字列の配列) を、編集用に1要素1行の文字列にする
 std::string PromptToText(const ordered_json& prompt)
@@ -282,11 +336,27 @@ void LoadSettings(SettingsState& settings)
     settings.chatUrl = StringOr(settings.serverJson, "chat_url", "");
     settings.embedUrl = StringOr(settings.serverJson, "embed_url", "");
 
+    // cloud が無い (前の版の設定ファイル) ときは既定値
+    const CloudSettings defaults;
+    const ordered_json cloud =
+        settings.serverJson.contains("cloud") && settings.serverJson["cloud"].is_object()
+            ? settings.serverJson["cloud"]
+            : ordered_json::object();
+    settings.cloudName = StringOr(cloud, "name", defaults.name);
+    settings.cloudUrl = StringOr(cloud, "chat_url", defaults.chatUrl);
+    settings.cloudModel = StringOr(cloud, "model", defaults.model);
+    settings.cloudKeyName = StringOr(cloud, "api_key_name", defaults.apiKeyName);
+
+    ClearApiKeyInput(settings);
+    settings.deleteApiKey = false;
+    settings.keyStatus.clear();
+
     for (const auto& entry : AGENT_ENTRIES)
     {
         AgentSettings agent;
         agent.key = entry.key;
         agent.name = entry.key;
+        agent.rewrite = agent.key != "assistant";
 
         const ordered_json& agents = settings.agentsJson;
 
@@ -300,6 +370,17 @@ void LoadSettings(SettingsState& settings)
                 agent.prompt = PromptToText(config["system_prompt"]);
                 agent.promptIsString = config["system_prompt"].is_string();
             }
+
+            if (config.contains("rewrite") && config["rewrite"].is_boolean())
+            {
+                agent.rewrite = config["rewrite"].get<bool>();
+            }
+        }
+        else if (!DefaultAgentPrompt(entry.key).empty())
+        {
+            // 前の版の設定ファイルには無いので、既定のプロンプトから始める
+            agent.name = DefaultAgentName(entry.key);
+            agent.prompt = DefaultAgentPrompt(entry.key);
         }
 
         settings.agents.push_back(std::move(agent));
@@ -351,6 +432,24 @@ bool SaveSettings(SettingsState& settings)
     settings.serverJson["chat_url"] = settings.chatUrl;
     settings.serverJson["embed_url"] = settings.embedUrl;
 
+    // auth など、画面で扱わない項目はそのまま残す
+    ordered_json& cloud = settings.serverJson["cloud"];
+
+    if (!cloud.is_object())
+    {
+        cloud = ordered_json::object();
+    }
+
+    cloud["name"] = settings.cloudName;
+    cloud["chat_url"] = settings.cloudUrl;
+    cloud["model"] = settings.cloudModel;
+    cloud["api_key_name"] = settings.cloudKeyName;
+
+    if (!cloud.contains("auth"))
+    {
+        cloud["auth"] = "bearer";
+    }
+
     for (const auto& agent : settings.agents)
     {
         ordered_json& config = settings.agentsJson[agent.key];
@@ -364,10 +463,33 @@ bool SaveSettings(SettingsState& settings)
         config["system_prompt"] = agent.promptIsString
             ? ordered_json(agent.prompt)
             : TextToPromptLines(agent.prompt);
+
+        if (IsAnswerer(agent.key))
+        {
+            config["rewrite"] = agent.rewrite;
+        }
     }
 
     try
     {
+        // API キーは設定ファイルではなく秘密ファイルに書く
+        if (settings.deleteApiKey)
+        {
+            SaveApiKey(settings.cloudKeyName, "");
+        }
+        else if (settings.apiKeyInput.find_first_not_of(" \t\r\n") != std::string::npos)
+        {
+            std::string key = settings.apiKeyInput;
+            key.erase(0, key.find_first_not_of(" \t\r\n"));
+            key.erase(key.find_last_not_of(" \t\r\n") + 1);
+            SaveApiKey(settings.cloudKeyName, key);
+            std::fill(key.begin(), key.end(), '\0');
+        }
+
+        ClearApiKeyInput(settings);
+        settings.deleteApiKey = false;
+        settings.keyStatus.clear();
+
         SaveConfig("ui.json", settings.uiJson);
         SaveConfig("server.json", settings.serverJson);
         SaveConfig("agents.json", settings.agentsJson);
@@ -453,12 +575,27 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         }
 
         // 回答役は、人格のテンプレートから選んで直せる
-        if (agent.key != "router")
+        if (IsAnswerer(agent.key))
         {
             DrawTemplatePicker(settings, agent);
+            ImGui::InputText("名前", &agent.name);
+            ImGui::Checkbox(
+                "ChatGPT に聞き直した回答を、この口調で書き直す", &agent.rewrite);
         }
-
-        ImGui::InputText("名前", &agent.name);
+        else if (agent.key == "cloud")
+        {
+            ImGui::TextDisabled(
+                "「ChatGPT に聞き直す」で送る system プロンプトです (名前はサーバーのタブで決めます)。");
+        }
+        else if (agent.key == "rewriter")
+        {
+            ImGui::TextDisabled(
+                "ChatGPT の回答を書き直すとき、回答役の system プロンプトの後ろに付ける指示です。");
+        }
+        else
+        {
+            ImGui::InputText("名前", &agent.name);
+        }
 
         if (agent.promptIsString)
         {
@@ -479,9 +616,53 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
 
 void DrawServerTab(SettingsState& settings)
 {
+    ImGui::SeparatorText("ローカル");
     ImGui::InputText("チャット", &settings.chatUrl);
     ImGui::InputText("埋め込み (RAG)", &settings.embedUrl);
     ImGui::TextDisabled("保存すると次の質問から反映されます。");
+
+    ImGui::SeparatorText("ChatGPT (「聞き直す」ボタンで使う)");
+    ImGui::InputText("表示名", &settings.cloudName);
+    ImGui::InputText("URL", &settings.cloudUrl);
+    ImGui::InputText("モデル", &settings.cloudModel);
+    ImGui::InputText("API キーの名前", &settings.cloudKeyName);
+    ImGui::TextDisabled(
+        "API キーは、この名前の環境変数か、下の秘密ファイルから読みます (設定ファイルには書きません)。");
+
+    UpdateKeyStatus(settings);
+    ImGui::Text("API キー: %s", settings.keyStatus.c_str());
+
+    ImGui::BeginDisabled(settings.deleteApiKey);
+    ImGui::InputText(
+        "新しい API キー", &settings.apiKeyInput, ImGuiInputTextFlags_Password);
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    if (settings.deleteApiKey)
+    {
+        if (ImGui::SmallButton("削除をやめる"))
+        {
+            settings.deleteApiKey = false;
+        }
+    }
+    else if (ImGui::SmallButton("秘密ファイルから削除"))
+    {
+        settings.deleteApiKey = true;
+        ClearApiKeyInput(settings);
+    }
+
+    if (settings.deleteApiKey)
+    {
+        ImGui::TextDisabled("保存すると、秘密ファイルから API キーを削除します。");
+    }
+    else
+    {
+        ImGui::TextDisabled("入力して保存すると、秘密ファイルに登録します (空なら今のまま)。");
+    }
+
+    ImGui::TextDisabled("秘密ファイル: %s", SecretsFilePath().c_str());
+    ImGui::TextDisabled("API キーは https の URL にだけ送ります。");
 }
 
 } // namespace
@@ -644,6 +825,7 @@ void DrawSettings(SettingsState& settings)
     {
         settings.current = settings.ui;
         settings.editing = false;
+        settings.saved = true;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndDisabled();
@@ -655,6 +837,7 @@ void DrawSettings(SettingsState& settings)
         // 見ながら変えた不透明度と大きさを元に戻す
         ApplyUiSettings(settings.current);
         settings.editing = false;
+        ClearApiKeyInput(settings);
         ImGui::CloseCurrentPopup();
     }
 

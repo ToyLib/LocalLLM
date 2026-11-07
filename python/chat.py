@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from typing import Callable
 
 import rag
-from agent import create_assistant, create_general, route_question, run_agent
-from llm_client import CancelToken
+from agent import (
+    create_answerer, create_assistant, create_cloud, create_general,
+    rewrite_answer, route_question, run_agent)
+from llm_client import CancelToken, LLMError, has_cloud_api_key, load_cloud_settings
 
 
 class RagMode(enum.Enum):
@@ -30,6 +32,25 @@ class Message:
 
     # 回答したエージェントの名前 (assistant のみ)
     agent: str = ""
+
+    # 回答役のキー (assistant / general。ChatGPT に聞き直したときの書き直しに使う)
+    agent_key: str = ""
+
+    # user: 資料を添えて送った質問 (資料を使わなかったら空)
+    rag_prompt: str = ""
+
+    # assistant: 資料 (rag/) の内容を使って答えたか
+    # (資料を使ったやりとりは、ChatGPT 宛ての履歴から除く)
+    used_rag: bool = False
+
+    # assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
+    superseded: bool = False
+
+    # assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
+    cloud_original: str = ""
+
+    # assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
+    status: str = ""
 
 
 class ChatState:
@@ -52,6 +73,11 @@ class ChatState:
 
         # 質問に rag/ の資料を添えるか (UIスレッドだけが触る)
         self.rag_mode = RagMode.AUTO
+
+        # クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る)
+        # 起動時と設定を保存したときに調べ直す
+        self.has_cloud_key = False
+        self.cloud_name = "ChatGPT"
 
         # UIスレッドに再描画を頼む (どのスレッドからでも呼べる)
         self.notify = notify
@@ -122,8 +148,9 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
         state.messages.append(Message("user", prompt))
 
         # 履歴全体を送信 (system プロンプトは回答役のエージェントが付ける)
+        # ChatGPT に聞き直して置き換えた回答は除く
         history = [{"role": message.role, "content": message.content}
-                   for message in state.messages]
+                   for message in state.messages if not message.superseded]
 
         # ストリーミングで埋めていくAIの回答
         state.messages.append(Message("assistant"))
@@ -148,6 +175,7 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
 
             with state.lock:
                 state.messages[-1].agent = answerer.name
+                state.messages[-1].agent_key = answerer.key
                 state.messages[-1].note = note
             state.notify()
 
@@ -161,7 +189,14 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                     hits = rag.search(rag_state, prompt, state.cancel)
 
                     if hits:
-                        history[-1]["content"] = rag.build_prompt(hits, prompt)
+                        rag_prompt = rag.build_prompt(hits, prompt)
+                        history[-1]["content"] = rag_prompt
+
+                        # ChatGPT に聞き直すときに同じ資料を送れるように、
+                        # また資料を使ったやりとりを ChatGPT 宛ての履歴から除けるように残す
+                        with state.lock:
+                            state.messages[-2].rag_prompt = rag_prompt
+                            state.messages[-1].used_rag = True
 
                     note += _format_sources(hits)
                 except Exception as e:
@@ -192,6 +227,182 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                     state.restored_prompt = prompt
 
                 if not cancelled:
+                    state.error = str(e)
+
+        with state.lock:
+            state.busy = False
+        state.notify()
+
+    state.worker = threading.Thread(target=run, daemon=True)
+    state.worker.start()
+
+
+def _last_user_index(messages: list[Message]) -> int | None:
+    """最新の質問の位置 (無ければ None)"""
+
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].role == "user":
+            return i
+
+    return None
+
+
+def _build_cloud_history(
+        messages: list[Message], last_user: int) -> list[dict[str, str]]:
+    """ChatGPT に送る履歴を作る (呼ぶ側で state.lock を取っておく)
+    最新の質問より前のやりとりのうち、資料を使っていないものだけを送る"""
+
+    history: list[dict[str, str]] = []
+
+    for i in range(last_user):
+        if messages[i].role != "user":
+            continue
+
+        # この質問への今の回答 (聞き直して置き換えたものは除く)
+        answer = None
+        j = i + 1
+
+        while j < last_user and messages[j].role != "user":
+            if not messages[j].superseded:
+                answer = messages[j]
+            j += 1
+
+        if answer is None or answer.used_rag or not answer.content:
+            continue
+
+        history.append({"role": "user", "content": messages[i].content})
+        history.append({"role": "assistant", "content": answer.content})
+
+    return history
+
+
+def refresh_cloud_status(state: ChatState) -> None:
+    """クラウドの API キーの有無と名前を調べ直す (UIスレッドから呼ぶ)"""
+
+    cloud = load_cloud_settings()
+    state.has_cloud_key = has_cloud_api_key(cloud)
+    state.cloud_name = cloud.name
+
+
+def can_ask_cloud(state: ChatState) -> bool:
+    """最新の回答を ChatGPT に聞き直せるか (呼ぶ側で state.lock を取っておく)"""
+
+    if state.busy or not state.messages:
+        return False
+
+    last = state.messages[-1]
+
+    return (last.role == "assistant" and bool(last.agent_key) and
+            bool(last.content) and _last_user_index(state.messages) is not None)
+
+
+def ask_cloud(state: ChatState) -> None:
+    """最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
+    資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
+    (資料を送ることの確認は、呼ぶ前に UI で済ませておく)"""
+
+    join_worker(state)
+
+    with state.lock:
+        if not can_ask_cloud(state):
+            return
+
+        last_user = _last_user_index(state.messages)
+        assert last_user is not None
+        previous = state.messages[-1]
+        user = state.messages[last_user]
+
+        history = _build_cloud_history(state.messages, last_user)
+        question = user.content
+        agent_key = previous.agent_key
+
+        # 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
+        send_rag = previous.used_rag and bool(user.rag_prompt)
+        history.append({
+            "role": "user",
+            "content": user.rag_prompt if send_rag else user.content,
+        })
+
+        previous.superseded = True
+        state.messages.append(Message(
+            "assistant",
+            agent=f"{previous.agent} ({state.cloud_name})",
+            agent_key=agent_key,
+            used_rag=previous.used_rag,
+            note=f"{state.cloud_name} に聞き直しました" +
+                 (" (資料も送りました)" if send_rag else ""),
+            status=f"{state.cloud_name} に問い合わせ中…",
+        ))
+
+        state.busy = True
+        state.error = ""
+
+    state.cancel.reset()
+
+    def run() -> None:
+        try:
+            persona = create_answerer(agent_key)
+            cloud = create_cloud()
+
+            with state.lock:
+                state.messages[-1].agent = f"{persona.name} ({cloud.name})"
+            state.notify()
+
+            cloud_answer = run_agent(cloud, history, None, state.cancel)
+
+            if not cloud_answer.strip():
+                raise LLMError(f"{cloud.name} の回答が空でした")
+
+            if not persona.rewrite:
+                with state.lock:
+                    answer = state.messages[-1]
+                    answer.content = cloud_answer
+                    answer.status = ""
+            else:
+                with state.lock:
+                    answer = state.messages[-1]
+                    answer.agent = f"{persona.name} ({cloud.name} → ローカルで書き直し)"
+                    answer.cloud_original = cloud_answer
+                    answer.status = f"{persona.name} が言い直し中…"
+                state.notify()
+
+                def on_delta(text: str) -> None:
+                    with state.lock:
+                        state.messages[-1].content += text
+                    state.notify()
+
+                failure = ""
+
+                try:
+                    rewrite_answer(
+                        persona, question, cloud_answer, on_delta, state.cancel)
+                except Exception as e:
+                    failure = "中断しました" if state.cancel.is_set() else str(e)
+
+                with state.lock:
+                    answer = state.messages[-1]
+                    answer.status = ""
+
+                    # 書き直せなかったら、ChatGPT の回答をそのまま出す
+                    # (中断しても、途中まで書き直したものがあればそれを残す)
+                    if not answer.content.strip():
+                        answer.content = cloud_answer
+                        answer.agent = f"{persona.name} ({cloud.name})"
+                        answer.cloud_original = ""
+                        answer.note += (
+                            f"\n書き直せなかったので、{cloud.name} の回答をそのまま表示しています" +
+                            (f": {failure}" if failure else ""))
+                    elif failure and not state.cancel.is_set():
+                        answer.note += f"\n書き直しが途中で止まりました: {failure}"
+        except Exception as e:
+            # ChatGPT に聞けなかった: 聞き直す前の回答に戻す
+            with state.lock:
+                state.messages.pop()
+
+                if state.messages:
+                    state.messages[-1].superseded = False
+
+                if not state.cancel.is_set():
                     state.error = str(e)
 
         with state.lock:

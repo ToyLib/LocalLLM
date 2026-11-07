@@ -35,6 +35,74 @@ fs::path ConfigDirectory()
     return Utf8ToPath(basePath ? basePath : "") / "config";
 }
 
+// 秘密ファイルの JSON を読む。無ければ空のオブジェクト、読めなければ std::runtime_error
+json LoadSecrets(const fs::path& path)
+{
+    std::string text;
+
+    if (!fs::exists(path))
+    {
+        return json::object();
+    }
+
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file)
+    {
+        throw std::runtime_error("秘密ファイルを開けません: " + PathToUtf8(path));
+    }
+
+    text.assign(std::istreambuf_iterator<char>(file), {});
+
+    json secrets = json::parse(text, nullptr, false);
+
+    if (secrets.is_discarded() || !secrets.is_object())
+    {
+        throw std::runtime_error(
+            "秘密ファイルを JSON として読めません: " + PathToUtf8(path));
+    }
+
+    return secrets;
+}
+
+fs::path SecretsPath()
+{
+    if (const char* env = SDL_getenv("LOCALLLM_SECRETS_FILE"); env && *env)
+    {
+        return Utf8ToPath(env);
+    }
+
+    fs::path directory;
+
+#if defined(_WIN32)
+    if (const char* appData = SDL_getenv("APPDATA"); appData && *appData)
+    {
+        directory = Utf8ToPath(appData);
+    }
+#elif defined(__APPLE__)
+    if (const char* home = SDL_getenv("HOME"); home && *home)
+    {
+        directory = Utf8ToPath(home) / "Library" / "Application Support";
+    }
+#else
+    if (const char* xdg = SDL_getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+    {
+        directory = Utf8ToPath(xdg);
+    }
+    else if (const char* home = SDL_getenv("HOME"); home && *home)
+    {
+        directory = Utf8ToPath(home) / ".config";
+    }
+#endif
+
+    if (directory.empty())
+    {
+        throw std::runtime_error("秘密ファイルを置くフォルダーが分かりません");
+    }
+
+    return directory / "LocalLLM" / "secrets.json";
+}
+
 // ファイルを読む。開けなければ false
 bool ReadFile(const fs::path& path, std::string& text)
 {
@@ -189,5 +257,126 @@ void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& confi
         fs::remove(temporary, error);
         throw std::runtime_error(
             "設定ファイルを置き換えられません: " + PathToUtf8(path));
+    }
+}
+
+ApiKey FindApiKey(const std::string& name)
+{
+    if (name.empty())
+    {
+        return {};
+    }
+
+    if (const char* env = SDL_getenv(name.c_str()); env && *env)
+    {
+        return {env, ApiKeySource::Environment};
+    }
+
+    try
+    {
+        const json secrets = LoadSecrets(SecretsPath());
+
+        if (secrets.contains(name) && secrets[name].is_string() &&
+            !secrets[name].get<std::string>().empty())
+        {
+            return {secrets[name].get<std::string>(), ApiKeySource::SecretsFile};
+        }
+    }
+    catch (const std::exception& e)
+    {
+        // キーの値は出さない
+        SDL_Log("%s", e.what());
+    }
+
+    return {};
+}
+
+std::string SecretsFilePath()
+{
+    try
+    {
+        return PathToUtf8(SecretsPath());
+    }
+    catch (const std::exception& e)
+    {
+        return e.what();
+    }
+}
+
+void SaveApiKey(const std::string& name, const std::string& value)
+{
+    const fs::path path = SecretsPath();
+    json secrets = LoadSecrets(path);
+
+    if (value.empty())
+    {
+        if (!secrets.contains(name))
+        {
+            return;
+        }
+
+        secrets.erase(name);
+    }
+    else
+    {
+        secrets[name] = value;
+    }
+
+    std::error_code error;
+    const fs::path directory = path.parent_path();
+
+    if (!fs::exists(directory))
+    {
+        fs::create_directories(directory, error);
+
+        if (error)
+        {
+            throw std::runtime_error(
+                "秘密ファイルのフォルダーを作れません: " + PathToUtf8(directory));
+        }
+
+#if !defined(_WIN32)
+        fs::permissions(directory, fs::perms::owner_all, error);
+#endif
+    }
+
+    fs::path temporary = path;
+    temporary += ".tmp";
+
+    {
+        // 中身を書く前に、本人だけが読み書きできるようにしておく
+        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+
+#if !defined(_WIN32)
+        fs::permissions(
+            temporary, fs::perms::owner_read | fs::perms::owner_write, error);
+
+        if (error)
+        {
+            file.close();
+            fs::remove(temporary, error);
+            throw std::runtime_error(
+                "秘密ファイルの権限を変えられません: " + PathToUtf8(temporary));
+        }
+#endif
+
+        file << secrets.dump(2) << "\n";
+
+        if (!file)
+        {
+            file.close();
+            fs::remove(temporary, error);
+            throw std::runtime_error(
+                "秘密ファイルを書けません: " + PathToUtf8(temporary));
+        }
+    }
+
+    fs::rename(temporary, path, error);
+
+    if (error)
+    {
+        fs::remove(temporary, error);
+        throw std::runtime_error(
+            "秘密ファイルを置き換えられません: " + PathToUtf8(path));
     }
 }

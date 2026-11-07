@@ -7,6 +7,19 @@
 namespace
 {
 
+// agents.json に cloud / rewriter が無いとき (前の版の設定ファイル) に使う system プロンプト
+constexpr const char* DEFAULT_CLOUD_PROMPT =
+    "あなたは親切で正確なAIアシスタントです。日本語で、分かりやすく回答してください。";
+
+constexpr const char* DEFAULT_REWRITER_PROMPT =
+    "これから渡す「回答」を、あなたの口調で言い直してください。"
+    "内容・数値・手順・固有名詞・コードは変えず、足したり削ったりしないでください。"
+    "コードやコマンドはそのまま書き写します。"
+    "言い直した回答だけを書き、前置きや説明は付けないでください。";
+
+// 書き直しの最大トークン数 (ChatGPT の長い回答も入るように)
+constexpr int REWRITE_MAX_TOKENS = 4096;
+
 // ルーターに見せる直前の会話の数と、1件あたりの長さ (バイト)
 constexpr size_t ROUTER_HISTORY_MESSAGES = 4;
 constexpr size_t ROUTER_HISTORY_BYTES = 300;
@@ -27,7 +40,9 @@ Agent LoadAgent(const std::string& key)
     const json& entry = config[key];
 
     Agent agent;
+    agent.key = key;
     agent.name = entry.value("name", key);
+    agent.rewrite = entry.value("rewrite", key != "assistant");
 
     const json prompt = entry.value("system_prompt", json());
 
@@ -53,6 +68,25 @@ Agent LoadAgent(const std::string& key)
         throw std::runtime_error(key + " の system_prompt がありません");
     }
 
+    return agent;
+}
+
+// key のエージェントを読む。agents.json に無ければ name と prompt を使う
+// (設定ファイルが前の版のままでも動くように)
+Agent LoadAgentOr(
+    const std::string& key, const std::string& name, const std::string& prompt)
+{
+    const json config = LoadConfig("agents.json");
+
+    if (config.contains(key))
+    {
+        return LoadAgent(key);
+    }
+
+    Agent agent;
+    agent.key = key;
+    agent.name = name;
+    agent.systemPrompt = prompt;
     return agent;
 }
 
@@ -99,6 +133,26 @@ Agent CreateRouter()
 
 } // namespace
 
+std::string DefaultAgentName(const std::string& key)
+{
+    if (key == "cloud")
+    {
+        return "ChatGPT";
+    }
+
+    return key == "rewriter" ? "書き直し" : "";
+}
+
+std::string DefaultAgentPrompt(const std::string& key)
+{
+    if (key == "cloud")
+    {
+        return DEFAULT_CLOUD_PROMPT;
+    }
+
+    return key == "rewriter" ? DEFAULT_REWRITER_PROMPT : "";
+}
+
 Agent CreateAssistant()
 {
     return LoadAgent("assistant");
@@ -107,6 +161,53 @@ Agent CreateAssistant()
 Agent CreateGeneral()
 {
     return LoadAgent("general");
+}
+
+Agent CreateAnswerer(const std::string& key)
+{
+    if (key != "assistant" && key != "general")
+    {
+        throw std::runtime_error("回答役ではありません: " + key);
+    }
+
+    return LoadAgent(key);
+}
+
+Agent CreateCloud()
+{
+    const CloudSettings cloud = LoadCloudSettings();
+    Agent agent = LoadAgentOr("cloud", cloud.name, DefaultAgentPrompt("cloud"));
+
+    // 名前は server.json の cloud.name に合わせる
+    agent.name = cloud.name;
+    agent.options.cloud = true;
+    return agent;
+}
+
+std::string RewriteAnswer(
+    const Agent& persona,
+    const std::string& question,
+    const std::string& answer,
+    const DeltaCallback& onDelta,
+    const std::atomic<bool>& cancel)
+{
+    const Agent rewriter = LoadAgentOr(
+        "rewriter", DefaultAgentName("rewriter"), DefaultAgentPrompt("rewriter"));
+
+    Agent agent = persona;
+    agent.systemPrompt += "\n\n" + rewriter.systemPrompt;
+    agent.options.maxTokens = REWRITE_MAX_TOKENS;
+    agent.options.disableThinking = true;
+    agent.options.cloud = false;
+
+    const std::string content =
+        "## 質問\n" + question + "\n\n## 回答\n" + answer;
+
+    return RunAgent(
+        agent,
+        json::array({{{"role", "user"}, {"content", content}}}),
+        onDelta,
+        cancel);
 }
 
 std::string RunAgent(

@@ -97,6 +97,7 @@ int main(int, char**)
     InstallImeHook();
 
     ChatState state;
+    RefreshCloudStatus(state);
     RagState rag;
     std::string input;
     bool focusInput = true;

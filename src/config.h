@@ -30,3 +30,33 @@ nlohmann::ordered_json LoadConfigForEdit(const std::string& fileName);
 // 設定ファイルに書く (一時ファイルに書いてから置き換えるので、途中で失敗しても元のファイルは残る)
 // 失敗したら std::runtime_error
 void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& config);
+
+// API キー (ChatGPT など) の値は設定ファイルに書かず、名前 (例: OPENAI_API_KEY) で探す
+// 1. 同じ名前の環境変数
+// 2. ユーザーごとの秘密ファイル (SecretsFilePath)
+enum class ApiKeySource
+{
+    None,
+    Environment,
+    SecretsFile
+};
+
+struct ApiKey
+{
+    std::string value;
+    ApiKeySource source = ApiKeySource::None;
+};
+
+// API キーを探す。見つからなければ value が空 (source は None)
+ApiKey FindApiKey(const std::string& name);
+
+// 秘密ファイルの場所 (リポジトリやビルドフォルダーの外。環境変数 LOCALLLM_SECRETS_FILE で変えられる)
+// macOS: ~/Library/Application Support/LocalLLM/secrets.json
+// Linux: $XDG_CONFIG_HOME/LocalLLM/secrets.json (無ければ ~/.config/LocalLLM/secrets.json)
+// Windows: %APPDATA%\LocalLLM\secrets.json
+std::string SecretsFilePath();
+
+// 秘密ファイルに API キーを書く (value が空なら消す)
+// macOS / Linux では、ファイルを本人だけが読み書きできるようにする (0600)
+// 失敗したら std::runtime_error
+void SaveApiKey(const std::string& name, const std::string& value);

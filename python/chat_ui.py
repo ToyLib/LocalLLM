@@ -6,11 +6,13 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import ttk
+from tkinter import messagebox, ttk
+from typing import NamedTuple
 
 import config
 import rag
-from chat import ChatState, RagMode, send_prompt
+from chat import (
+    ChatState, RagMode, ask_cloud, can_ask_cloud, refresh_cloud_status, send_prompt)
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
@@ -29,8 +31,29 @@ DEFAULT_COLORS = {
     "error": "#E05555",
 }
 
-# 画面に表示した1件分 (変わった所から下だけを描き直す)
-_Rendered = tuple[str, str, str, str, bool]
+
+
+class _Rendered(NamedTuple):
+    """画面に表示した1件分 (変わった所から下だけを描き直す)"""
+
+    role: str
+    agent: str
+    content: str
+    note: str
+    thinking: bool
+    status: str = ""
+    superseded: bool = False
+
+    # ChatGPT の元の回答 (書き直したときだけ) と、開いているか
+    cloud_original: str = ""
+    original_open: bool = False
+
+    # 「ChatGPT に聞き直す」ボタン (最新の回答だけ): 出すか、押せるか、資料を使ったか
+    cloud_button: bool = False
+    cloud_enabled: bool = False
+    used_rag: bool = False
+    cloud_name: str = ""
+    has_cloud_key: bool = False
 
 
 def _font_size(ui: dict) -> int:
@@ -89,6 +112,14 @@ class ChatApp:
 
         self._rendered: list[_Rendered] = []
         self._busy: bool | None = None
+
+        # ChatGPT の元の回答を開いているメッセージの番号
+        self._open_originals: set[int] = set()
+
+        # 最新の回答の下に埋め込んだ「ChatGPT に聞き直す」ボタン
+        self._cloud_button: ttk.Button | None = None
+
+        refresh_cloud_status(self.state)
 
         root.title("Local LLM Chat")
         root.geometry("900x700")
@@ -173,6 +204,15 @@ class ChatApp:
             "note", font=self.small, lmargin1=12, lmargin2=12)
         self.text.tag_configure("separator", font=self.small)
         self.text.tag_configure("content", spacing3=4)
+        self.text.tag_configure("superseded", spacing3=4)
+        self.text.tag_configure("toggle", font=self.small, underline=True)
+        self.text.tag_configure(
+            "original", font=self.small, lmargin1=12, lmargin2=12, spacing3=4)
+        self.text.tag_bind("toggle", "<Button-1>", self._toggle_original)
+        self.text.tag_bind(
+            "toggle", "<Enter>", lambda _e: self.text.configure(cursor="hand2"))
+        self.text.tag_bind(
+            "toggle", "<Leave>", lambda _e: self.text.configure(cursor="arrow"))
 
         # 右クリックでコピー (macOS は Button-2 と Control+クリック)
         self.menu = tk.Menu(self.root, tearoff=False)
@@ -235,7 +275,7 @@ class ChatApp:
         self.text.tag_configure("user", foreground=colors["user"])
         self.text.tag_configure("ai", foreground=colors["ai"])
 
-        for tag in ("thinking", "note", "separator"):
+        for tag in ("thinking", "note", "separator", "superseded", "toggle"):
             self.text.tag_configure(tag, foreground=colors["sub_text"])
 
         self.rag_status.configure(foreground=colors["sub_text"])
@@ -245,11 +285,18 @@ class ChatApp:
         SettingsDialog(
             self.root, self.font, self.font_size, self._apply_font_size,
             self.colors, self.default_colors, self._apply_colors,
-            self._on_settings_reset)
+            self._on_settings_reset, self._on_settings_saved)
+
+    def _on_settings_saved(self) -> None:
+        """保存したら、API キーの有無を調べ直す"""
+
+        refresh_cloud_status(self.state)
+        self._dirty.set()
 
     def _on_settings_reset(self) -> None:
         """設定を既定値に戻したあと、画面の設定を読み直して設定画面を開き直す"""
 
+        refresh_cloud_status(self.state)
         ui = config.load_or_empty("ui.json")
         self._apply_font_size(_font_size(ui))
         self._apply_colors(_colors(ui, self.default_colors))
@@ -281,10 +328,38 @@ class ChatApp:
     def _cancel(self) -> None:
         self.state.cancel.cancel()
 
+    def _ask_cloud(self) -> None:
+        with self.state.lock:
+            if not can_ask_cloud(self.state):
+                return
+            used_rag = self.state.messages[-1].used_rag
+
+        # 資料を使った回答は、送る前に確認する
+        if used_rag and not messagebox.askyesno(
+                "資料を送る確認",
+                f"資料 (rag/) の内容が {self.state.cloud_name} に送られます。送りますか？\n"
+                "(ほかの、資料を使ったやりとりは送りません)",
+                default="no", parent=self.root):
+            return
+
+        ask_cloud(self.state)
+        self._dirty.set()
+
+    def _toggle_original(self, event: tk.Event) -> str:
+        index = self.text.index(f"@{event.x},{event.y}")
+
+        for tag in self.text.tag_names(index):
+            if tag.startswith("msg"):
+                self._open_originals ^= {int(tag[3:])}
+                self._dirty.set()
+
+        return "break"
+
     def _clear(self) -> None:
         with self.state.lock:
             self.state.messages.clear()
             self.state.error = ""
+        self._open_originals.clear()
         self.input.focus_set()
         self._dirty.set()
 
@@ -329,10 +404,24 @@ class ChatApp:
             error = self.state.error
             restored = self.state.restored_prompt
             self.state.restored_prompt = ""
+            cloud_enabled = self.state.has_cloud_key and can_ask_cloud(self.state)
+            last = len(self.state.messages) - 1
             snapshot: list[_Rendered] = [
-                (m.role, m.agent, m.content, m.note,
-                 busy and not m.content)
-                for m in self.state.messages
+                _Rendered(
+                    m.role, m.agent, m.content, m.note,
+                    busy and not m.content and not m.status,
+                    status=m.status,
+                    superseded=m.superseded,
+                    cloud_original="" if m.superseded else m.cloud_original,
+                    original_open=i in self._open_originals,
+                    cloud_button=(i == last and m.role == "assistant" and
+                                  bool(m.agent_key) and not m.superseded),
+                    cloud_enabled=i == last and cloud_enabled,
+                    used_rag=m.used_rag,
+                    cloud_name=self.state.cloud_name,
+                    has_cloud_key=self.state.has_cloud_key,
+                )
+                for i, m in enumerate(self.state.messages)
             ]
 
         with self.rag.lock:
@@ -379,6 +468,11 @@ class ChatApp:
         # 末尾の改行の手前まで消す
         self.text.delete(start, "end-1c")
 
+        # 埋め込んだボタンは、描き直すたびに作り直す
+        if self._cloud_button is not None:
+            self._cloud_button.destroy()
+            self._cloud_button = None
+
         for i in range(first, len(snapshot)):
             self._insert_message(i, snapshot[i])
 
@@ -389,7 +483,6 @@ class ChatApp:
             self.text.see("end")
 
     def _insert_message(self, index: int, message: _Rendered) -> None:
-        role, agent, content, note, thinking = message
         text = self.text
         tag = f"msg{index}"
 
@@ -397,20 +490,66 @@ class ChatApp:
         text.mark_gravity(f"msg{index}.start", "left")
 
         # AI の回答には、答えたエージェントの名前を出す
-        if role == "user":
+        if message.role == "user":
             text.insert("end", "You\n", ("user", tag))
+        elif message.superseded:
+            # ChatGPT に聞き直す前の回答は、薄く残す
+            text.insert(
+                "end", (message.agent or "AI") + " (聞き直す前の回答)\n",
+                ("superseded", tag))
         else:
-            text.insert("end", (agent or "AI") + "\n", ("ai", tag))
+            text.insert("end", (message.agent or "AI") + "\n", ("ai", tag))
 
-        if thinking:
+        if message.status:
+            text.insert("end", message.status + "\n", ("thinking", tag))
+
+        if message.thinking:
             text.insert("end", "考え中...\n", ("thinking", tag))
-        else:
-            text.insert("end", content + "\n", ("content", tag))
+        elif message.content or not message.status:
+            content_tag = "superseded" if message.superseded else "content"
+            text.insert("end", message.content + "\n", (content_tag, tag))
 
-        if note:
-            text.insert("end", note + "\n", ("note", tag))
+        # 書き直す前の ChatGPT の回答 (書き直しで中身が変わっていないか確かめられるように)
+        if message.cloud_original:
+            arrow = "▼" if message.original_open else "▶"
+            text.insert(
+                "end", f"{arrow} {message.cloud_name} の元の回答\n", ("toggle", tag))
+
+            if message.original_open:
+                text.insert(
+                    "end", message.cloud_original + "\n", ("original", tag))
+
+        if message.note:
+            text.insert("end", message.note + "\n", ("note", tag))
+
+        if message.cloud_button:
+            self._insert_cloud_button(message, tag)
 
         text.insert("end", "─" * 40 + "\n", ("separator",))
+
+
+    def _insert_cloud_button(self, message: _Rendered, tag: str) -> None:
+        """最新の回答の下に「ChatGPT に聞き直す」ボタンを埋め込む"""
+
+        button = ttk.Button(
+            self.text, text=f"{message.cloud_name} に聞き直す",
+            command=self._ask_cloud)
+
+        if not message.cloud_enabled:
+            button.state(["disabled"])
+
+        self.text.window_create("end", window=button, padx=2, pady=2)
+        self._cloud_button = button
+
+        # Tk にはツールチップが無いので、押せない理由などをボタンの横に書く
+        if not message.has_cloud_key:
+            hint = "  設定画面で API キーを登録すると使えます"
+        elif message.used_rag:
+            hint = "  資料 (rag/) の内容も送ります (送る前に確認します)"
+        else:
+            hint = ""
+
+        self.text.insert("end", hint + "\n", ("note", tag))
 
 
 def main() -> None:

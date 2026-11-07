@@ -1,4 +1,11 @@
 {
   "chat_url": "http://127.0.0.1:8080/v1/chat/completions",
-  "embed_url": "http://127.0.0.1:8081/v1/embeddings"
+  "embed_url": "http://127.0.0.1:8081/v1/embeddings",
+  "cloud": {
+    "name": "ChatGPT",
+    "chat_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-5-mini",
+    "api_key_name": "OPENAI_API_KEY",
+    "auth": "bearer"
+  }
 }

@@ -26,7 +26,40 @@ struct LLMOptions
 
     // 考える過程を出すモデル (Qwen3 など) で、考えずに答えさせる
     bool disableThinking = false;
+
+    // true ならローカルの LLM ではなく、クラウド (ChatGPT など、server.json の cloud) に送る
+    // クラウドには maxTokens / temperature / disableThinking を送らない
+    // (OpenAI の推論モデルは temperature を受け付けず、llama-server 専用の項目も通らないため)
+    bool cloud = false;
 };
+
+// クラウドの LLM の設定 (config/server.json の cloud。書いていない項目は既定値)
+struct CloudSettings
+{
+    // 画面に出す名前
+    std::string name = "ChatGPT";
+
+    std::string chatUrl = "https://api.openai.com/v1/chat/completions";
+    std::string model = "gpt-5-mini";
+
+    // API キーを探す名前 (環境変数 → 秘密ファイル。値は設定ファイルに書かない)
+    std::string apiKeyName = "OPENAI_API_KEY";
+
+    // 認証ヘッダーの形式: "bearer" (Authorization: Bearer) か "api-key" (Azure OpenAI)
+    std::string auth = "bearer";
+
+    // 0 なら送らない (サーバーの既定値)
+    int maxCompletionTokens = 0;
+
+    // 推論の深さ (minimal / low / medium / high)。空なら送らない
+    std::string reasoningEffort;
+};
+
+// server.json を読んで、クラウドの設定を返す (読めなければ既定値)
+CloudSettings LoadCloudSettings();
+
+// クラウドの API キーが見つかるか (環境変数か秘密ファイル)
+bool HasCloudApiKey(const CloudSettings& settings);
 
 // LLMに会話履歴を送信し、ストリーミングで回答を受け取る
 // cancel が true になると中断して std::runtime_error を投げる

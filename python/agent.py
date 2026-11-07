@@ -7,7 +7,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import config
-from llm_client import CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm
+from llm_client import (
+    CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm, load_cloud_settings)
+
+# agents.json に cloud / rewriter が無いとき (前の版の設定ファイル) に使う名前と system プロンプト
+DEFAULT_AGENTS = {
+    "cloud": (
+        "ChatGPT",
+        "あなたは親切で正確なAIアシスタントです。日本語で、分かりやすく回答してください。",
+    ),
+    "rewriter": (
+        "書き直し",
+        "これから渡す「回答」を、あなたの口調で言い直してください。"
+        "内容・数値・手順・固有名詞・コードは変えず、足したり削ったりしないでください。"
+        "コードやコマンドはそのまま書き写します。"
+        "言い直した回答だけを書き、前置きや説明は付けないでください。",
+    ),
+}
+
+# 書き直しの最大トークン数 (ChatGPT の長い回答も入るように)
+REWRITE_MAX_TOKENS = 4096
 
 # ルーターに見せる直前の会話の数と、1件あたりの長さ (バイト)
 ROUTER_HISTORY_MESSAGES = 4
@@ -22,6 +41,12 @@ class Agent:
     name: str
     system_prompt: str
     options: LLMOptions = field(default_factory=LLMOptions)
+
+    # config/agents.json のキー (assistant / general など)
+    key: str = ""
+
+    # ChatGPT に聞き直した回答を、この回答役の口調で書き直すか (agents.json の rewrite)
+    rewrite: bool = True
 
 
 @dataclass
@@ -63,11 +88,26 @@ def _load_agent(key: str, options: LLMOptions | None = None) -> Agent:
     if not isinstance(prompt, str):
         raise config.ConfigError(f"{key} の system_prompt がありません")
 
+    rewrite = entry.get("rewrite", key != "assistant")
+
     return Agent(
         name=str(entry.get("name", key)),
         system_prompt=prompt,
         options=options or LLMOptions(),
+        key=key,
+        rewrite=rewrite if isinstance(rewrite, bool) else key != "assistant",
     )
+
+
+def _load_agent_or_default(key: str) -> Agent:
+    """key のエージェントを読む。agents.json に無ければ既定のもの
+    (設定ファイルが前の版のままでも動くように)"""
+
+    if key in config.load("agents.json"):
+        return _load_agent(key)
+
+    name, prompt = DEFAULT_AGENTS[key]
+    return Agent(name=name, system_prompt=prompt, key=key)
 
 
 def _create_router() -> Agent:
@@ -102,6 +142,52 @@ def create_general() -> Agent:
     口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)"""
 
     return _load_agent("general")
+
+
+def create_answerer(key: str) -> Agent:
+    """key (assistant / general) の回答役"""
+
+    if key not in ("assistant", "general"):
+        raise LLMError(f"回答役ではありません: {key}")
+
+    return _load_agent(key)
+
+
+def create_cloud() -> Agent:
+    """ChatGPT (server.json の cloud) に聞き直すエージェント
+    system プロンプトは agents.json の cloud (無ければ既定のもの)"""
+
+    cloud = load_cloud_settings()
+    agent = _load_agent_or_default("cloud")
+
+    # 名前は server.json の cloud.name に合わせる
+    agent.name = cloud.name
+    agent.options = LLMOptions(cloud=True)
+    return agent
+
+
+def rewrite_answer(
+    persona: Agent,
+    question: str,
+    answer: str,
+    on_delta: DeltaCallback | None,
+    cancel: CancelToken,
+) -> str:
+    """クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)
+    書き直しの指示は agents.json の rewriter (無ければ既定のもの)"""
+
+    rewriter = _load_agent_or_default("rewriter")
+
+    agent = Agent(
+        name=persona.name,
+        system_prompt=persona.system_prompt + "\n\n" + rewriter.system_prompt,
+        options=LLMOptions(max_tokens=REWRITE_MAX_TOKENS, disable_thinking=True),
+        key=persona.key,
+        rewrite=persona.rewrite,
+    )
+
+    content = f"## 質問\n{question}\n\n## 回答\n{answer}"
+    return run_agent(agent, [{"role": "user", "content": content}], on_delta, cancel)
 
 
 def run_agent(

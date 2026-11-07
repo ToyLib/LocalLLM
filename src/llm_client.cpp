@@ -2,8 +2,10 @@
 
 #include "config.h"
 
+#include <SDL3/SDL.h>
 #include <curl/curl.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace
@@ -20,6 +22,10 @@ struct StreamContext
     std::string answer;
     std::string error;
     bool done = false;
+
+    // エラーのときに返ってくる本文 (SSE ではない JSON) を読むため、先頭を取っておく
+    std::string raw;
+
     const DeltaCallback* onDelta = nullptr;
     const std::atomic<bool>* cancel = nullptr;
 };
@@ -66,7 +72,15 @@ void ProcessLine(
 
     if (data.contains("error"))
     {
-        throw std::runtime_error(data["error"].dump());
+        const json& error = data["error"];
+
+        if (error.is_object() && error.contains("message") &&
+            error["message"].is_string())
+        {
+            throw std::runtime_error(error["message"].get<std::string>());
+        }
+
+        throw std::runtime_error(error.dump());
     }
 
     if (!data.contains("choices") ||
@@ -115,6 +129,13 @@ size_t WriteCallback(
 
     try
     {
+        constexpr size_t MAX_RAW = 64 * 1024;
+
+        if (context->raw.size() < MAX_RAW)
+        {
+            context->raw.append(data, std::min(bytes, MAX_RAW - context->raw.size()));
+        }
+
         context->buffer.append(data, bytes);
 
         size_t pos;
@@ -190,7 +211,97 @@ int EmbedProgressCallback(
     return context->cancel->load() ? 1 : 0;
 }
 
+// エラーの本文 ({"error": {"message": ...}}) からメッセージを取り出す
+std::string ErrorMessage(const std::string& body)
+{
+    const json data = json::parse(body, nullptr, false);
+
+    if (!data.is_discarded() && data.is_object() && data.contains("error"))
+    {
+        const json& error = data["error"];
+
+        if (error.is_object() && error.contains("message") &&
+            error["message"].is_string())
+        {
+            return error["message"].get<std::string>();
+        }
+
+        if (error.is_string())
+        {
+            return error.get<std::string>();
+        }
+    }
+
+    return {};
+}
+
+// HTTP のエラーを、分かりやすいメッセージにする
+std::string HttpError(long status, const std::string& body, const std::string& server)
+{
+    std::string text = server + ": HTTP " + std::to_string(status);
+
+    if (status == 401)
+    {
+        text += " (API キーが無効です)";
+    }
+    else if (status == 429)
+    {
+        text += " (回数の制限か、残高不足です)";
+    }
+
+    const std::string message = ErrorMessage(body);
+
+    if (!message.empty())
+    {
+        text += ": " + message;
+    }
+
+    return text;
+}
+
+bool StartsWith(const std::string& text, const char* prefix)
+{
+    return text.rfind(prefix, 0) == 0;
+}
+
 } // namespace
+
+CloudSettings LoadCloudSettings()
+{
+    CloudSettings settings;
+    const json server = LoadConfigOrEmpty(SERVER_CONFIG);
+
+    if (!server.contains("cloud"))
+    {
+        return settings;
+    }
+
+    const json& cloud = server["cloud"];
+
+    if (!cloud.is_object())
+    {
+        SDL_Log("Config cloud is not an object (using defaults)");
+        return settings;
+    }
+
+    settings.name = ConfigStringOr(cloud, "name", settings.name);
+    settings.chatUrl = ConfigStringOr(cloud, "chat_url", settings.chatUrl);
+    settings.model = ConfigStringOr(cloud, "model", settings.model);
+    settings.apiKeyName = ConfigStringOr(cloud, "api_key_name", settings.apiKeyName);
+    settings.auth = ConfigStringOr(cloud, "auth", settings.auth);
+    settings.maxCompletionTokens = static_cast<int>(ConfigNumberOr(
+        cloud, "max_completion_tokens",
+        static_cast<float>(settings.maxCompletionTokens)));
+    settings.reasoningEffort =
+        ConfigStringOr(cloud, "reasoning_effort", settings.reasoningEffort);
+
+    return settings;
+}
+
+bool HasCloudApiKey(const CloudSettings& settings)
+{
+    return !FindApiKey(settings.apiKeyName).value.empty();
+}
 
 std::string AskLLM(
     const json& messages,
@@ -198,39 +309,98 @@ std::string AskLLM(
     const std::atomic<bool>& cancel,
     const LLMOptions& options)
 {
-    const std::string url = ConfigString(SERVER_CONFIG, "chat_url");
+    json request = {
+        {"messages", messages},
+        {"stream", true}
+    };
+
+    std::string url;
+    std::string serverName;
+    std::string authHeader;
+
+    if (options.cloud)
+    {
+        const CloudSettings cloud = LoadCloudSettings();
+        url = cloud.chatUrl;
+        serverName = cloud.name;
+
+        const ApiKey key = FindApiKey(cloud.apiKeyName);
+
+        if (key.value.empty())
+        {
+            throw std::runtime_error(
+                cloud.name + " の API キー (" + cloud.apiKeyName + ") が設定されていません");
+        }
+
+        // キーを平文の通信やローカルのサーバーに送らないように
+        if (!StartsWith(url, "https://"))
+        {
+            throw std::runtime_error(
+                "API キーは https の URL にだけ送ります: " + url);
+        }
+
+        authHeader = cloud.auth == "api-key"
+            ? "api-key: " + key.value
+            : "Authorization: Bearer " + key.value;
+
+        request["model"] = cloud.model;
+
+        if (cloud.maxCompletionTokens > 0)
+        {
+            request["max_completion_tokens"] = cloud.maxCompletionTokens;
+        }
+
+        if (!cloud.reasoningEffort.empty())
+        {
+            request["reasoning_effort"] = cloud.reasoningEffort;
+        }
+
+        if (!options.schema.is_null())
+        {
+            request["response_format"] = {
+                {"type", "json_schema"},
+                {"json_schema", {
+                    {"name", "result"},
+                    {"strict", true},
+                    {"schema", options.schema}
+                }}
+            };
+        }
+    }
+    else
+    {
+        url = ConfigString(SERVER_CONFIG, "chat_url");
+        serverName = "LLM server";
+
+        // llama-server はモデル名を見ない
+        request["model"] = "local";
+        request["max_tokens"] = options.maxTokens;
+
+        if (options.temperature >= 0.0f)
+        {
+            request["temperature"] = options.temperature;
+        }
+
+        if (!options.schema.is_null())
+        {
+            // llama-server は文法で出力を縛るので、小さいモデルでも形が崩れない
+            request["response_format"] = {
+                {"type", "json_schema"},
+                {"json_schema", {{"name", "result"}, {"schema", options.schema}}}
+            };
+        }
+
+        if (options.disableThinking)
+        {
+            request["chat_template_kwargs"] = {{"enable_thinking", false}};
+        }
+    }
 
     CURL* curl = curl_easy_init();
 
     if (!curl)
     {
         throw std::runtime_error("curl_easy_init failed");
-    }
-
-    json request = {
-        {"model", "local"},
-        {"messages", messages},
-        {"max_tokens", options.maxTokens},
-        {"stream", true}
-    };
-
-    if (options.temperature >= 0.0f)
-    {
-        request["temperature"] = options.temperature;
-    }
-
-    if (!options.schema.is_null())
-    {
-        // llama-server は文法で出力を縛るので、小さいモデルでも形が崩れない
-        request["response_format"] = {
-            {"type", "json_schema"},
-            {"json_schema", {{"name", "result"}, {"schema", options.schema}}}
-        };
-    }
-
-    if (options.disableThinking)
-    {
-        request["chat_template_kwargs"] = {{"enable_thinking", false}};
     }
 
     std::string body = request.dump();
@@ -244,6 +414,11 @@ std::string AskLLM(
         headers, "Content-Type: application/json");
     headers = curl_slist_append(
         headers, "Accept: text/event-stream");
+
+    if (!authHeader.empty())
+    {
+        headers = curl_slist_append(headers, authHeader.c_str());
+    }
 
     curl_easy_setopt(
         curl, CURLOPT_URL, url.c_str());
@@ -283,9 +458,18 @@ std::string AskLLM(
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
+    // ヘッダーにキーが入っていたので、メモリから消しておく
+    std::fill(authHeader.begin(), authHeader.end(), '\0');
+
     if (cancel.load())
     {
         throw std::runtime_error("Cancelled");
+    }
+
+    // エラーの本文は SSE ではないので、行の処理より先に HTTP の状態を見る
+    if (result == CURLE_OK && status != 200)
+    {
+        throw std::runtime_error(HttpError(status, context.raw, serverName));
     }
 
     if (!context.error.empty())
@@ -295,13 +479,8 @@ std::string AskLLM(
 
     if (result != CURLE_OK)
     {
-        throw std::runtime_error(curl_easy_strerror(result));
-    }
-
-    if (status != 200)
-    {
         throw std::runtime_error(
-            "HTTP " + std::to_string(status));
+            serverName + ": " + curl_easy_strerror(result));
     }
 
     if (!context.done)

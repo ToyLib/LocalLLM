@@ -10,9 +10,15 @@
 // 同じ LLM サーバーを、役割を変えて呼び分ける
 struct Agent
 {
+    // config/agents.json のキー (assistant / general など)
+    std::string key;
+
     std::string name;
     std::string systemPrompt;
     LLMOptions options;
+
+    // ChatGPT に聞き直した回答を、この回答役の口調で書き直すか (agents.json の rewrite)
+    bool rewrite = true;
 };
 
 // エージェントに会話 (system を除いた user / assistant) を渡して回答させる
@@ -36,6 +42,26 @@ Agent CreateAssistant();
 // 資料の要らない質問 (雑談や一般的な質問) に答える
 // 口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)
 Agent CreateGeneral();
+
+// key (assistant / general) の回答役
+Agent CreateAnswerer(const std::string& key);
+
+// ChatGPT (server.json の cloud) に聞き直すエージェント
+// system プロンプトは agents.json の cloud (無ければ既定のもの)
+Agent CreateCloud();
+
+// クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)
+// 書き直しの指示は agents.json の rewriter (無ければ既定のもの)
+std::string RewriteAnswer(
+    const Agent& persona,
+    const std::string& question,
+    const std::string& answer,
+    const DeltaCallback& onDelta,
+    const std::atomic<bool>& cancel);
+
+// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter のみ。ほかは空)
+std::string DefaultAgentName(const std::string& key);
+std::string DefaultAgentPrompt(const std::string& key);
 
 // ルーターの判断
 struct RouteDecision

@@ -16,6 +16,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - メッセージを右クリックでコピー
 - `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
 - 資料を参照するかを質問ごとに判断するルーターと、口調の違う 2 つの回答役 (資料に基づくアシスタント / 時代劇口調の侍) ([説明](doc/agent.md))
+- 物足りない回答は「ChatGPT に聞き直す」ボタンで ChatGPT (OpenAI API) に聞き直し、回答役の口調で言い直して表示 ([説明](doc/chatgpt.md))
 - 回答役の人格をテンプレート (侍・悟空風・バカボンのパパ風・大阪のおばちゃん・執事・猫など) から選び、設定画面で好みに直せる
 
 ## 必要なもの
@@ -87,6 +88,7 @@ cmake --build build --parallel
 | 中断ボタン | 受信を止める (途中までの回答は残る) |
 | クリアボタン | 会話履歴をリセット |
 | メッセージを右クリック | コピー |
+| ChatGPT に聞き直すボタン | 最新の質問を ChatGPT に聞き直す (API キーが必要。[説明](doc/chatgpt.md)) |
 | 資料 (RAG) | `rag/` の資料を質問に添えるか (自動: ルーターが判断 / 常に / 使わない) |
 | 再読込ボタン | `rag/` を読み直してインデックスを更新 |
 | 設定ボタン | 設定画面を開く (画面・システムプロンプト・サーバーの URL を変えて保存) |
@@ -112,7 +114,14 @@ Python 版は、初めて起動したときに `config/` をリポジトリの `
 ```json
 {
   "chat_url": "http://127.0.0.1:8080/v1/chat/completions",
-  "embed_url": "http://127.0.0.1:8081/v1/embeddings"
+  "embed_url": "http://127.0.0.1:8081/v1/embeddings",
+  "cloud": {
+    "name": "ChatGPT",
+    "chat_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-5-mini",
+    "api_key_name": "OPENAI_API_KEY",
+    "auth": "bearer"
+  }
 }
 ```
 
@@ -120,7 +129,9 @@ Python 版は、初めて起動したときに `config/` をリポジトリの `
 | --- | --- |
 | サーバーの URL | `config/server.json` の `chat_url` |
 | 埋め込みサーバーの URL (RAG) | `config/server.json` の `embed_url` |
-| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`、[説明](doc/agent.md)) |
+| システムプロンプト | `config/agents.json` (`router` / `assistant` / `general` / `cloud` / `rewriter`、[説明](doc/agent.md)) |
+| ChatGPT の接続先・モデル | `config/server.json` の `cloud` ([説明](doc/chatgpt.md)) |
+| ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)) |
 | 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
@@ -205,7 +216,7 @@ python3 python/main.py
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
 | `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
-| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md)) |
+| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |

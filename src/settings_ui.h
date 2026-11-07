@@ -57,6 +57,9 @@ struct AgentSettings
 
     // テンプレートの選択欄で選んでいるもの (SettingsState::templates の番号)
     int templateIndex = 0;
+
+    // 回答役のみ: ChatGPT に聞き直した回答を、この口調で書き直すか
+    bool rewrite = true;
 };
 
 // system プロンプトのテンプレート (config/personas.json の1件)
@@ -86,6 +89,25 @@ struct SettingsState
     std::string embedUrl;
     std::vector<AgentSettings> agents;
     std::vector<PromptTemplate> templates;
+
+    // クラウド (ChatGPT。server.json の cloud)
+    std::string cloudName;
+    std::string cloudUrl;
+    std::string cloudModel;
+    std::string cloudKeyName;
+
+    // 新しく登録する API キー (空なら変えない。保存したら消す)
+    std::string apiKeyInput;
+
+    // 保存するときに秘密ファイルの API キーを消すか
+    bool deleteApiKey = false;
+
+    // 今の API キーの状態 (keyStatusName のキーを調べたもの)
+    std::string keyStatusName;
+    std::string keyStatus;
+
+    // 保存したら true (チャット画面が API キーの有無を調べ直したら false に戻す)
+    bool saved = false;
 
     // 開いたときに読んだファイルの中身 (設定画面で扱わない項目もそのまま残して保存する)
     nlohmann::ordered_json uiJson;

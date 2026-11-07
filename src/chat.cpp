@@ -7,6 +7,8 @@
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <optional>
+#include <stdexcept>
 
 namespace
 {
@@ -128,9 +130,14 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 
         state.messages.push_back({"user", prompt});
 
-        // 履歴全体を送信
+        // 履歴全体を送信 (ChatGPT に聞き直して置き換えた回答は除く)
         for (const auto& message : state.messages)
         {
+            if (message.superseded)
+            {
+                continue;
+            }
+
             history.push_back({
                 {"role", message.role},
                 {"content", message.content}
@@ -165,6 +172,7 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
             {
                 std::lock_guard lock(state.mutex);
                 state.messages.back().agent = answerer.name;
+                state.messages.back().agentKey = answerer.key;
                 state.messages.back().note = note;
             }
             WakeUI();
@@ -184,8 +192,15 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 
                     if (!hits.empty())
                     {
-                        history.back()["content"] =
-                            BuildRagPrompt(hits, prompt);
+                        std::string ragPrompt = BuildRagPrompt(hits, prompt);
+                        history.back()["content"] = ragPrompt;
+
+                        // ChatGPT に聞き直すときに同じ資料を送れるように、
+                        // また資料を使ったやりとりを ChatGPT 宛ての履歴から除けるように残す
+                        std::lock_guard lock(state.mutex);
+                        auto& messages = state.messages;
+                        messages[messages.size() - 2].ragPrompt = std::move(ragPrompt);
+                        messages.back().usedRag = true;
                     }
 
                     note += FormatSources(hits);
@@ -234,6 +249,251 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
                 state.messages.pop_back();
                 state.messages.pop_back();
                 state.restoredPrompt = prompt;
+            }
+
+            if (!state.cancel)
+            {
+                state.error = e.what();
+            }
+        }
+
+        {
+            std::lock_guard lock(state.mutex);
+            state.busy = false;
+        }
+        WakeUI();
+    });
+}
+
+namespace
+{
+
+// 最新の質問の位置 (無ければ nullopt)
+std::optional<size_t> LastUserIndex(const std::vector<Message>& messages)
+{
+    for (size_t i = messages.size(); i > 0; --i)
+    {
+        if (messages[i - 1].role == "user")
+        {
+            return i - 1;
+        }
+    }
+
+    return std::nullopt;
+}
+
+// ChatGPT に送る履歴を作る (呼ぶ側で state.mutex をロックしておく)
+// 最新の質問より前のやりとりのうち、資料を使っていないものだけを送る
+json BuildCloudHistory(const std::vector<Message>& messages, size_t lastUser)
+{
+    json history = json::array();
+
+    for (size_t i = 0; i < lastUser; ++i)
+    {
+        if (messages[i].role != "user")
+        {
+            continue;
+        }
+
+        // この質問への今の回答 (聞き直して置き換えたものは除く)
+        const Message* answer = nullptr;
+
+        for (size_t j = i + 1; j < lastUser && messages[j].role != "user"; ++j)
+        {
+            if (!messages[j].superseded)
+            {
+                answer = &messages[j];
+            }
+        }
+
+        if (!answer || answer->usedRag || answer->content.empty())
+        {
+            continue;
+        }
+
+        history.push_back({{"role", "user"}, {"content", messages[i].content}});
+        history.push_back({{"role", "assistant"}, {"content", answer->content}});
+    }
+
+    return history;
+}
+
+bool IsBlank(const std::string& text)
+{
+    return text.find_first_not_of(" \t\r\n") == std::string::npos;
+}
+
+} // namespace
+
+void RefreshCloudStatus(ChatState& state)
+{
+    const CloudSettings cloud = LoadCloudSettings();
+    state.hasCloudKey = HasCloudApiKey(cloud);
+    state.cloudName = cloud.name;
+}
+
+bool CanAskCloud(const ChatState& state)
+{
+    if (state.busy || state.messages.empty())
+    {
+        return false;
+    }
+
+    const Message& last = state.messages.back();
+
+    return last.role == "assistant" &&
+        !last.agentKey.empty() &&
+        !last.content.empty() &&
+        LastUserIndex(state.messages).has_value();
+}
+
+bool LastAnswerUsedRag(const ChatState& state)
+{
+    return !state.messages.empty() && state.messages.back().usedRag;
+}
+
+void AskCloud(ChatState& state)
+{
+    JoinWorker(state);
+
+    json history;
+    std::string question;
+    std::string agentKey;
+
+    {
+        std::lock_guard lock(state.mutex);
+
+        if (!CanAskCloud(state))
+        {
+            return;
+        }
+
+        const size_t lastUser = *LastUserIndex(state.messages);
+        Message& previous = state.messages.back();
+        const Message& user = state.messages[lastUser];
+
+        history = BuildCloudHistory(state.messages, lastUser);
+        question = user.content;
+        agentKey = previous.agentKey;
+
+        // 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
+        const bool sendRag = previous.usedRag && !user.ragPrompt.empty();
+        history.push_back({
+            {"role", "user"},
+            {"content", sendRag ? user.ragPrompt : user.content}
+        });
+
+        Message answer;
+        answer.role = "assistant";
+        answer.agent = previous.agent + " (" + state.cloudName + ")";
+        answer.agentKey = agentKey;
+        answer.usedRag = previous.usedRag;
+        answer.note = state.cloudName + " に聞き直しました" +
+            (sendRag ? std::string(" (資料も送りました)") : std::string());
+        answer.status = state.cloudName + " に問い合わせ中…";
+
+        previous.superseded = true;
+        state.messages.push_back(std::move(answer));
+
+        state.busy = true;
+        state.error.clear();
+    }
+
+    state.cancel = false;
+
+    state.worker = std::thread([&state, history, question, agentKey]() {
+        std::string cloudAnswer;
+
+        try
+        {
+            const Agent persona = CreateAnswerer(agentKey);
+            const Agent cloud = CreateCloud();
+
+            {
+                std::lock_guard lock(state.mutex);
+                state.messages.back().agent = persona.name + " (" + cloud.name + ")";
+            }
+            WakeUI();
+
+            cloudAnswer = RunAgent(cloud, history, {}, state.cancel);
+
+            if (IsBlank(cloudAnswer))
+            {
+                throw std::runtime_error(cloud.name + " の回答が空でした");
+            }
+
+            if (!persona.rewrite)
+            {
+                std::lock_guard lock(state.mutex);
+                Message& answer = state.messages.back();
+                answer.agent = persona.name + " (" + cloud.name + ")";
+                answer.content = cloudAnswer;
+                answer.status.clear();
+            }
+            else
+            {
+                {
+                    std::lock_guard lock(state.mutex);
+                    Message& answer = state.messages.back();
+                    answer.agent =
+                        persona.name + " (" + cloud.name + " → ローカルで書き直し)";
+                    answer.cloudOriginal = cloudAnswer;
+                    answer.status = persona.name + " が言い直し中…";
+                }
+                WakeUI();
+
+                std::string failure;
+
+                try
+                {
+                    RewriteAnswer(
+                        persona,
+                        question,
+                        cloudAnswer,
+                        [&state](std::string_view text) {
+                            {
+                                std::lock_guard lock(state.mutex);
+                                state.messages.back().content += text;
+                            }
+                            WakeUI();
+                        },
+                        state.cancel);
+                }
+                catch (const std::exception& e)
+                {
+                    failure = state.cancel ? "中断しました" : e.what();
+                }
+
+                std::lock_guard lock(state.mutex);
+                Message& answer = state.messages.back();
+                answer.status.clear();
+
+                // 書き直せなかったら、ChatGPT の回答をそのまま出す
+                // (中断しても、途中まで書き直したものがあればそれを残す)
+                if (IsBlank(answer.content))
+                {
+                    answer.content = cloudAnswer;
+                    answer.agent = persona.name + " (" + cloud.name + ")";
+                    answer.cloudOriginal.clear();
+                    answer.note += "\n書き直せなかったので、" + cloud.name +
+                        " の回答をそのまま表示しています" +
+                        (failure.empty() ? std::string() : ": " + failure);
+                }
+                else if (!failure.empty() && !state.cancel)
+                {
+                    answer.note += "\n書き直しが途中で止まりました: " + failure;
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            // ChatGPT に聞けなかった: 聞き直す前の回答に戻す
+            std::lock_guard lock(state.mutex);
+            state.messages.pop_back();
+
+            if (!state.messages.empty())
+            {
+                state.messages.back().superseded = false;
             }
 
             if (!state.cancel)

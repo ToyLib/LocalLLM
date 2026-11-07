@@ -16,6 +16,8 @@ from tkinter import ttk
 from typing import Any
 
 import config
+from agent import DEFAULT_AGENTS
+from llm_client import CloudSettings
 
 ERROR_COLOR = "#e05555"
 NOTE_COLOR = "#888888"
@@ -48,7 +50,32 @@ AGENT_ENTRIES = (
     ("router", "ルーター"),
     ("assistant", "資料ありの回答役"),
     ("general", "資料なしの回答役"),
+    ("cloud", "ChatGPT"),
+    ("rewriter", "口調の書き直し"),
 )
+
+# 回答役 (人格のテンプレートと、ChatGPT の回答の書き直しを選べる)
+ANSWERERS = ("assistant", "general")
+
+
+def mask_key(key: str) -> str:
+    """API キーの末尾だけを見せる"""
+
+    return "…" + key[-4:] if len(key) > 8 else "…"
+
+
+def describe_api_key(name: str) -> str:
+    """API キーの状態 (値は末尾4文字だけ)"""
+
+    value, source = config.find_api_key(name)
+
+    if source == config.API_KEY_ENVIRONMENT:
+        return f"設定済み ({mask_key(value)})。環境変数 {name} から読んでいます"
+
+    if source == config.API_KEY_SECRETS_FILE:
+        return f"設定済み ({mask_key(value)})。秘密ファイルから読んでいます"
+
+    return "未設定"
 
 
 def prompt_to_text(prompt: Any) -> str:
@@ -83,6 +110,7 @@ class SettingsDialog:
     default_colors: 「色を既定に戻す」で使う色
     apply_colors: 色を画面に反映する (変えるたびに呼ぶ)
     on_reset: 設定を既定値に戻したあとに呼ぶ (画面の設定を読み直して、設定画面を開き直す)
+    on_saved: 保存したあとに呼ぶ (API キーの有無を調べ直す)
     """
 
     def __init__(
@@ -95,6 +123,7 @@ class SettingsDialog:
         default_colors: dict[str, str],
         apply_colors: Callable[[dict[str, str]], None],
         on_reset: Callable[[], None],
+        on_saved: Callable[[], None] | None = None,
     ) -> None:
         self.parent = parent
         self.font = font
@@ -104,6 +133,7 @@ class SettingsDialog:
         self.default_colors = default_colors
         self.apply_colors = apply_colors
         self.on_reset = on_reset
+        self.on_saved = on_saved
 
         self.window = tk.Toplevel(parent)
         self.window.title("設定")
@@ -273,27 +303,56 @@ class SettingsDialog:
         self.agent_widgets: dict[str, tuple[tk.StringVar, tk.Text]] = {}
         # key → system_prompt が文字列か (テンプレートを読み込むと変わる)
         self.prompt_is_string: dict[str, bool] = {}
+        # 回答役の key → ChatGPT の回答をこの口調で書き直すか
+        self.rewrite: dict[str, tk.BooleanVar] = {}
 
         for key, label in AGENT_ENTRIES:
             entry = self.agents_json.get(key)
-            entry = entry if isinstance(entry, dict) else {}
+
+            if not isinstance(entry, dict):
+                # 前の版の設定ファイルに無いもの (cloud / rewriter) は、既定のプロンプトから始める
+                default = DEFAULT_AGENTS.get(key)
+                entry = ({"name": default[0], "system_prompt": [default[1]]}
+                         if default else {})
+
             prompt = entry.get("system_prompt")
             is_string = isinstance(prompt, str)
 
             page = ttk.Frame(agents, padding=8)
             agents.add(page, text=label)
 
+            name = tk.StringVar(value=str(entry.get("name", key)))
+
             # 回答役は、人格のテンプレートから選んで直せる
-            if key != "router":
+            if key in ANSWERERS:
                 self._build_template_picker(page, key, entry.get("name"))
 
-            row = ttk.Frame(page)
-            row.pack(side="top", fill="x", pady=(0, 6))
-            ttk.Label(row, text="名前").pack(side="left")
-            name = tk.StringVar(value=str(entry.get("name", key)))
-            ttk.Entry(row, textvariable=name).pack(
-                side="left", fill="x", expand=True, padx=(8, 0))
+            if key == "cloud":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="「ChatGPT に聞き直す」で送る system プロンプトです (名前はサーバーのタブで決めます)。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            elif key == "rewriter":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="ChatGPT の回答を書き直すとき、回答役の system プロンプトの後ろに付ける指示です。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            else:
+                row = ttk.Frame(page)
+                row.pack(side="top", fill="x", pady=(0, 6))
+                ttk.Label(row, text="名前").pack(side="left")
+                ttk.Entry(row, textvariable=name).pack(
+                    side="left", fill="x", expand=True, padx=(8, 0))
 
+            if key in ANSWERERS:
+                rewrite = entry.get("rewrite", key != "assistant")
+                variable = tk.BooleanVar(
+                    value=rewrite if isinstance(rewrite, bool) else key != "assistant")
+                ttk.Checkbutton(
+                    page, variable=variable,
+                    text="ChatGPT に聞き直した回答を、この口調で書き直す",
+                ).pack(side="top", anchor="w", pady=(0, 6))
+                self.rewrite[key] = variable
 
             box = ttk.Frame(page)
             box.pack(side="top", fill="both", expand=True)
@@ -378,7 +437,88 @@ class SettingsDialog:
             text="保存すると次の質問から反映されます。",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # ChatGPT (server.json の cloud。無ければ既定値)
+        ttk.Separator(tab).grid(
+            row=3, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Label(tab, text="ChatGPT (「聞き直す」ボタンで使う)").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+        defaults = CloudSettings()
+        cloud = self.server_json.get("cloud")
+        cloud = cloud if isinstance(cloud, dict) else {}
+        self.cloud: dict[str, tk.StringVar] = {}
+
+        for row, (key, label) in enumerate(
+                (("name", "表示名"), ("chat_url", "URL"), ("model", "モデル"),
+                 ("api_key_name", "API キーの名前")), start=5):
+            value = cloud.get(key)
+            variable = tk.StringVar(
+                value=value if isinstance(value, str) else getattr(defaults, key))
+            ttk.Label(tab, text=label).grid(row=row, column=0, sticky="w")
+            ttk.Entry(tab, textvariable=variable).grid(
+                row=row, column=1, sticky="ew", padx=(8, 0), pady=2)
+            self.cloud[key] = variable
+
+        ttk.Label(
+            tab, foreground=NOTE_COLOR, wraplength=560, justify="left",
+            text="API キーは、この名前の環境変数か、下の秘密ファイルから読みます (設定ファイルには書きません)。",
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 4))
+
+        self.key_status = ttk.Label(tab)
+        self.key_status.grid(row=10, column=0, columnspan=2, sticky="w")
+        self.cloud["api_key_name"].trace_add(
+            "write", lambda *_: self._update_key_status())
+
+        ttk.Label(tab, text="新しい API キー").grid(row=11, column=0, sticky="w")
+        key_row = ttk.Frame(tab)
+        key_row.grid(row=11, column=1, sticky="ew", padx=(8, 0), pady=2)
+
+        self.api_key = tk.StringVar()
+        self.api_key_entry = ttk.Entry(key_row, textvariable=self.api_key, show="•")
+        self.api_key_entry.pack(side="left", fill="x", expand=True)
+
+        self.delete_api_key = False
+        self.delete_button = ttk.Button(
+            key_row, text="秘密ファイルから削除", command=self._toggle_delete_key)
+        self.delete_button.pack(side="left", padx=(6, 0))
+
+        self.key_hint = ttk.Label(tab, foreground=NOTE_COLOR)
+        self.key_hint.grid(row=12, column=0, columnspan=2, sticky="w")
+
+        try:
+            secrets = str(config.secrets_file_path())
+        except config.ConfigError as e:
+            secrets = str(e)
+
+        ttk.Label(
+            tab, foreground=NOTE_COLOR, wraplength=560, justify="left",
+            text=f"秘密ファイル: {secrets}\nAPI キーは https の URL にだけ送ります。",
+        ).grid(row=13, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        self._update_key_status()
+        self._update_key_hint()
+
         return tab
+
+    def _update_key_status(self) -> None:
+        self.key_status.configure(
+            text="API キー: " + describe_api_key(self.cloud["api_key_name"].get()))
+
+    def _update_key_hint(self) -> None:
+        if self.delete_api_key:
+            self.key_hint.configure(
+                text="保存すると、秘密ファイルから API キーを削除します。")
+        else:
+            self.key_hint.configure(
+                text="入力して保存すると、秘密ファイルに登録します (空なら今のまま)。")
+
+    def _toggle_delete_key(self) -> None:
+        self.delete_api_key = not self.delete_api_key
+        self.api_key.set("")
+        self.api_key_entry.state(["disabled" if self.delete_api_key else "!disabled"])
+        self.delete_button.configure(
+            text="削除をやめる" if self.delete_api_key else "秘密ファイルから削除")
+        self._update_key_hint()
 
     # ---- 操作 ----
 
@@ -458,6 +598,17 @@ class SettingsDialog:
         for key, variable in self.urls.items():
             self.server_json[key] = variable.get()
 
+        # auth など、画面で扱わない項目はそのまま残す
+        cloud = self.server_json.get("cloud")
+
+        if not isinstance(cloud, dict):
+            cloud = self.server_json["cloud"] = {}
+
+        for key, variable in self.cloud.items():
+            cloud[key] = variable.get()
+
+        cloud.setdefault("auth", "bearer")
+
         for key, (name, text) in self.agent_widgets.items():
             is_string = self.prompt_is_string[key]
             entry = self.agents_json.get(key)
@@ -470,7 +621,20 @@ class SettingsDialog:
             entry["system_prompt"] = (
                 prompt if is_string else text_to_prompt_lines(prompt))
 
+            if key in self.rewrite:
+                entry["rewrite"] = self.rewrite[key].get()
+
         try:
+            # API キーは設定ファイルではなく秘密ファイルに書く
+            key_name = self.cloud["api_key_name"].get()
+
+            if self.delete_api_key:
+                config.save_api_key(key_name, "")
+            elif key := self.api_key.get().strip():
+                config.save_api_key(key_name, key)
+
+            self.api_key.set("")
+
             config.save("ui.json", self.ui_json)
             config.save("server.json", self.server_json)
             config.save("agents.json", self.agents_json)
@@ -481,6 +645,9 @@ class SettingsDialog:
         self.apply_font_size(size)
         self.apply_colors(colors)
         self._close()
+
+        if self.on_saved:
+            self.on_saved()
 
     def _reset(self) -> None:
         """user-config/ を config/ の内容で上書きする"""
