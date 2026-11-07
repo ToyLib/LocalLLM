@@ -21,7 +21,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 
 ## 必要なもの
 
-Linux (Ubuntu / CachyOS などの Arch 系)、macOS、Windows でビルドできます。詳しい環境構築手順 (llama.cpp のビルドやモデル別の起動方法を含む) は OS ごとの手順書を参照してください。
+Linux (Ubuntu / CachyOS などの Arch 系)、macOS、Windows でビルドできます。詳しい環境構築手順は、OS によらない部分を [SETUP.md](SETUP.md) (プロジェクト構成、ビルドのプリセット、フォント、モデル別の起動、動作確認)、OS ごとの部分 (パッケージのインストールや llama.cpp のビルド) を次の手順書にまとめています。
 
 | OS | 手順書 | パッケージ管理 | ビルド・実行を確認した環境 |
 | --- | --- | --- | --- |
@@ -222,6 +222,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
+| `SETUP.md` | 環境構築手順 (OS によらない部分) |
 | `SETUP-Ubuntu.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |
 | `scripts/` | llama-server の起動スクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |

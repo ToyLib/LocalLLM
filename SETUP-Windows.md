@@ -4,9 +4,7 @@ Windows 上で、Visual Studio (MSVC) と vcpkg を使って開発環境を構�
 ビルドには Visual Studio のジェネレーターを使うので、Ninja や開発者用のシェル (Developer PowerShell for VS) は不要。
 vcpkg の場所は環境変数 `VCPKG_ROOT` で指定する (この手順では例として `C:\tools\vcpkg` にインストールする)。
 
-Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、CachyOS など Arch 系の手順は [SETUP-Arch.md](SETUP-Arch.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md) を参照。
-
-アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「9. GUI クライアントの構成」を参照。
+OS によらない部分 (プロジェクト構成、フォント、モデル別の起動、動作確認) は [SETUP.md](SETUP.md) にまとめている。
 
 ## 1. 概要
 
@@ -16,8 +14,7 @@ Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、CachyOS など Arch 系
 | コンパイラ | MSVC (Visual Studio 2022 以降。Visual Studio 2026 / MSVC 14.51 で確認) |
 | パッケージ管理 | vcpkg (場所は環境変数 `VCPKG_ROOT`。Ubuntu の APT や macOS の Homebrew と同じく、`vcpkg install` で先に入れておく) |
 | ビルド | CMake + Visual Studio のジェネレーター (MSBuild。CMake 4.4 で確認) |
-| ウィンドウ・描画 | SDL3 (SDL_Renderer) |
-| GUI・テキスト描画 | Dear ImGui v1.92.9b |
+| ウィンドウ・描画 | SDL3 (SDL_Renderer、vcpkg) |
 | HTTP 通信 | libcurl (vcpkg) |
 | JSON | nlohmann/json (vcpkg) |
 | LLM サーバー | llama.cpp (Vulkan。Vulkan のヘッダー・ローダーと glslc は vcpkg) |
@@ -133,36 +130,18 @@ C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり�
 - F5：構成「Debug LocalLLM (Windows)」を選ぶと、Debug ビルドしてから Visual Studio のデバッガーで `build\Debug\LocalLLM.exe` をデバッグする。
   - 「実行とデバッグ」パネル (Ctrl+Shift+D) の上のプルダウンで、最初に「**Debug LocalLLM (Windows)**」を選んでおく。既定で選ばれる先頭の「Debug LocalLLM」は Linux / macOS 用で、Windows では起動に失敗する。一度選べば次回からはそれが使われる。
 
-## 5. 日本語フォントと入力
+## 5. 日本語フォント
 
-日本語の表示には、プロジェクトに同梱したフリーフォント **M PLUS Rounded 1c Bold** (`Asset/MPLUSRounded1c-Bold.ttf`) を使う。配布元は [Google Fonts](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) で、ライセンスは SIL Open Font License 1.1 (`Asset/OFL.txt`)。
+フォントの探し方は [SETUP.md](SETUP.md) の「5. 日本語フォントと入力」を参照。
 
-ビルドすると `Asset/` が実行ファイルの隣 (`build\Asset\`) にコピーされ、アプリは実行ファイルの場所を基準にフォントを読み込む。そのため、どのフォルダーから起動しても同じフォントが使われる。
+Windows では、同梱フォントに無い文字を游ゴシック (`C:\Windows\Fonts\YuGothM.ttc`)、メイリオ、MS ゴシックの順で補う。追加のインストールは要らない。
 
-アプリは次の順にフォントを探す。
-
-1. 環境変数 `LOCALLLM_FONT` で指定したファイル
-2. `config/ui.json` の `font_file` (既定は実行ファイルの隣の `Asset/MPLUSRounded1c-Bold.ttf`)
-3. OS の日本語フォント (下記)
-
-フォントの大きさは `config/ui.json` の `font_size` (既定 18) で変えられる。
-
-M PLUS Rounded 1c に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、M PLUS Rounded 1c に無い文字は表示されない。
-
-Windows で補完に使う OS のフォント：
-
-- `C:\Windows\Fonts\YuGothM.ttc` (游ゴシック Medium)
-- `C:\Windows\Fonts\meiryo.ttc` (メイリオ)
-- `C:\Windows\Fonts\msgothic.ttc` (MS ゴシック)
-
-別のフォントを使う場合は `config/ui.json` の `font_file` を書き換えるか、環境変数で指定する：
+別のフォントを環境変数で指定する場合：
 
 ```powershell
 $env:LOCALLLM_FONT = "C:\path\to\font.ttf"
-.\build\LocalLLM.exe
+.\build\Debug\LocalLLM.exe
 ```
-
-日本語入力 (IME) は ImGui の SDL3 バックエンドが処理する。
 
 ## 6. llama.cpp サーバー
 
@@ -222,19 +201,15 @@ AMD Radeon などの GPU が Vulkan デバイスとして表示されること�
 
 ソースからビルドしない場合は、[llama.cpp の Releases](https://github.com/ggml-org/llama.cpp/releases) から Windows の Vulkan 版 (`llama-<バージョン>-bin-win-vulkan-x64.zip`) をダウンロードして展開しても使える。この場合、vcpkg のライブラリは不要。
 
-### 起動スクリプト
-
-モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-windows.bat](scripts/llama-server-windows.bat) に置いてある。エクスプローラーからダブルクリックするか、コマンドプロンプト / PowerShell で実行する。
+### 起動
 
 ```powershell
 .\scripts\llama-server-windows.bat
 ```
 
-中身は [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) を、そのときだけ PowerShell の実行ポリシーを外して呼び出している (システムの設定は変わらない)。
+エクスプローラーからダブルクリックしてもよい。中身は [scripts/llama-server-windows.ps1](scripts/llama-server-windows.ps1) を、そのときだけ PowerShell の実行ポリシーを外して呼び出している (システムの設定は変わらない)。
 
-メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
-
-あわせて RAG 用の埋め込みサーバー (BGE-M3、`127.0.0.1:8081`、初回は約 600 MB をダウンロード) を裏で起動し、チャット用のサーバーを止めると一緒に止める。RAG を使わないときは `--no-embed` を付ける (`-NoEmbed` でもよい)。詳しくは [doc/rag.md](doc/rag.md) を参照。
+メニューや埋め込みサーバー、`--no-embed` (`-NoEmbed` でもよい) については [SETUP.md](SETUP.md) の「6. llama.cpp サーバー」を参照。
 
 llama-server.exe は既定で `%USERPROFILE%\Repos\llama.cpp\build\bin\Release\llama-server.exe` を使う。場所が違う場合 (ビルド済みのバイナリを使う場合など) は環境変数で指定する。
 
@@ -243,11 +218,7 @@ $env:LLAMA_SERVER = "C:\path\to\llama-server.exe"
 .\scripts\llama-server-windows.bat
 ```
 
-### モデル別の起動
-
-`build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う。
-
-Qwen3 4B：
+スクリプトを使わずに起動する場合は、`build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う (Qwen3 4B。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)。
 
 ```powershell
 .\llama-server.exe `
@@ -259,35 +230,11 @@ Qwen3 4B：
     --port 8080
 ```
 
-Gemma 3 4B：
-
-```powershell
-.\llama-server.exe `
-    -hf ggml-org/gemma-3-4b-it-GGUF `
-    -ngl 99 `
-    -c 4096 `
-    --alias local `
-    --host 127.0.0.1 `
-    --port 8080
-```
-
-Phi-4 mini：
-
-```powershell
-.\llama-server.exe `
-    -hf bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M `
-    -ngl 99 `
-    -c 4096 `
-    --alias local `
-    --host 127.0.0.1 `
-    --port 8080
-```
-
-モデルを切り替える場合は、現在のサーバーを `Ctrl+C` で終了してから、別のモデルで起動する。
-
 Hugging Face から取得したモデルは、通常 `%LOCALAPPDATA%\llama.cpp\` または `%USERPROFILE%\.cache\huggingface\hub\` 以下にキャッシュされる (llama.cpp のバージョンによる)。
 
 ## 7. クライアントとサーバーの接続
+
+接続先や動作確認の手順は [SETUP.md](SETUP.md) の「7. クライアントとサーバーの接続」と「8. 動作確認手順」を参照。ここでは PowerShell での書き方だけを示す。
 
 サーバーの稼働確認 (`{"status":"ok"}` が返れば正常)。
 Windows PowerShell 5.1 では `curl` が `Invoke-WebRequest` の別名になっているため、`curl.exe` と書く。

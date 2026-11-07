@@ -1,9 +1,9 @@
 # LocalLLM GUI — 環境構築手順 (CachyOS / Arch Linux)
 
 CachyOS などの Arch Linux 系で、pacman を使って開発環境を構築する手順。
-Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
+OS によらない部分 (プロジェクト構成、ビルドのプリセット、フォント、モデル別の起動、動作確認) は [SETUP.md](SETUP.md) にまとめている。
 
-Ubuntu との違いは主にパッケージ名とインストールのコマンドで、ビルドや llama-server の使い方は同じ。アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「9. GUI クライアントの構成」を参照。
+Ubuntu ([SETUP-Ubuntu.md](SETUP-Ubuntu.md)) との違いは主にパッケージ名とインストールのコマンドで、ビルドや llama-server の使い方は同じ。
 
 ## 1. 概要
 
@@ -11,13 +11,11 @@ Ubuntu との違いは主にパッケージ名とインストールのコマン�
 |---|---|
 | OS | CachyOS (Arch Linux 系) |
 | GPU | AMD Radeon (Vulkan) |
-| 言語 | C++20 |
+| コンパイラ | GCC (G++) |
 | ビルド | CMake + Make (Unix Makefiles) |
-| ウィンドウ・描画 | SDL3 (SDL_Renderer) |
-| GUI・テキスト描画 | Dear ImGui v1.92.9b |
-| HTTP 通信 | libcurl |
-| JSON | nlohmann/json |
 | LLM サーバー | llama.cpp (Vulkan) |
+
+ライブラリの構成は [SETUP.md](SETUP.md) の「1. 概要」を参照。
 
 ## 2. 必要なパッケージ
 
@@ -72,11 +70,11 @@ cmake --build --preset debug
 ./build/LocalLLM
 ```
 
-Release は `release` プリセット (`build-release/`)。プリセットを使わない書き方や VS Code での使い方は [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「5. ビルド」を参照。
+Release は `release` プリセット (`build-release/`)。プリセットを使わない書き方 (`-j$(nproc)` を付ける) や `build/` を作り直すときは [SETUP.md](SETUP.md) の「4. ビルド」を参照。VS Code では F5 で gdb を使ってデバッグする。
 
 ## 4. 日本語フォント
 
-同梱フォント (`Asset/MPLUSRounded1c-Bold.ttf`) を使い、含まれない文字は OS の日本語フォントで補う。仕組みは [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「6. 日本語フォントと入力」を参照。
+同梱フォント (`Asset/MPLUSRounded1c-Bold.ttf`) を使い、含まれない文字は OS の日本語フォントで補う。仕組みは [SETUP.md](SETUP.md) の「5. 日本語フォントと入力」を参照。
 
 Arch 系の `noto-fonts-cjk` は次の場所に入り、アプリはこれを自動で使う。
 
@@ -174,17 +172,11 @@ AMD Radeon が Vulkan デバイスとして認識されることを確認する�
 ./scripts/llama-server-linux.sh
 ```
 
-スクリプトのオプション、環境変数 (`LLAMA_DIR`、`LLAMA_SERVER`)、モデル別の起動コマンドは [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「7. llama.cpp サーバー」を参照。
+llama-server の探し方と環境変数 (`LLAMA_DIR`、`LLAMA_SERVER`)、スクリプトを使わない起動のコマンドは Ubuntu と同じ ([SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「起動」)。メニューや埋め込みサーバー、モデル別の設定は [SETUP.md](SETUP.md) の「6. llama.cpp サーバー」を参照。
 
 ## 6. クライアントとサーバーの接続
 
-Ubuntu と同じ。[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「8. クライアントとサーバーの接続」と「10. 動作確認手順」を参照。
-
-サーバーの稼働確認 (`{"status":"ok"}` が返れば正常)：
-
-```bash
-curl http://127.0.0.1:8080/health
-```
+[SETUP.md](SETUP.md) の「7. クライアントとサーバーの接続」と「8. 動作確認手順」を参照。
 
 ## 7. 注意事項
 

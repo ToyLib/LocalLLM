@@ -1,9 +1,7 @@
 # LocalLLM GUI — 環境構築手順 (macOS)
 
 macOS 上で、Homebrew を使って開発環境を構築する手順。
-Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、CachyOS など Arch 系の手順は [SETUP-Arch.md](SETUP-Arch.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
-
-アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「9. GUI クライアントの構成」を参照。
+OS によらない部分 (プロジェクト構成、ビルドのプリセット、フォント、モデル別の起動、動作確認) は [SETUP.md](SETUP.md) にまとめている。
 
 ## 1. 概要
 
@@ -14,10 +12,10 @@ Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、CachyOS など Arch 系
 | コンパイラ | Apple Clang (Xcode Command Line Tools) |
 | ビルド | CMake + Make (Unix Makefiles) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer、Metal) |
-| GUI・テキスト描画 | Dear ImGui v1.92.9b |
 | HTTP 通信 | libcurl (macOS 標準) |
-| JSON | nlohmann/json |
 | LLM サーバー | llama.cpp (Metal) |
+
+ほかのライブラリの構成は [SETUP.md](SETUP.md) の「1. 概要」を参照。
 
 ## 2. 必要なツールとパッケージ
 
@@ -69,7 +67,13 @@ clang++ --version
 
 プロジェクトのルートディレクトリで実行する。
 
-Debug ビルド：
+```bash
+cmake --preset debug
+cmake --build --preset debug
+./build/LocalLLM
+```
+
+プリセットを使わない場合は `-j$(sysctl -n hw.ncpu)` で CPU の数だけ並列にビルドできる。Release やプリセットの一覧、`build/` を作り直すときは [SETUP.md](SETUP.md) の「4. ビルド」を参照。
 
 ```bash
 cmake -S . -B build \
@@ -78,25 +82,6 @@ cmake -S . -B build \
 
 cmake --build build -j$(sysctl -n hw.ncpu)
 ```
-
-実行：
-
-```bash
-./build/LocalLLM
-```
-
-Release ビルド：
-
-```bash
-cmake -S . -B build-release \
-    -DCMAKE_BUILD_TYPE=Release
-
-cmake --build build-release -j$(sysctl -n hw.ncpu)
-```
-
-ジェネレーターは CMake の標準 (Unix Makefiles) なので、`-G` の指定は不要。make は並列数を指定しないと1ファイルずつビルドするので、`-j` を付ける。プリセット (`cmake --preset debug` / `cmake --build --preset debug`) も使え、プリセットは8並列でビルドする。
-
-以前に Ninja で configure した `build/` / `build-release/` が残っている場合は、`Does not match the generator used previously` というエラーになるので、削除してから configure し直す。
 
 CMake が SDL3 や nlohmann/json を見つけられない場合は、Homebrew のインストール先を指定する。
 
@@ -113,34 +98,11 @@ C/C++ と CMake Tools の拡張機能を入れて開く。
 - Ctrl+Shift+B (⇧⌘B)：ビルド
 - F5：Debug ビルドして lldb でデバッグ (構成「Debug LocalLLM」)
 
-## 4. 日本語フォントと入力
+## 4. 日本語フォント
 
-日本語の表示には、プロジェクトに同梱したフリーフォント **M PLUS Rounded 1c Bold** (`Asset/MPLUSRounded1c-Bold.ttf`) を使う。配布元は [Google Fonts](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) で、ライセンスは SIL Open Font License 1.1 (`Asset/OFL.txt`)。
+フォントの探し方は [SETUP.md](SETUP.md) の「5. 日本語フォントと入力」を参照。
 
-ビルドすると `Asset/` が実行ファイルの隣 (`build/Asset/`) にコピーされ、アプリは実行ファイルの場所を基準にフォントを読み込む。そのため、どのフォルダーから起動しても同じフォントが使われる。
-
-アプリは次の順にフォントを探す。
-
-1. 環境変数 `LOCALLLM_FONT` で指定したファイル
-2. `config/ui.json` の `font_file` (既定は実行ファイルの隣の `Asset/MPLUSRounded1c-Bold.ttf`)
-3. OS の日本語フォント (下記)
-
-フォントの大きさは `config/ui.json` の `font_size` (既定 18) で変えられる。
-
-M PLUS Rounded 1c に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、M PLUS Rounded 1c に無い文字は表示されない。
-
-macOS で補完に使う OS のフォント：
-
-- `/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc`
-- `/System/Library/Fonts/Hiragino Sans GB.ttc`
-
-別のフォントを使う場合は `config/ui.json` の `font_file` を書き換えるか、環境変数で指定する：
-
-```bash
-LOCALLLM_FONT=/path/to/font.ttf ./build/LocalLLM
-```
-
-日本語入力 (IME) は ImGui の SDL3 バックエンドが処理する。
+macOS では、同梱フォントに無い文字をヒラギノ (`/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc`) で補う。追加のインストールは要らない。
 
 ## 5. llama.cpp サーバー
 
@@ -176,17 +138,13 @@ llama-cli --list-devices
 
 Metal のデバイスが表示されることを確認する。
 
-### 起動スクリプト
-
-モデルをメニューから選んで起動するサンプルスクリプトを [scripts/llama-server-macos.sh](scripts/llama-server-macos.sh) に置いてある。
+### 起動
 
 ```bash
 ./scripts/llama-server-macos.sh
 ```
 
-メニューで番号を選ぶと、次の「モデル別の起動」と同じ設定 (`-ngl 99`、`-c 4096`、`--alias local`、`127.0.0.1:8080`) でサーバーを起動する。`q` で何もせずに終了する。
-
-あわせて RAG 用の埋め込みサーバー (BGE-M3、`127.0.0.1:8081`、初回は約 600 MB をダウンロード) を裏で起動し、チャット用のサーバーを止めると一緒に止める。RAG を使わないときは `--no-embed` を付ける。詳しくは [doc/rag.md](doc/rag.md) を参照。
+メニューや埋め込みサーバー、`--no-embed` については [SETUP.md](SETUP.md) の「6. llama.cpp サーバー」を参照。macOS 標準の bash (3.2) で動く。
 
 llama-server は次の順に探す。
 
@@ -194,11 +152,7 @@ llama-server は次の順に探す。
 2. `$LLAMA_DIR/build/bin/llama-server` (ソースからビルドしたもの。`LLAMA_DIR` の既定は `~/Repos/llama.cpp`)
 3. PATH 上の `llama-server` (Homebrew で入れたもの)
 
-macOS 標準の bash (3.2) で動く。
-
-### モデル別の起動
-
-Qwen3 4B：
+スクリプトを使わずに起動する場合 (Qwen3 4B。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)：
 
 ```bash
 llama-server \
@@ -210,60 +164,16 @@ llama-server \
     --port 8080
 ```
 
-Gemma 3 4B：
-
-```bash
-llama-server \
-    -hf ggml-org/gemma-3-4b-it-GGUF \
-    -ngl 99 \
-    -c 4096 \
-    --alias local \
-    --host 127.0.0.1 \
-    --port 8080
-```
-
-Phi-4 mini：
-
-```bash
-llama-server \
-    -hf bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M \
-    -ngl 99 \
-    -c 4096 \
-    --alias local \
-    --host 127.0.0.1 \
-    --port 8080
-```
-
-モデルを切り替える場合は、現在のサーバーを `Ctrl+C` で終了してから、別のモデルで起動する。
+ソースからビルドした場合は `~/Repos/llama.cpp/build/bin/llama-server` を使う。
 
 Hugging Face から取得したモデルは、通常 `~/Library/Caches/llama.cpp/` または `~/.cache/huggingface/hub/` 以下にキャッシュされる (llama.cpp のバージョンによる)。
 
 ## 6. クライアントとサーバーの接続
 
-サーバーの稼働確認 (`{"status":"ok"}` が返れば正常)：
-
-```bash
-curl http://127.0.0.1:8080/health
-```
-
-API 動作確認：
-
-```bash
-curl http://127.0.0.1:8080/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{
-        "model": "local",
-        "messages": [
-            {
-                "role": "user",
-                "content": "こんにちは"
-            }
-        ],
-        "stream": false
-    }'
-```
+[SETUP.md](SETUP.md) の「7. クライアントとサーバーの接続」と「8. 動作確認手順」を参照。
 
 ## 7. 注意事項
 
+- 本文をタイトルバーの下まで広げ、タイトルバーも本文と同じ半透明にする (`src/macos_window.mm`)。
 - Retina ディスプレイでは SDL3 の高解像度対応 (`SDL_WINDOW_HIGH_PIXEL_DENSITY`) により、文字がくっきり表示される。
 - この手順は macOS 27 の実機で、環境構築から LocalLLM のビルド・実行まで確認済み。
