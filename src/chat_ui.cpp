@@ -85,7 +85,9 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
 
             if (!message.status.empty())
             {
-                ImGui::TextDisabled("%s", message.status.c_str());
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("%s", FormatStatus(message).c_str());
+                ImGui::PopTextWrapPos();
             }
 
             if (message.content.empty() && state.busy)

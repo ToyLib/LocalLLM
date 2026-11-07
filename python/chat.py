@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -50,7 +51,51 @@ class Message:
     cloud_original: str = ""
 
     # assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
+    # 画面には format_status で、経過時間と受け取った文字数を添えて出す
     status: str = ""
+    status_since: float = 0.0
+
+    # 今の段階で受け取った文字数と、目安の全体の文字数 (分からなければ 0)
+    received_chars: int = 0
+    total_chars: int = 0
+
+
+# この秒数を過ぎたら、中断できることを添える
+SLOW_SECONDS = 20
+
+
+def _set_status(message: Message, status: str, total_chars: int = 0) -> None:
+    """途中の状態を変える (呼ぶ側で state.lock を取っておく)"""
+
+    message.status = status
+    message.status_since = time.monotonic()
+    message.received_chars = 0
+    message.total_chars = total_chars
+
+
+def format_status(message: Message) -> str:
+    """回答の途中の状態に、受け取った文字数と経過時間を添えた文 (status が空なら空)
+    例: 「ChatGPT から受信中… 1,234 文字 (18 秒)」「侍が言い直し中… 340 文字 (元の回答は 1,234 文字) (5 秒)」"""
+
+    if not message.status:
+        return ""
+
+    seconds = int(time.monotonic() - message.status_since)
+    text = message.status
+
+    if message.received_chars or message.total_chars:
+        text += f" {message.received_chars:,} 文字"
+
+        # 書き直すと長さが変わるので、元の長さは目安として添える
+        if message.total_chars:
+            text += f" (元の回答は {message.total_chars:,} 文字)"
+
+    text += f" ({seconds} 秒)"
+
+    if seconds >= SLOW_SECONDS and not message.received_chars:
+        text += "\n時間がかかっています。中断ボタンで止めると、元の回答に戻ります。"
+
+    return text
 
 
 class ChatState:
@@ -324,15 +369,16 @@ def ask_cloud(state: ChatState) -> None:
         })
 
         previous.superseded = True
-        state.messages.append(Message(
+        answer = Message(
             "assistant",
             agent=f"{previous.agent} ({state.cloud_name})",
             agent_key=agent_key,
             used_rag=previous.used_rag,
             note=f"{state.cloud_name} に聞き直しました" +
                  (" (資料も送りました)" if send_rag else ""),
-            status=f"{state.cloud_name} に問い合わせ中…",
-        ))
+        )
+        _set_status(answer, f"{state.cloud_name} に問い合わせ中…")
+        state.messages.append(answer)
 
         state.busy = True
         state.error = ""
@@ -348,7 +394,21 @@ def ask_cloud(state: ChatState) -> None:
                 state.messages[-1].agent = f"{persona.name} ({cloud.name})"
             state.notify()
 
-            cloud_answer = run_agent(cloud, history, None, state.cancel)
+            # 画面には流さず、受け取った文字数だけを進み具合として出す
+            def on_cloud_delta(text: str) -> None:
+                with state.lock:
+                    answer = state.messages[-1]
+
+                    if not answer.received_chars:
+                        # 経過時間は問い合わせた時から数える
+                        since = answer.status_since
+                        _set_status(answer, f"{cloud.name} から受信中…")
+                        answer.status_since = since
+
+                    answer.received_chars += len(text)
+                state.notify()
+
+            cloud_answer = run_agent(cloud, history, on_cloud_delta, state.cancel)
 
             if not cloud_answer.strip():
                 raise LLMError(f"{cloud.name} の回答が空でした")
@@ -363,12 +423,14 @@ def ask_cloud(state: ChatState) -> None:
                     answer = state.messages[-1]
                     answer.agent = f"{persona.name} ({cloud.name} → ローカルで書き直し)"
                     answer.cloud_original = cloud_answer
-                    answer.status = f"{persona.name} が言い直し中…"
+                    _set_status(
+                        answer, f"{persona.name}が言い直し中…", len(cloud_answer))
                 state.notify()
 
                 def on_delta(text: str) -> None:
                     with state.lock:
                         state.messages[-1].content += text
+                        state.messages[-1].received_chars += len(text)
                     state.notify()
 
                 failure = ""

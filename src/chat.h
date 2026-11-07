@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -44,8 +45,19 @@ struct Message
     std::string cloudOriginal;
 
     // assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
+    // 画面には FormatStatus で、経過時間と受け取った文字数を添えて出す
     std::string status;
+    std::chrono::steady_clock::time_point statusSince;
+
+    // 今の段階で受け取った文字数と、目安の全体の文字数 (分からなければ 0)
+    size_t receivedChars = 0;
+    size_t totalChars = 0;
 };
+
+// 回答の途中の状態に、受け取った文字数と経過時間を添えた文 (status が空なら空)
+// 例: 「ChatGPT から受信中… 1,234 文字 (18 秒)」「侍が言い直し中… 340 文字 (元の回答は 1,234 文字) (5 秒)」
+// 呼ぶ側で state.mutex をロックしておく
+std::string FormatStatus(const Message& message);
 
 // UIスレッドとワーカースレッドで共有する会話状態
 struct ChatState

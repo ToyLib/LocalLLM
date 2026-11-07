@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox, ttk
@@ -12,7 +13,8 @@ from typing import NamedTuple
 import config
 import rag
 from chat import (
-    ChatState, RagMode, ask_cloud, can_ask_cloud, refresh_cloud_status, send_prompt)
+    ChatState, RagMode, ask_cloud, can_ask_cloud, format_status,
+    refresh_cloud_status, send_prompt)
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
@@ -21,6 +23,9 @@ DEFAULT_FONT_SIZE = 14
 
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
 POLL_INTERVAL_MS = 30
+
+# 受信中に、経過時間の表示を進めるために描き直す間隔 (秒)
+STATUS_REFRESH_SECONDS = 0.5
 
 # 色の既定値。config/ui.json の python_colors で変えられる
 # (背景と文字の既定は OS のテーマの色で、起動時に会話欄から読む)
@@ -112,6 +117,7 @@ class ChatApp:
 
         self._rendered: list[_Rendered] = []
         self._busy: bool | None = None
+        self._last_refresh = 0.0
 
         # ChatGPT の元の回答を開いているメッセージの番号
         self._open_originals: set[int] = set()
@@ -393,8 +399,16 @@ class ChatApp:
     # ---- 描画 ----
 
     def _poll(self) -> None:
+        # 受信中は、何も届かなくても経過時間が進むように描き直す
+        # (表示が変わらなければ _render_messages は何もしない)
+        now = time.monotonic()
+
+        if self._busy and now - self._last_refresh >= STATUS_REFRESH_SECONDS:
+            self._dirty.set()
+
         if self._dirty.is_set():
             self._dirty.clear()
+            self._last_refresh = now
             self._refresh()
         self.root.after(POLL_INTERVAL_MS, self._poll)
 
@@ -410,7 +424,7 @@ class ChatApp:
                 _Rendered(
                     m.role, m.agent, m.content, m.note,
                     busy and not m.content and not m.status,
-                    status=m.status,
+                    status=format_status(m),
                     superseded=m.superseded,
                     cloud_original="" if m.superseded else m.cloud_original,
                     original_open=i in self._open_originals,

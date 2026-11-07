@@ -282,6 +282,47 @@ std::optional<size_t> LastUserIndex(const std::vector<Message>& messages)
     return std::nullopt;
 }
 
+// UTF-8 の文字数 (続きのバイト 10xxxxxx は数えない)
+size_t CountChars(std::string_view text)
+{
+    size_t count = 0;
+
+    for (const char c : text)
+    {
+        if ((static_cast<unsigned char>(c) & 0xC0) != 0x80)
+        {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+// 1234 → "1,234"
+std::string FormatCount(size_t value)
+{
+    std::string digits = std::to_string(value);
+
+    for (int i = static_cast<int>(digits.size()) - 3; i > 0; i -= 3)
+    {
+        digits.insert(static_cast<size_t>(i), ",");
+    }
+
+    return digits;
+}
+
+// 途中の状態を変える (呼ぶ側で state.mutex をロックしておく)
+void SetStatus(Message& message, std::string status, size_t totalChars = 0)
+{
+    message.status = std::move(status);
+    message.statusSince = std::chrono::steady_clock::now();
+    message.receivedChars = 0;
+    message.totalChars = totalChars;
+}
+
+// この秒数を過ぎたら、中断できることを添える
+constexpr long long SLOW_SECONDS = 20;
+
 // ChatGPT に送る履歴を作る (呼ぶ側で state.mutex をロックしておく)
 // 最新の質問より前のやりとりのうち、資料を使っていないものだけを送る
 json BuildCloudHistory(const std::vector<Message>& messages, size_t lastUser)
@@ -324,6 +365,39 @@ bool IsBlank(const std::string& text)
 }
 
 } // namespace
+
+std::string FormatStatus(const Message& message)
+{
+    if (message.status.empty())
+    {
+        return {};
+    }
+
+    const long long seconds = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - message.statusSince).count();
+
+    std::string text = message.status;
+
+    if (message.receivedChars > 0 || message.totalChars > 0)
+    {
+        text += " " + FormatCount(message.receivedChars) + " 文字";
+
+        // 書き直すと長さが変わるので、元の長さは目安として添える
+        if (message.totalChars > 0)
+        {
+            text += " (元の回答は " + FormatCount(message.totalChars) + " 文字)";
+        }
+    }
+
+    text += " (" + std::to_string(seconds) + " 秒)";
+
+    if (seconds >= SLOW_SECONDS && message.receivedChars == 0)
+    {
+        text += "\n時間がかかっています。中断ボタンで止めると、元の回答に戻ります。";
+    }
+
+    return text;
+}
 
 void RefreshCloudStatus(ChatState& state)
 {
@@ -390,7 +464,7 @@ void AskCloud(ChatState& state)
         answer.usedRag = previous.usedRag;
         answer.note = state.cloudName + " に聞き直しました" +
             (sendRag ? std::string(" (資料も送りました)") : std::string());
-        answer.status = state.cloudName + " に問い合わせ中…";
+        SetStatus(answer, state.cloudName + " に問い合わせ中…");
 
         previous.superseded = true;
         state.messages.push_back(std::move(answer));
@@ -415,7 +489,31 @@ void AskCloud(ChatState& state)
             }
             WakeUI();
 
-            cloudAnswer = RunAgent(cloud, history, {}, state.cancel);
+            // 画面には流さず、受け取った文字数だけを進み具合として出す
+            const std::string receiving = cloud.name + " から受信中…";
+
+            cloudAnswer = RunAgent(
+                cloud,
+                history,
+                [&state, &receiving](std::string_view text) {
+                    {
+                        std::lock_guard lock(state.mutex);
+                        Message& answer = state.messages.back();
+
+                        if (answer.receivedChars == 0)
+                        {
+                            const auto since = answer.statusSince;
+                            SetStatus(answer, receiving);
+
+                            // 経過時間は問い合わせた時から数える
+                            answer.statusSince = since;
+                        }
+
+                        answer.receivedChars += CountChars(text);
+                    }
+                    WakeUI();
+                },
+                state.cancel);
 
             if (IsBlank(cloudAnswer))
             {
@@ -438,7 +536,8 @@ void AskCloud(ChatState& state)
                     answer.agent =
                         persona.name + " (" + cloud.name + " → ローカルで書き直し)";
                     answer.cloudOriginal = cloudAnswer;
-                    answer.status = persona.name + " が言い直し中…";
+                    SetStatus(
+                        answer, persona.name + "が言い直し中…", CountChars(cloudAnswer));
                 }
                 WakeUI();
 
@@ -453,7 +552,9 @@ void AskCloud(ChatState& state)
                         [&state](std::string_view text) {
                             {
                                 std::lock_guard lock(state.mutex);
-                                state.messages.back().content += text;
+                                Message& answer = state.messages.back();
+                                answer.content += text;
+                                answer.receivedChars += CountChars(text);
                             }
                             WakeUI();
                         },
