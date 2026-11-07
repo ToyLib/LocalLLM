@@ -10,7 +10,7 @@
 namespace
 {
 
-void DrawMessages(ChatState& state)
+void DrawMessages(ChatState& state, const UiColors& colors)
 {
     std::lock_guard lock(state.mutex);
 
@@ -31,8 +31,7 @@ void DrawMessages(ChatState& state)
             : message.agent.c_str();
 
         ImGui::TextColored(
-            isUser ? ImVec4(0.45f, 0.75f, 1.0f, 1.0f)
-                   : ImVec4(0.55f, 0.9f, 0.55f, 1.0f),
+            isUser ? colors.user : colors.ai,
             "%s", name);
 
         if (message.content.empty() && state.busy)
@@ -181,13 +180,13 @@ void DrawUI(
         "messages",
         ImVec2(0.0f, -(inputHeight + errorHeight + style.ItemSpacing.y)),
         ImGuiChildFlags_Borders);
-    DrawMessages(state);
+    DrawMessages(state, ActiveUiSettings(settings).colors);
     ImGui::EndChild();
 
     if (!error.empty())
     {
         ImGui::TextColored(
-            ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error: %s", error.c_str());
+            ActiveUiSettings(settings).colors.error, "Error: %s", error.c_str());
     }
 
     // 入力欄 (Enterで送信 / Shift+Enterで改行)

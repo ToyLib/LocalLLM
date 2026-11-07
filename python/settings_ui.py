@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
 import tkinter.font as tkfont
 from collections.abc import Callable
+from tkinter import colorchooser
 from tkinter import ttk
 from typing import Any
 
@@ -20,6 +22,25 @@ NOTE_COLOR = "#888888"
 # 文字の大きさを選べる範囲 (ポイント)
 MIN_FONT_SIZE = 8
 MAX_FONT_SIZE = 40
+
+# config/ui.json の python_colors のキーと、画面に出す説明 (色は "#RRGGBB")
+COLOR_ENTRIES = (
+    ("background", "背景 (会話欄・入力欄)"),
+    ("text", "文字"),
+    ("sub_text", "補足の文字"),
+    ("user", "送信者名 (You)"),
+    ("ai", "回答者名"),
+    ("error", "エラー"),
+)
+
+_COLOR_PATTERN = re.compile(r"#[0-9A-Fa-f]{6}")
+
+
+def is_color(value: Any) -> bool:
+    """"#RRGGBB" の形の文字列か"""
+
+    return isinstance(value, str) and _COLOR_PATTERN.fullmatch(value) is not None
+
 
 # 設定画面で編集するエージェントと、画面に出す説明
 AGENT_ENTRIES = (
@@ -57,6 +78,9 @@ class SettingsDialog:
 
     font_size: 適用中の文字の大きさ
     apply_font_size: 文字の大きさを画面に反映する (見ながら調整できるように、変えるたびに呼ぶ)
+    colors: 適用中の色 (COLOR_ENTRIES のキー → "#RRGGBB")
+    default_colors: 「色を既定に戻す」で使う色
+    apply_colors: 色を画面に反映する (変えるたびに呼ぶ)
     """
 
     def __init__(
@@ -65,11 +89,17 @@ class SettingsDialog:
         font: tkfont.Font,
         font_size: int,
         apply_font_size: Callable[[int], None],
+        colors: dict[str, str],
+        default_colors: dict[str, str],
+        apply_colors: Callable[[dict[str, str]], None],
     ) -> None:
         self.parent = parent
         self.font = font
         self.initial_font_size = font_size
         self.apply_font_size = apply_font_size
+        self.initial_colors = dict(colors)
+        self.default_colors = default_colors
+        self.apply_colors = apply_colors
 
         self.window = tk.Toplevel(parent)
         self.window.title("設定")
@@ -156,8 +186,40 @@ class SettingsDialog:
 
         ttk.Label(
             tab, foreground=NOTE_COLOR,
-            text="Python 版の python_font_size です (C++ 版の画面の設定は C++ 版の設定画面で変えます)",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            text="Python 版の python_font_size と python_colors です (C++ 版の画面の設定は C++ 版の設定画面で変えます)",
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+
+        ttk.Separator(tab).grid(
+            row=2, column=0, columnspan=3, sticky="ew", pady=10)
+
+        # 色: "#RRGGBB" を直接書くか、「選ぶ」で色の選択画面から選ぶ
+        self.colors: dict[str, tk.StringVar] = {}
+        self.swatches: dict[str, tk.Label] = {}
+
+        for row, (key, label) in enumerate(COLOR_ENTRIES, start=3):
+            ttk.Label(tab, text=label).grid(row=row, column=0, sticky="w")
+
+            variable = tk.StringVar(value=self.initial_colors[key])
+            ttk.Entry(tab, textvariable=variable, width=9).grid(
+                row=row, column=1, sticky="w", padx=(8, 0), pady=2)
+
+            swatch = tk.Label(
+                tab, width=3, relief="solid", borderwidth=1,
+                background=self.initial_colors[key], cursor="hand2")
+            swatch.grid(row=row, column=2, sticky="w", padx=(6, 0))
+            swatch.bind("<Button-1>", lambda _e, k=key: self._choose_color(k))
+
+            ttk.Button(
+                tab, text="選ぶ", command=lambda k=key: self._choose_color(k),
+            ).grid(row=row, column=3, sticky="w", padx=(6, 0))
+
+            variable.trace_add("write", lambda *_: self._on_color())
+            self.colors[key] = variable
+            self.swatches[key] = swatch
+
+        ttk.Button(
+            tab, text="色を既定に戻す", command=self._reset_colors,
+        ).grid(row=len(COLOR_ENTRIES) + 3, column=0, sticky="w", pady=(8, 0))
 
         return tab
 
@@ -254,6 +316,38 @@ class SettingsDialog:
         if (size := self._current_font_size()) is not None:
             self.apply_font_size(size)
 
+    def _current_colors(self) -> dict[str, str]:
+        """入力中の色。"#RRGGBB" になっていない色は適用中の色のまま"""
+
+        colors = dict(self.initial_colors)
+
+        for key, variable in self.colors.items():
+            if is_color(value := variable.get().strip()):
+                colors[key] = value
+
+        return colors
+
+    def _on_color(self) -> None:
+        # 見ながら調整できるように、すぐ反映する
+        colors = self._current_colors()
+
+        for key, swatch in self.swatches.items():
+            swatch.configure(background=colors[key])
+
+        self.apply_colors(colors)
+
+    def _choose_color(self, key: str) -> None:
+        _rgb, chosen = colorchooser.askcolor(
+            self._current_colors()[key], parent=self.window,
+            title=dict(COLOR_ENTRIES)[key])
+
+        if chosen:
+            self.colors[key].set(chosen.upper())
+
+    def _reset_colors(self) -> None:
+        for key, variable in self.colors.items():
+            variable.set(self.default_colors[key])
+
     def _save(self) -> None:
         size = self._current_font_size()
 
@@ -262,7 +356,24 @@ class SettingsDialog:
                 text=f"文字の大きさは {MIN_FONT_SIZE}〜{MAX_FONT_SIZE} にしてください")
             return
 
+        invalid = [label for key, label in COLOR_ENTRIES
+                   if not is_color(self.colors[key].get().strip())]
+
+        if invalid:
+            self.save_error.configure(
+                text=f"色は #RRGGBB の形で書いてください: {'、'.join(invalid)}")
+            return
+
+        colors = self._current_colors()
+
         self.ui_json["python_font_size"] = size
+
+        saved_colors = self.ui_json.get("python_colors")
+
+        if not isinstance(saved_colors, dict):
+            saved_colors = self.ui_json["python_colors"] = {}
+
+        saved_colors.update(colors)
 
         for key, variable in self.urls.items():
             self.server_json[key] = variable.get()
@@ -287,11 +398,13 @@ class SettingsDialog:
             return
 
         self.apply_font_size(size)
+        self.apply_colors(colors)
         self._close()
 
     def _cancel(self) -> None:
-        # 見ながら変えた文字の大きさを元に戻す
+        # 見ながら変えた文字の大きさと色を元に戻す
         self.apply_font_size(self.initial_font_size)
+        self.apply_colors(self.initial_colors)
         self._close()
 
     def _close(self) -> None:

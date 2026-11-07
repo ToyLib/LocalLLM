@@ -259,7 +259,7 @@ RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を�
 
 - ファイルは `LoadConfigForEdit()` で `nlohmann::ordered_json` として読みます。項目の順番を保ち、設定画面で扱わない項目 (`python_font_size` など) もそのまま残して保存するためです。読めないファイルがあるときは、上書きして中身を消さないように保存ボタンを無効にします。
 - 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。
-- 背景の不透明度と文字の大きさは、スライダーを動かすたびに `ApplyUiSettings()` で反映します。文字の大きさはフレームの途中で `style.FontSizeBase` を変えても戻されるので、`style._NextFrameFontSizeBase` で次のフレームの始めに変えます (ImGui 1.92 のフォントは大きさを後から変えられます)。キャンセルすると開く前の値 (`SettingsState::current`) に戻します。
+- 背景の不透明度・文字の大きさ・色は、動かすたびに `ApplyUiSettings()` で反映します。背景・文字・補足の文字の色は ImGui のスタイル (`WindowBg` / `Text` / `TextDisabled`) に入れ、送信者名とエラーの色は描くときに `ActiveUiSettings()` から読みます (設定画面を開いている間は編集中の値)。文字の大きさはフレームの途中で `style.FontSizeBase` を変えても戻されるので、`style._NextFrameFontSizeBase` で次のフレームの始めに変えます (ImGui 1.92 のフォントは大きさを後から変えられます)。キャンセルすると開く前の値 (`SettingsState::current`) に戻します。
 - フォントファイルは起動時に読み込むので、変えても再起動するまで反映されません。
 
 ## 設定を変えたいとき
@@ -274,5 +274,5 @@ RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を�
 | 背景の不透明度 | `config/ui.json` の `window_opacity` |
 | ウィンドウの初期サイズ | `main.cpp` の `SDL_CreateWindow` (900×700) |
 | 入力欄の高さ | `chat_ui.cpp` の `DrawUI` の `inputHeight` (4 行分) |
-| 送信者名の色 | `chat_ui.cpp` の `DrawMessages` の `TextColored` |
+| 色 (背景・文字・送信者名・エラーなど) | `config/ui.json` の `colors` (既定値は `settings_ui.h` の `UiColors`) |
 | 接続先や system プロンプト | `config/server.json`、`config/agents.json` ([llm-client.md](llm-client.md)、[agent.md](agent.md) を参照) |

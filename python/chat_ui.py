@@ -11,7 +11,7 @@ from tkinter import ttk
 import config
 import rag
 from chat import ChatState, RagMode, send_prompt
-from settings_ui import SettingsDialog
+from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
 # (font_size は C++ 版のピクセル数なので別にしている)
@@ -20,10 +20,14 @@ DEFAULT_FONT_SIZE = 14
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
 POLL_INTERVAL_MS = 30
 
-USER_COLOR = "#4a90e2"
-AI_COLOR = "#3fa34d"
-NOTE_COLOR = "#888888"
-ERROR_COLOR = "#e05555"
+# 色の既定値。config/ui.json の python_colors で変えられる
+# (背景と文字の既定は OS のテーマの色で、起動時に会話欄から読む)
+DEFAULT_COLORS = {
+    "user": "#4A90E2",
+    "ai": "#3FA34D",
+    "sub_text": "#888888",
+    "error": "#E05555",
+}
 
 # 画面に表示した1件分 (変わった所から下だけを描き直す)
 _Rendered = tuple[str, str, str, str, bool]
@@ -40,6 +44,37 @@ def _font_size(ui: dict) -> int:
         return DEFAULT_FONT_SIZE
 
     return round(size)
+
+
+def _colors(ui: dict, defaults: dict[str, str]) -> dict[str, str]:
+    """config/ui.json の python_colors (無い・正しくない色は既定値)"""
+
+    colors = dict(defaults)
+    configured = ui.get("python_colors", {})
+
+    if not isinstance(configured, dict):
+        print("python_colors が正しくありません (既定値を使います)",
+              file=sys.stderr)
+        return colors
+
+    for key, _label in COLOR_ENTRIES:
+        if key not in configured:
+            continue
+
+        if is_color(configured[key]):
+            colors[key] = configured[key]
+        else:
+            print(f"python_colors の {key} は \"#RRGGBB\" で書いてください "
+                  "(既定値を使います)", file=sys.stderr)
+
+    return colors
+
+
+def _to_hex(widget: tk.Misc, color: str) -> str:
+    """Tk の色 (名前や OS のテーマの色も) を "#RRGGBB" にする"""
+
+    r, g, b = widget.winfo_rgb(color)
+    return f"#{r >> 8:02X}{g >> 8:02X}{b >> 8:02X}"
 
 
 class ChatApp:
@@ -60,17 +95,26 @@ class ChatApp:
         root.minsize(480, 360)
         root.protocol("WM_DELETE_WINDOW", self._close)
 
+        ui = config.load_or_empty("ui.json")
+
         base = tkfont.nametofont("TkDefaultFont").actual()["family"]
         self.font = tkfont.Font(family=base)
         self.bold = tkfont.Font(family=base, weight="bold")
         self.small = tkfont.Font(family=base)
-        self._apply_font_size(_font_size(config.load_or_empty("ui.json")))
+        self._apply_font_size(_font_size(ui))
 
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
         self._build_input()
         self._build_messages()
+
+        self.default_colors = {
+            "background": _to_hex(self.text, self.text.cget("background")),
+            "text": _to_hex(self.text, self.text.cget("foreground")),
+            **DEFAULT_COLORS,
+        }
+        self._apply_colors(_colors(ui, self.default_colors))
 
         rag.start_indexing(self.rag)
         self._dirty.set()
@@ -103,7 +147,7 @@ class ChatApp:
         ttk.Button(bar, text="設定", command=self._open_settings).pack(
             side="right")
 
-        self.rag_status = ttk.Label(bar, foreground=NOTE_COLOR)
+        self.rag_status = ttk.Label(bar)
         self.rag_status.pack(side="left", padx=(8, 0))
 
     def _build_messages(self) -> None:
@@ -122,15 +166,12 @@ class ChatApp:
         scrollbar.pack(side="right", fill="y")
         self.text.pack(side="left", fill="both", expand=True)
 
-        self.text.tag_configure("user", foreground=USER_COLOR, font=self.bold)
-        self.text.tag_configure("ai", foreground=AI_COLOR, font=self.bold)
+        # 色は _apply_colors で付ける
+        self.text.tag_configure("user", font=self.bold)
+        self.text.tag_configure("ai", font=self.bold)
         self.text.tag_configure(
-            "thinking", foreground=NOTE_COLOR)
-        self.text.tag_configure(
-            "note", foreground=NOTE_COLOR, font=self.small,
-            lmargin1=12, lmargin2=12)
-        self.text.tag_configure(
-            "separator", foreground=NOTE_COLOR, font=self.small)
+            "note", font=self.small, lmargin1=12, lmargin2=12)
+        self.text.tag_configure("separator", font=self.small)
         self.text.tag_configure("content", spacing3=4)
 
         # 右クリックでコピー (macOS は Button-2 と Control+クリック)
@@ -143,8 +184,7 @@ class ChatApp:
 
     def _build_input(self) -> None:
         self.error_label = ttk.Label(
-            self.root, foreground=ERROR_COLOR, padding=(8, 4, 8, 0),
-            wraplength=860)
+            self.root, padding=(8, 4, 8, 0), wraplength=860)
 
         frame = ttk.Frame(self.root, padding=8)
         frame.pack(side="bottom", fill="x")
@@ -182,9 +222,29 @@ class ChatApp:
         self.bold.configure(size=size)
         self.small.configure(size=max(size - 3, 1))
 
+    def _apply_colors(self, colors: dict[str, str]) -> None:
+        """色を変える"""
+
+        self.colors = dict(colors)
+
+        for widget in (self.text, self.input):
+            widget.configure(
+                background=colors["background"], foreground=colors["text"],
+                insertbackground=colors["text"])
+
+        self.text.tag_configure("user", foreground=colors["user"])
+        self.text.tag_configure("ai", foreground=colors["ai"])
+
+        for tag in ("thinking", "note", "separator"):
+            self.text.tag_configure(tag, foreground=colors["sub_text"])
+
+        self.rag_status.configure(foreground=colors["sub_text"])
+        self.error_label.configure(foreground=colors["error"])
+
     def _open_settings(self) -> None:
         SettingsDialog(
-            self.root, self.font, self.font_size, self._apply_font_size)
+            self.root, self.font, self.font_size, self._apply_font_size,
+            self.colors, self.default_colors, self._apply_colors)
 
     def _on_rag_mode(self) -> None:
         self.state.rag_mode = RagMode(self.rag_mode.get())

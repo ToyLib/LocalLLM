@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <exception>
 
 using ordered_json = nlohmann::ordered_json;
@@ -20,6 +21,52 @@ constexpr const char* POPUP_NAME = "設定";
 // 文字の大きさを選べる範囲 (ピクセル)
 constexpr int MIN_FONT_SIZE = 10;
 constexpr int MAX_FONT_SIZE = 48;
+
+// ui.json の colors のキーと、画面に出す説明
+struct ColorEntry
+{
+    const char* key;
+    const char* label;
+    ImVec4 UiColors::* member;
+};
+
+constexpr ColorEntry COLOR_ENTRIES[] = {
+    {"background", "背景", &UiColors::background},
+    {"text", "文字", &UiColors::text},
+    {"sub_text", "補足の文字", &UiColors::subText},
+    {"user", "送信者名 (You)", &UiColors::user},
+    {"ai", "回答者名", &UiColors::ai},
+    {"error", "エラー", &UiColors::error},
+};
+
+// "#RRGGBB" を色にする。形が違えば false
+bool ParseColor(const std::string& text, ImVec4& color)
+{
+    unsigned int r, g, b;
+    char rest;
+
+    if (text.size() != 7 ||
+        std::sscanf(text.c_str(), "#%2x%2x%2x%c", &r, &g, &b, &rest) != 3)
+    {
+        return false;
+    }
+
+    color = UiColors::Rgb(static_cast<int>(r), static_cast<int>(g), static_cast<int>(b));
+    return true;
+}
+
+std::string FormatColor(const ImVec4& color)
+{
+    auto channel = [](float value)
+    {
+        return static_cast<int>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+    };
+
+    char text[8];
+    std::snprintf(text, sizeof(text), "#%02X%02X%02X",
+        channel(color.x), channel(color.y), channel(color.z));
+    return text;
+}
 
 // 設定画面で編集するエージェントと、画面に出す説明
 struct AgentEntry
@@ -175,6 +222,18 @@ bool SaveSettings(SettingsState& settings)
     settings.uiJson["font_file"] = settings.ui.fontFile;
     settings.uiJson["font_size"] = static_cast<int>(settings.ui.fontSize);
 
+    ordered_json& colors = settings.uiJson["colors"];
+
+    if (!colors.is_object())
+    {
+        colors = ordered_json::object();
+    }
+
+    for (const auto& entry : COLOR_ENTRIES)
+    {
+        colors[entry.key] = FormatColor(settings.ui.colors.*entry.member);
+    }
+
     settings.serverJson["chat_url"] = settings.chatUrl;
     settings.serverJson["embed_url"] = settings.embedUrl;
 
@@ -233,6 +292,22 @@ void DrawUiTab(SettingsState& settings)
     ImGui::InputText("フォントファイル", &ui.fontFile);
     ImGui::TextDisabled(
         "フォントファイルは再起動後に反映されます (相対パスは実行ファイルのフォルダーから)");
+
+    ImGui::SeparatorText("色");
+
+    for (const auto& entry : COLOR_ENTRIES)
+    {
+        ImVec4& color = ui.colors.*entry.member;
+        changed |= ImGui::ColorEdit3(
+            entry.label, &color.x,
+            ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_InputRGB);
+    }
+
+    if (ImGui::Button("色を既定に戻す"))
+    {
+        ui.colors = UiColors();
+        changed = true;
+    }
 
     // 不透明度と大きさは、見ながら調整できるようにすぐ反映する
     if (changed)
@@ -295,6 +370,35 @@ UiSettings ReadUiSettings(const nlohmann::json& ui)
 {
     UiSettings settings;
 
+    if (ui.contains("colors"))
+    {
+        const nlohmann::json& colors = ui["colors"];
+
+        if (!colors.is_object())
+        {
+            SDL_Log("Config colors is not an object (using defaults)");
+        }
+        else
+        {
+            for (const auto& entry : COLOR_ENTRIES)
+            {
+                if (!colors.contains(entry.key))
+                {
+                    continue;
+                }
+
+                const nlohmann::json& value = colors[entry.key];
+
+                if (!value.is_string() ||
+                    !ParseColor(value.get<std::string>(), settings.colors.*entry.member))
+                {
+                    SDL_Log("Config colors.%s must be \"#RRGGBB\" (using default)",
+                        entry.key);
+                }
+            }
+        }
+    }
+
     settings.windowOpacity = std::clamp(
         ConfigNumberOr(ui, "window_opacity", settings.windowOpacity),
         0.0f, 1.0f);
@@ -318,11 +422,21 @@ UiSettings ReadUiSettings(const nlohmann::json& ui)
 void ApplyUiSettings(const UiSettings& ui)
 {
     ImGuiStyle& style = ImGui::GetStyle();
-    style.Colors[ImGuiCol_WindowBg].w = ui.windowOpacity;
+
+    ImVec4 background = ui.colors.background;
+    background.w = ui.windowOpacity;
+    style.Colors[ImGuiCol_WindowBg] = background;
+    style.Colors[ImGuiCol_Text] = ui.colors.text;
+    style.Colors[ImGuiCol_TextDisabled] = ui.colors.subText;
 
     // フレームの途中で FontSizeBase を変えても戻されるので、
     // 次のフレームの始めに反映させる
     style._NextFrameFontSizeBase = ui.fontSize;
+}
+
+const UiSettings& ActiveUiSettings(const SettingsState& settings)
+{
+    return settings.editing ? settings.ui : settings.current;
 }
 
 void DrawSettings(SettingsState& settings)
@@ -330,6 +444,7 @@ void DrawSettings(SettingsState& settings)
     if (settings.requestOpen)
     {
         settings.requestOpen = false;
+        settings.editing = true;
         LoadSettings(settings);
         ImGui::OpenPopup(POPUP_NAME);
     }
@@ -408,6 +523,7 @@ void DrawSettings(SettingsState& settings)
         SaveSettings(settings))
     {
         settings.current = settings.ui;
+        settings.editing = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndDisabled();
@@ -418,6 +534,7 @@ void DrawSettings(SettingsState& settings)
     {
         // 見ながら変えた不透明度と大きさを元に戻す
         ApplyUiSettings(settings.current);
+        settings.editing = false;
         ImGui::CloseCurrentPopup();
     }
 

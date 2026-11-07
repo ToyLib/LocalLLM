@@ -97,7 +97,7 @@ cmake --build build --parallel
 サーバーの URL、system プロンプト、画面の設定は `config/` の JSON ファイルに書きます。
 画面右上の「設定」ボタンから開く設定画面でも変えられます (タブは 画面 / システムプロンプト / サーバー)。
 
-- 背景の不透明度と文字の大きさは、設定画面で動かすとすぐに反映されます (キャンセルで元に戻ります)。フォントファイルは再起動後に反映されます。
+- 背景の不透明度・文字の大きさ・色は、設定画面で動かすとすぐに反映されます (キャンセルで元に戻ります)。フォントファイルは再起動後に反映されます。
 - system プロンプトは 1 行が `system_prompt` の配列の 1 要素です (送るときは行をそのままつなげます)。
 - 保存すると、読み込んでいるフォルダーの JSON を書き換えます。設定画面に出ない項目はそのまま残ります。
 
@@ -124,13 +124,30 @@ cmake --build build --parallel
 | フォントファイル | `config/ui.json` の `font_file` (相対パスは実行ファイルのフォルダーから。既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`)。環境変数 `LOCALLLM_FONT` があればそちらを優先 |
 | フォントサイズ | `config/ui.json` の `font_size` (ピクセル、既定 18) |
 | フォントサイズ (Python 版) | `config/ui.json` の `python_font_size` (ポイント、既定 14) |
+| 色 | `config/ui.json` の `colors` (下の表のキーに `"#RRGGBB"`)。書かなかった色は既定値 |
+| 色 (Python 版) | `config/ui.json` の `python_colors` (キーは `colors` と同じ。背景と文字の既定は OS のテーマの色) |
+
+| `colors` のキー | 色を付ける所 | C++ 版の既定 |
+| --- | --- | --- |
+| `background` | チャット画面の背景 (Python 版は会話欄と入力欄。透け具合は `window_opacity`) | `#0F0F0F` |
+| `text` | 文字 | `#FFFFFF` |
+| `sub_text` | 補足の文字 (考え中・参照した資料・RAG の状態) | `#808080` |
+| `user` | 送信者名「You」 | `#73BFFF` |
+| `ai` | 回答したエージェントの名前 | `#8CE68C` |
+| `error` | エラー | `#FF6666` |
+
+C++ 版は暗い背景、Python 版は OS の明るいテーマを前提に既定の色を決めているので、`colors` と `python_colors` を分けています。
 
 ```json
 {
   "window_opacity": 0.85,
   "font_file": "Asset/MPLUSRounded1c-Bold.ttf",
   "font_size": 18,
-  "python_font_size": 14
+  "python_font_size": 14,
+  "colors": {
+    "user": "#73BFFF",
+    "ai": "#8CE68C"
+  }
 }
 ```
 
@@ -147,7 +164,7 @@ Python 3.10 以上と、Tk が使える Python が必要です (macOS の Homebr
 python3 python/main.py
 ```
 
-- 操作と設定は C++ 版と同じです (設定はリポジトリの `config/` を読みます。フォントサイズは `config/ui.json` の `python_font_size`)。
+- 操作と設定は C++ 版と同じです (設定はリポジトリの `config/` を読みます。フォントサイズと色は `config/ui.json` の `python_font_size` と `python_colors`)。
 - RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
 - フォントは OS の標準フォントを使います。背景の半透明には対応していません。
 

@@ -1,9 +1,26 @@
 #pragma once
 
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 #include <string>
 #include <vector>
+
+// 画面の色 (config/ui.json の colors に "#RRGGBB" で書く。透明度は使わない)
+struct UiColors
+{
+    ImVec4 background = Rgb(0x0F, 0x0F, 0x0F); // チャット画面の背景 (透け具合は windowOpacity)
+    ImVec4 text = Rgb(0xFF, 0xFF, 0xFF);       // 文字
+    ImVec4 subText = Rgb(0x80, 0x80, 0x80);    // 補足の文字 (考え中・参照した資料・RAG の状態)
+    ImVec4 user = Rgb(0x73, 0xBF, 0xFF);       // 送信者名「You」
+    ImVec4 ai = Rgb(0x8C, 0xE6, 0x8C);         // 回答したエージェントの名前
+    ImVec4 error = Rgb(0xFF, 0x66, 0x66);      // エラー
+
+    static constexpr ImVec4 Rgb(int r, int g, int b)
+    {
+        return ImVec4(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+    }
+};
 
 // 画面の設定 (config/ui.json)。書いていない・正しくない項目は次の既定値を使う
 struct UiSettings
@@ -14,12 +31,15 @@ struct UiSettings
     // フォントファイル (相対パスは実行ファイルのフォルダーから) と大きさ (ピクセル)
     std::string fontFile = "Asset/MPLUSRounded1c-Bold.ttf";
     float fontSize = 18.0f;
+
+    UiColors colors;
 };
 
 // ui.json の値から画面の設定を作る (無い・正しくない項目はログに書いて既定値)
 UiSettings ReadUiSettings(const nlohmann::json& ui);
 
-// 背景の不透明度と文字の大きさを ImGui に反映する (次のフレームから)
+// 背景の不透明度・文字の大きさ・色を ImGui に反映する (次のフレームから)
+// 送信者名とエラーの色は、描くときに ActiveUiSettings から読む
 // フォントファイルは起動時に読み込むので、ここでは変わらない
 void ApplyUiSettings(const UiSettings& ui);
 
@@ -45,6 +65,9 @@ struct SettingsState
     // 適用中の画面の設定 (キャンセルしたときに戻す値)
     UiSettings current;
 
+    // 設定画面を開いているか (開いている間は編集中の値で画面を描く)
+    bool editing = false;
+
     // 編集中の値
     UiSettings ui;
     std::string chatUrl;
@@ -60,6 +83,9 @@ struct SettingsState
     std::string loadError;
     std::string saveError;
 };
+
+// 画面を描くのに使う設定 (設定画面を開いている間は、見ながら調整できるように編集中の値)
+const UiSettings& ActiveUiSettings(const SettingsState& settings);
 
 // 設定画面 (モーダル) を描く。DrawUI の中から毎フレーム呼ぶ
 void DrawSettings(SettingsState& settings);
