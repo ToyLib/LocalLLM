@@ -75,7 +75,7 @@ LocalLLM/
 ├── CMakeLists.txt
 ├── CMakePresets.json   (OS 別のビルド設定)
 ├── README.md
-├── SETUP.md            (Ubuntu)
+├── SETUP-Ubuntu.md     (Ubuntu)
 ├── SETUP-Arch.md       (CachyOS / Arch Linux)
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md

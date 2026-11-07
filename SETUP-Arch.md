@@ -1,9 +1,9 @@
 # LocalLLM GUI — 環境構築手順 (CachyOS / Arch Linux)
 
 CachyOS などの Arch Linux 系で、pacman を使って開発環境を構築する手順。
-Ubuntu の手順は [SETUP.md](SETUP.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
+Ubuntu の手順は [SETUP-Ubuntu.md](SETUP-Ubuntu.md)、macOS の手順は [SETUP-macOS.md](SETUP-macOS.md)、Windows の手順は [SETUP-Windows.md](SETUP-Windows.md) を参照。
 
-Ubuntu との違いは主にパッケージ名とインストールのコマンドで、ビルドや llama-server の使い方は同じ。アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP.md](SETUP.md) の「9. GUI クライアントの構成」を参照。
+Ubuntu との違いは主にパッケージ名とインストールのコマンドで、ビルドや llama-server の使い方は同じ。アプリの構成 (GUI とワーカースレッドの関係など) は OS によらず同じなので、[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「9. GUI クライアントの構成」を参照。
 
 ## 1. 概要
 
@@ -72,11 +72,11 @@ cmake --build --preset debug
 ./build/LocalLLM
 ```
 
-Release は `release` プリセット (`build-release/`)。プリセットを使わない書き方や VS Code での使い方は [SETUP.md](SETUP.md) の「5. ビルド」を参照。
+Release は `release` プリセット (`build-release/`)。プリセットを使わない書き方や VS Code での使い方は [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「5. ビルド」を参照。
 
 ## 4. 日本語フォント
 
-同梱フォント (`Asset/MPLUSRounded1c-Bold.ttf`) を使い、含まれない文字は OS の日本語フォントで補う。仕組みは [SETUP.md](SETUP.md) の「6. 日本語フォントと入力」を参照。
+同梱フォント (`Asset/MPLUSRounded1c-Bold.ttf`) を使い、含まれない文字は OS の日本語フォントで補う。仕組みは [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「6. 日本語フォントと入力」を参照。
 
 Arch 系の `noto-fonts-cjk` は次の場所に入り、アプリはこれを自動で使う。
 
@@ -174,11 +174,11 @@ AMD Radeon が Vulkan デバイスとして認識されることを確認する�
 ./scripts/llama-server-linux.sh
 ```
 
-スクリプトのオプション、環境変数 (`LLAMA_DIR`、`LLAMA_SERVER`)、モデル別の起動コマンドは [SETUP.md](SETUP.md) の「7. llama.cpp サーバー」を参照。
+スクリプトのオプション、環境変数 (`LLAMA_DIR`、`LLAMA_SERVER`)、モデル別の起動コマンドは [SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「7. llama.cpp サーバー」を参照。
 
 ## 6. クライアントとサーバーの接続
 
-Ubuntu と同じ。[SETUP.md](SETUP.md) の「8. クライアントとサーバーの接続」と「10. 動作確認手順」を参照。
+Ubuntu と同じ。[SETUP-Ubuntu.md](SETUP-Ubuntu.md) の「8. クライアントとサーバーの接続」と「10. 動作確認手順」を参照。
 
 サーバーの稼働確認 (`{"status":"ok"}` が返れば正常)：
 

@@ -25,7 +25,7 @@ Linux (Ubuntu / CachyOS などの Arch 系)、macOS、Windows でビルドでき
 
 | OS | 手順書 | パッケージ管理 | ビルド・実行を確認した環境 |
 | --- | --- | --- | --- |
-| Ubuntu | [SETUP.md](SETUP.md) | APT | Ubuntu 26.x |
+| Ubuntu | [SETUP-Ubuntu.md](SETUP-Ubuntu.md) | APT | Ubuntu 26.x |
 | CachyOS / Arch Linux | [SETUP-Arch.md](SETUP-Arch.md) | pacman | CachyOS |
 | macOS | [SETUP-macOS.md](SETUP-macOS.md) | Homebrew | macOS 27 |
 | Windows | [SETUP-Windows.md](SETUP-Windows.md) | vcpkg (場所は環境変数 `VCPKG_ROOT`) | Windows 11 + Visual Studio 2026 |
@@ -222,7 +222,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
-| `SETUP.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |
+| `SETUP-Ubuntu.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |
 | `scripts/` | llama-server の起動スクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
