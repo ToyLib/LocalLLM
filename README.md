@@ -187,6 +187,8 @@ python3 python/main.py
 - RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
 - フォントは OS の標準フォントを使います。背景の半透明には対応していません。
 
+C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/python-app.md) にまとめています。
+
 | ファイル | 内容 (対応する C++ のファイル) |
 | --- | --- |
 | `python/main.py` | 起動 (`main.cpp`) |
@@ -216,7 +218,7 @@ python3 python/main.py
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
 | `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
-| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md)) |
+| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |

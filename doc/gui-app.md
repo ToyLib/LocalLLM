@@ -7,12 +7,15 @@
 | --- | --- |
 | [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
 | [chat.h](../src/chat.h) / [chat.cpp](../src/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
-| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`) |
+| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`、聞き直しの確認ダイアログ) |
+| [settings_ui.h](../src/settings_ui.h) / [settings_ui.cpp](../src/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
+| [config.h](../src/config.h) / [config.cpp](../src/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
 | [ime.h](../src/ime.h) / [ime.cpp](../src/ime.cpp) | IME の変換中の文字列の表示 |
 | [font.h](../src/font.h) / [font.cpp](../src/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
 | [macos_window.h](../src/macos_window.h) / [macos_window.mm](../src/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
-LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md) を参照してください。
+LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md)、回答役の選び方は [agent.md](agent.md)、資料の検索は [rag.md](rag.md)、ChatGPT への聞き直しは [chatgpt.md](chatgpt.md) を参照してください。
+Python 版 (`python/`) は同じ構成を Tk で作ったもので、C++ 版との違いは [python-app.md](python-app.md) にまとめています。
 
 ## 使っているライブラリ
 
@@ -47,14 +50,17 @@ main()                         … main.cpp
  │   ├ イベント処理 (ImGui に渡す・IME の変換中の文字列・終了)
  │   ├ ImGui の新しいフレームを開始
  │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
- │   │   ├ DrawMessages()    … 会話の一覧
+ │   │   ├ DrawRagBar()      … 資料 (RAG) の選択・再読込・インデックスの状態・設定ボタン
+ │   │   ├ DrawMessages()    … 会話の一覧と「ChatGPT に聞き直す」ボタン
+ │   │   ├ 聞き直しの確認ダイアログ (資料を使った回答のときだけ)
  │   │   ├ 入力欄・送信/中断・クリアのボタン
  │   │   ├ DrawComposition() … IME の変換中の文字列 (ime.cpp)
  │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)
  │   └ 描画して画面に表示
  └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
 
-SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドで AskLLM() を実行 (chat.cpp)
+SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドでルーター → 回答役 (RunAgent → AskLLM) を実行 (chat.cpp)
+AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッドで ChatGPT → 書き直しを実行 (chat.cpp)
 ```
 
 ## 起動処理 (main.cpp の main の前半)
@@ -121,19 +127,36 @@ UI スレッドとワーカースレッドで共有するデータを 1 つの�
 | メンバー | 内容 |
 | --- | --- |
 | `mutex` | 下のメンバーを守るための排他ロック |
-| `messages` | 画面に表示している会話 (user / assistant)。system プロンプトは含みません |
+| `messages` | 画面に表示している会話 (`Message` の配列、user / assistant)。system プロンプトは含みません |
 | `busy` | 回答を受信中かどうか |
 | `error` | 最後に起きたエラーのメッセージ |
 | `restoredPrompt` | 失敗したときに入力欄へ戻す質問 |
 | `cancel` | 中断の要求 (`std::atomic<bool>`。ロックなしで読み書きします) |
 | `worker` | 受信用のワーカースレッド |
+| `ragMode` | 資料 (RAG) を「自動 / 常に / 使わない」のどれにするか (UI スレッドだけが触ります) |
+| `hasCloudKey` / `cloudName` | ChatGPT の API キーがあるかと、その表示名。起動時と設定を保存したときに `RefreshCloudStatus` で調べ直します (毎フレームファイルを読まないため) |
+
+### Message
+
+`messages` の 1 件です。画面に出す本文のほかに、エージェントや ChatGPT の聞き直しのための情報を持ちます。
+
+| メンバー | 内容 |
+| --- | --- |
+| `role` / `content` | `user` か `assistant` と、本文 |
+| `note` | 回答の下に薄く出す補足 (ルーターの判断、参照した資料など) |
+| `agent` / `agentKey` | 答えたエージェントの表示名と、`agents.json` のキー (聞き直したときの書き直しに使う) |
+| `ragPrompt` | user: 資料を添えて送った質問 (聞き直しで資料も送るときに使う) |
+| `usedRag` | assistant: 資料を使って答えたか (ChatGPT 宛ての履歴から除く印) |
+| `superseded` | assistant: 聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する) |
+| `cloudOriginal` | assistant: 書き直す前の ChatGPT の回答 (折りたたんで表示する) |
+| `status` / `statusSince` / `receivedChars` / `totalChars` | 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)。`FormatStatus` で経過時間と文字数を添えて表示する |
 
 ### SendPrompt: 質問の送信
 
 1. 前回のワーカースレッドが残っていれば終了を待ちます (`JoinWorker`)。
 2. ロックを取り、次のことをまとめて行います。
    - `messages` に今回の質問 (user) を追加する
-   - `messages` を全部つなげて、送信する会話履歴を作る (system プロンプトは回答役のエージェントが付ける)
+   - `messages` をつなげて、送信する会話履歴を作る (聞き直して置き換えた `superseded` の回答は除く。system プロンプトは回答役のエージェントが付ける)
    - 回答を書き込むための空の assistant メッセージを追加する
    - `busy = true` にし、前回のエラーを消す
 3. ワーカースレッドを起動し、回答役のエージェントを決めて ([エージェント](agent.md)) `RunAgent()` から `AskLLM()` を呼びます。履歴はスレッドにコピーで渡すので、UI 側で `messages` が変わっても影響しません。
@@ -171,12 +194,15 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 
 ```
 ┌────────────────────────────────────────────┐
+│ 資料 (RAG): ◉自動 ○常に ○使わない [再読込] 6 ファイル / 54 チャンク   [設定] │
+├────────────────────────────────────────────┤
 │ You                                        │
 │ 質問の内容                                  │
 │ ────────────────────────────────────────── │  ← 会話の表示 (子ウィンドウ "messages")
-│ AI                                         │
+│ 侍                                         │
 │ 回答の内容…                                 │
-│                                            │
+│ ルーター: …  (補足)                         │
+│ [ChatGPT に聞き直す]  (最新の回答だけ)        │
 ├────────────────────────────────────────────┤
 │ Error: ...  (エラーがあるときだけ)            │
 ├──────────────────────────────────┬─────────┤
@@ -195,7 +221,11 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 
 - 送信者の名前 (`You` は青、AI の回答は答えたエージェントの名前を緑) と本文を表示し、メッセージの間に区切り線を引きます。
 - 本文は `TextWrapped` で、ウィンドウの幅に合わせて折り返します。
-- 受信中で回答がまだ空のときは「考え中...」と表示します。
+- 受信中で回答がまだ空のときは「考え中...」と表示します。`status` があるとき (ChatGPT に聞き直している間) は、代わりに `FormatStatus` の結果 (段階・文字数・経過時間) を出します。
+- `superseded` の回答は、名前に「(聞き直す前の回答)」を付けて、本文ごと `TextDisabled` で薄く表示します。
+- `cloudOriginal` があれば、「ChatGPT の元の回答」を `TreeNode` で折りたたんで表示します。
+- `note` (ルーターの判断や参照した資料) は本文の下に薄く表示します。
+- 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときと、資料も送ることになるときは `SetItemTooltip` で理由を出します。資料を使った回答なら、確認ダイアログで「送る」を選んだときだけ `AskCloud` を呼びます。
 - メッセージを右クリックすると「コピー」のメニューが出て、本文をクリップボードにコピーできます。
 - 各メッセージは `PushID` で番号を付けて区別しています。同じ名前 ("copy") のポップアップをメッセージごとに作るためです。
 
@@ -257,6 +287,8 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 
 RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を立て、`DrawSettings()` が次のフレームで `ui.json` / `server.json` / `agents.json` を読み直してモーダル (`BeginPopupModal`) を開きます。
 
+- タブは「画面」「システムプロンプト」「サーバー」の 3 つです。「システムプロンプト」はエージェントごとのタブで、回答役には人格のテンプレート (`personas.json`) の選択欄と「書き直す」(`rewrite`) のチェックがあります。「サーバー」には ChatGPT の接続先と API キーの登録欄があります ([chatgpt.md](chatgpt.md#api-キーの登録))。
+- API キーは `server.json` ではなく秘密ファイルに `SaveApiKey()` で書きます。保存したら `SettingsState::saved` を立て、チャット画面が `RefreshCloudStatus` でキーの有無を調べ直します。
 - ファイルは `LoadConfigForEdit()` で `nlohmann::ordered_json` として読みます。項目の順番を保ち、設定画面で扱わない項目 (`python_font_size` など) もそのまま残して保存するためです。読めないファイルがあるときは、上書きして中身を消さないように保存ボタンを無効にします。
 - 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。
 - 背景の不透明度・文字の大きさ・色は、動かすたびに `ApplyUiSettings()` で反映します。背景・文字・補足の文字の色は ImGui のスタイル (`WindowBg` / `Text` / `TextDisabled`) に入れ、送信者名とエラーの色は描くときに `ActiveUiSettings()` から読みます (設定画面を開いている間は編集中の値)。文字の大きさはフレームの途中で `style.FontSizeBase` を変えても戻されるので、`style._NextFrameFontSizeBase` で次のフレームの始めに変えます (ImGui 1.92 のフォントは大きさを後から変えられます)。キャンセルすると開く前の値 (`SettingsState::current`) に戻します。

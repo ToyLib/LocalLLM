@@ -85,6 +85,8 @@ llama-server の起動スクリプトが、両方をまとめて起動します�
 LOCALLLM_RAG_DIR=~/Documents/notes ./build/LocalLLM
 ```
 
+- Python 版はビルドしないので、リポジトリの `rag/` をそのまま読み、インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ。どちらも `LOCALLLM_RAG_DIR` で変えられます)。
+- 資料を使った回答は「ChatGPT に聞き直す」で送る履歴から除きます。聞き直す回答そのものが資料を使っていたときは、確認してから送ります ([説明](chatgpt.md#送る内容-資料を守るために))。
 - 対象は `.md` / `.markdown` / `.txt` です。UTF-8 でないファイル (Shift_JIS など) は読み飛ばし、ログに出します。
 - 名前が `.` で始まるファイルやフォルダ、`rag/` の直下の `README.md` は対象外です。
 

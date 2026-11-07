@@ -1,16 +1,23 @@
 # エージェント (役割ごとに LLM を呼び分ける)
 
 同じ LLM サーバー (8080 番) に、役割 (system プロンプト) と設定を変えて問い合わせるしくみです。
-エージェントは 3 種類あります。
+ふだんの質問で働くのは次の 3 つです。
 
-| エージェント | 役割 | 口調 |
+| エージェント (キー) | 役割 | 口調 |
 | --- | --- | --- |
-| ルーター | 質問ごとに `rag/` の資料を参照するかを決める (画面には出ない) | — |
-| アシスタント | 資料を参照する質問に、資料に基づいて答える | 普通の丁寧な口調 |
-| 侍 | 資料の要らない質問 (雑談や一般的な質問) に答える | 時代劇の侍の口調 (「拙者」「〜でござる」) |
+| ルーター (`router`) | 質問ごとに `rag/` の資料を参照するかを決める (画面には出ない) | — |
+| アシスタント (`assistant`) | 資料を参照する質問に、資料に基づいて答える | 普通の丁寧な口調 |
+| 侍 (`general`) | 資料の要らない質問 (雑談や一般的な質問) に答える | 時代劇の侍の口調 (「拙者」「〜でござる」) |
+
+「ChatGPT に聞き直す」ボタンを押したときは、さらに次の 2 つが働きます ([ChatGPT に聞き直す](chatgpt.md))。
+
+| エージェント (キー) | 役割 | 接続先 |
+| --- | --- | --- |
+| ChatGPT (`cloud`) | 最新の質問に答え直す | クラウド (`server.json` の `cloud`) |
+| 書き直し (`rewriter`) | ChatGPT の回答を、元の回答役の口調で言い直す。独立したエージェントではなく、回答役の system プロンプトの後ろに指示を足して使う | ローカル |
 
 回答役の 2 つは口調を変えてあるので、ルーターがどちらに振り分けたかが回答を見るだけで分かります。
-回答の上には、答えたエージェントの名前 (`アシスタント` / `侍`) も表示されます。
+回答の上には、答えたエージェントの名前 (`アシスタント` / `侍`。聞き直したときは `侍 (ChatGPT → ローカルで書き直し)` など) も表示されます。
 
 ## system プロンプトの設定 (config/agents.json)
 
@@ -28,12 +35,14 @@
 }
 ```
 
-- キーは `router` / `assistant` / `general` の 3 つです。`general` は資料の要らない質問に答える汎用の回答役で、既定のプロンプトでは侍の口調にしています。
+- キーは `router` / `assistant` / `general` / `cloud` / `rewriter` の 5 つです。`general` は資料の要らない質問に答える汎用の回答役で、既定のプロンプトでは侍の口調にしています。
 - `system_prompt` は文字列か、文字列の配列です。配列は区切りなしでつなげて 1 つのプロンプトにします。
+- 回答役 (`assistant` / `general`) には `rewrite` (true / false) も書けます。ChatGPT に聞き直した回答をこの回答役の口調で書き直すかどうかです (既定: アシスタントは `false`、侍は `true`)。
+- `cloud` / `rewriter` は無くても既定のプロンプト (`agent.cpp` の `DefaultAgentPrompt`) で動きます。`cloud` の表示名は `agents.json` ではなく `server.json` の `cloud.name` を使います。
 - 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても次の質問から反映されます。
 - アプリの「設定」ボタンから開く設定画面の「システムプロンプト」タブでも編集できます。1 行が配列の 1 要素になります (元が文字列なら文字列のまま保存します)。
 - 回答役 (`assistant` / `general`) のタブでは、人格のテンプレートを選んで名前とプロンプトに読み込めます (下の「人格のテンプレート」)。
-- C++ 版は実行ファイルの隣の `config/agents.json` を読みます (ビルドのたびに `config/` から、新しいほうのファイルがコピーされます)。Python 版はリポジトリの `user-config/agents.json` を読みます (初めて起動したときに `config/` からコピーします)。
+- C++ 版は実行ファイルの隣の `config/agents.json` を読みます (ビルドのたびに `config/` から、新しいほうのファイルがコピーされます)。Python 版はリポジトリの `user-config/agents.json` を読みます (初めて起動したときに `config/` からコピーします。設定画面の「すべて既定に戻す」で `config/` の内容に戻せます)。
 - 環境変数 `LOCALLLM_CONFIG_DIR` で `config/` の代わりのフォルダを指定できます (`server.json` もそこから読みます)。
 - ルーターの `maxTokens` / `temperature` / JSON スキーマなどの設定は、コードと結びついているので `agent.cpp` に残しています。
 - ファイルが無い・読めないときは、回答の代わりにエラーを表示します (ルーターの失敗は、いつもどおり資料を参照して回答を続けます)。
@@ -99,6 +108,16 @@
 
 ルーターの回答は画面には流さず、全部受け取ってから JSON として読みます。
 
+```
+[「ChatGPT に聞き直す」を押したとき]  (chat.cpp: AskCloud)
+  ChatGPT (CreateCloud) に「資料を使っていない過去のやりとり + 最新の質問」を送る
+    → 全部受け取るまで画面には流さない
+  回答役の rewrite が true なら、RewriteAnswer で回答役がローカルで言い直す (ストリーミング表示)
+  false なら ChatGPT の回答をそのまま表示する
+```
+
+書き直しでは、回答役の system プロンプトの後ろに `rewriter` の指示を足し、「## 質問」「## 回答」をまとめた 1 つの user メッセージだけを送ります (会話履歴は送りません)。`maxTokens` は 4096 (`REWRITE_MAX_TOKENS`)、`disableThinking` は true です。
+
 ### 小さいモデルでも JSON を崩さないために
 
 `LLMOptions::schema` に JSON スキーマを入れると、リクエストに `response_format` (`json_schema`) を付けます。
@@ -119,15 +138,21 @@ llama-server はスキーマから文法を作って出力を縛るので、4B �
 ```cpp
 struct Agent
 {
+    std::string key;           // agents.json のキー
     std::string name;
     std::string systemPrompt;
-    LLMOptions options;
+    LLMOptions options;        // options.cloud が true ならクラウドに送る
+    bool rewrite = true;       // ChatGPT の回答をこの口調で書き直すか
 };
 
 std::string RunAgent(const Agent&, const json& messages,
                      const DeltaCallback& onDelta, const std::atomic<bool>& cancel);
 
 json RunAgentJson(const Agent&, const json& messages, const std::atomic<bool>& cancel);
+
+std::string RewriteAnswer(const Agent& persona, const std::string& question,
+                          const std::string& answer,
+                          const DeltaCallback& onDelta, const std::atomic<bool>& cancel);
 
 RouteDecision RouteQuestion(const json& history, const std::string& question,
                             const std::vector<std::string>& sources,
@@ -139,7 +164,10 @@ RouteDecision RouteQuestion(const json& history, const std::string& question,
 | `Agent` | 役割 (system プロンプト) と、1 回の問い合わせの設定 (`LLMOptions`) |
 | `RunAgent()` | system プロンプトを先頭に付けて `AskLLM` を呼ぶ。`messages` は user / assistant だけでよい |
 | `RunAgentJson()` | `RunAgent` の回答を JSON として読む (`options.schema` を入れておく) |
-| `CreateAssistant()` / `CreateGeneral()` | 回答役のエージェントを作る |
+| `CreateAssistant()` / `CreateGeneral()` / `CreateAnswerer(key)` | 回答役のエージェントを作る |
+| `CreateCloud()` | ChatGPT に聞き直すエージェントを作る (`options.cloud = true`) |
+| `RewriteAnswer()` | クラウドの回答を、回答役 `persona` の口調でローカルの LLM に書き直させる |
+| `DefaultAgentName()` / `DefaultAgentPrompt()` | `agents.json` に `cloud` / `rewriter` が無いときの既定値 |
 | `RouteQuestion()` | ルーターを作って呼び、資料が必要かの判断 (`RouteDecision`) を返す |
 
 どれも `AskLLM` と同じくブロッキングなので、ワーカースレッドから呼びます。

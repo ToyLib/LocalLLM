@@ -38,6 +38,7 @@ struct LLMOptions
     float temperature = -1.0f;   // 負ならサーバーの既定値
     json schema = nullptr;       // JSON スキーマ (出力の形を縛る)
     bool disableThinking = false;
+    bool cloud = false;          // true なら server.json の cloud (ChatGPT など) に送る
 };
 
 std::string AskLLM(
@@ -45,13 +46,23 @@ std::string AskLLM(
     const DeltaCallback& onDelta,
     const std::atomic<bool>& cancel,
     const LLMOptions& options = {});
+
+CloudSettings LoadCloudSettings();
+bool HasCloudApiKey(const CloudSettings& settings);
+
+std::vector<std::vector<float>> Embed(
+    const std::vector<std::string>& inputs,
+    const std::atomic<bool>& cancel);
 ```
 
 | 名前 | 役割 |
 | --- | --- |
 | `DeltaCallback` | 回答のテキスト片を受け取るコールバックです。`AskLLM` を呼んだスレッド (GUI ではワーカースレッド) から呼ばれます。 |
-| `LLMOptions` | 1 回の問い合わせごとの設定です。省略すると今までどおり `max_tokens: 1024` だけを付けます。`schema` を入れると `response_format` (`json_schema`) を、`disableThinking` を true にすると `chat_template_kwargs.enable_thinking = false` を付けます ([エージェント](agent.md) で使っています)。 |
+| `LLMOptions` | 1 回の問い合わせごとの設定です。省略すると今までどおり `max_tokens: 1024` だけを付けます。`schema` を入れると `response_format` (`json_schema`) を、`disableThinking` を true にすると `chat_template_kwargs.enable_thinking = false` を付けます ([エージェント](agent.md) で使っています)。`cloud` は下の「クラウドに送るとき」を参照。 |
 | `AskLLM()` | 会話履歴を送り、回答が終わるまで処理を返しません (ブロッキング)。戻り値は回答の全文です。失敗したときや中断されたときは `std::runtime_error` を投げます。 |
+| `CloudSettings` / `LoadCloudSettings()` | `server.json` の `cloud` を読んだもの (書いていない項目は既定値) |
+| `HasCloudApiKey()` | API キーが見つかるか (環境変数か秘密ファイル)。「ChatGPT に聞き直す」ボタンを押せるかに使います |
+| `Embed()` | 埋め込みサーバー (`embed_url`) で文章をベクトルにします ([RAG](rag.md))。つながらないときに早く諦めるよう、接続のタイムアウトを 3 秒にしています |
 
 `AskLLM` は処理が終わるまで戻らないため、GUI から呼ぶときは必ず別スレッドで実行します。
 
@@ -79,6 +90,22 @@ std::string AskLLM(
 `llama-server` は読み込んでいるモデルを 1 つしか持たないため、`model` の値は何でも構いません。
 `max_tokens` は 1 回の回答の最大トークン数で、これを超えた回答は途中で打ち切られます。
 
+### クラウドに送るとき (`LLMOptions::cloud`)
+
+`cloud` が true のときは、リクエストを次のように変えます。
+
+| 項目 | ローカル | クラウド |
+| --- | --- | --- |
+| 送り先 | `chat_url` | `cloud.chat_url` |
+| `model` | `"local"` | `cloud.model` |
+| `max_tokens` / `temperature` / `chat_template_kwargs` | 送る | 送らない (OpenAI の推論モデルは `temperature` を受け付けないため) |
+| `max_completion_tokens` / `reasoning_effort` | 送らない | `server.json` に書いてあれば送る |
+| `response_format` | `json_schema` | `json_schema` に `"strict": true` を付ける |
+| 認証ヘッダー | なし | `Authorization: Bearer <キー>` (`auth` が `api-key` なら `api-key: <キー>`) |
+
+- API キーが見つからないとき、URL が `https://` で始まらないときは、送らずに例外を投げます (URL をローカルに戻したときに、キーを別のサーバーへ送らないため)。
+- キーの値はログやエラーメッセージに出しません。
+
 ## 会話履歴の形式
 
 API はステートレスなので、毎回それまでの会話をすべて送ります。履歴は次のような JSON 配列です。
@@ -104,7 +131,7 @@ system メッセージは、回答役のエージェント (`src/agent.cpp` の 
    | オプション | 設定内容 |
    | --- | --- |
    | `CURLOPT_URL` | `config/server.json` の `chat_url` |
-   | `CURLOPT_HTTPHEADER` | `Content-Type: application/json` と `Accept: text/event-stream` |
+   | `CURLOPT_HTTPHEADER` | `Content-Type: application/json` と `Accept: text/event-stream` (クラウドなら認証ヘッダーも) |
    | `CURLOPT_POSTFIELDS` | リクエストの本文 (これを設定すると POST になります) |
    | `CURLOPT_WRITEFUNCTION` / `CURLOPT_WRITEDATA` | 受信データを `WriteCallback` に `StreamContext` 付きで渡します |
    | `CURLOPT_XFERINFOFUNCTION` / `CURLOPT_XFERINFODATA` | 中断の確認に使う `ProgressCallback` |
@@ -120,7 +147,7 @@ system メッセージは、回答役のエージェント (`src/agent.cpp` の 
    | キャンセルされたか | `Cancelled` |
    | 受信中にエラーがあったか (`context.error`) | そのエラーの内容 |
    | libcurl の結果が `CURLE_OK` か | `curl_easy_strerror()` の文字列 (例: 接続できないとき `Couldn't connect to server`) |
-   | HTTP ステータスが 200 か | `HTTP 500` など |
+   | HTTP ステータスが 200 か | `LLM server: HTTP 500: <本文の error.message>` など (`HttpError`。接続先がクラウドなら `ChatGPT: HTTP 401 (API キーが無効です): ...`。429 には「回数の制限か、残高不足です」を添えます) |
    | `[DONE]` を受け取ったか | `Stream ended before [DONE]` |
 
    キャンセルを一番先に確認するのは、中断したときに libcurl が返すエラー (`CURLE_ABORTED_BY_CALLBACK`) をエラーとして表示しないためです。
