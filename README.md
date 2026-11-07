@@ -110,6 +110,7 @@ Python 版は、初めて起動したときに `config/` をリポジトリの `
 コピーするのは `build/config/` に無いファイルと、`config/` のほうが新しいファイルだけなので、C++ 版の設定画面で保存した設定はビルドしても消えません。`config/` を書き換えれば、次のビルドでそちらが反映されます。
 `server.json` と `agents.json` は送信のたびに読み直すので、書き換えると再起動しなくても次の質問から反映されます。`ui.json` は起動時に読みます。
 環境変数 `LOCALLLM_CONFIG_DIR` で別のフォルダを指定できます。
+全項目と環境変数の一覧は [doc/config.md](doc/config.md) にまとめています。
 
 ```json
 {
@@ -131,7 +132,7 @@ Python 版は、初めて起動したときに `config/` をリポジトリの `
 | 埋め込みサーバーの URL (RAG) | `config/server.json` の `embed_url` |
 | システムプロンプト | `config/agents.json` (`router` / `assistant` / `general` / `cloud` / `rewriter`、[説明](doc/agent.md)) |
 | ChatGPT の接続先・モデル | `config/server.json` の `cloud` ([説明](doc/chatgpt.md)) |
-| ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)) |
+| ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)。何が送られるかは [doc/privacy.md](doc/privacy.md)) |
 | 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
@@ -218,7 +219,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
 | `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
-| `doc/` | コードの解説 ([LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md)) |
+| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | `SETUP.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |

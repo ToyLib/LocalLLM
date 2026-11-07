@@ -3,7 +3,7 @@
 ふだんの回答はローカルの LLM が作ります。物足りないときは、最新の回答の下にある「ChatGPT に聞き直す」ボタンで ChatGPT (OpenAI API) に聞き直せます。
 ChatGPT の回答は、元の回答役 (侍など) がローカルの LLM で自分の口調に言い直して表示します。
 
-設計の考え方は [chatgpt-plan.md](chatgpt-plan.md) にまとめています。
+設計の考え方は [chatgpt-plan.md](chatgpt-plan.md)、ローカルも含めたデータの行き先は [privacy.md](privacy.md) にまとめています。
 
 ## 流れ
 

@@ -14,6 +14,7 @@
 | [font.h](../src/font.h) / [font.cpp](../src/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
 | [macos_window.h](../src/macos_window.h) / [macos_window.mm](../src/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
+全体の流れは [architecture.md](architecture.md)、設定ファイルは [config.md](config.md) にまとめています。
 LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md)、回答役の選び方は [agent.md](agent.md)、資料の検索は [rag.md](rag.md)、ChatGPT への聞き直しは [chatgpt.md](chatgpt.md) を参照してください。
 Python 版 (`python/`) は同じ構成を Tk で作ったもので、C++ 版との違いは [python-app.md](python-app.md) にまとめています。
 
