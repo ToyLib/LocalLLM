@@ -80,6 +80,13 @@ LocalLLM/
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md
 ├── LICENSE
+├── cmake/
+│   └── sync_config.cmake   (config/ を実行ファイルの隣へコピー)
+├── config/                 (設定の既定値)
+│   ├── ui.json
+│   ├── server.json
+│   ├── agents.json
+│   └── personas.json
 ├── scripts/
 │   ├── llama-server-linux.sh
 │   ├── llama-server-macos.sh
@@ -88,16 +95,33 @@ LocalLLM/
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)
+├── rag/                    (RAG の資料。samples/ と README.md 以外は git で無視)
+│   ├── README.md
+│   └── samples/
 ├── doc/
-│   ├── llm-client.md   (LLM との通信の解説)
-│   └── gui-app.md      (GUI アプリの解説)
+│   ├── architecture.md   (全体の構成)
+│   ├── config.md         (設定ファイルと環境変数)
+│   ├── privacy.md        (データの行き先)
+│   ├── llm-client.md     (LLM との通信)
+│   ├── gui-app.md        (GUI アプリ)
+│   ├── agent.md          (エージェント)
+│   ├── rag.md            (RAG)
+│   ├── chatgpt.md        (ChatGPT に聞き直す)
+│   ├── chatgpt-plan.md   (ChatGPT 連携の設計メモ)
+│   └── python-app.md     (Python 版)
 ├── src/
 │   ├── main.cpp
 │   ├── chat.h / chat.cpp
 │   ├── chat_ui.h / chat_ui.cpp
+│   ├── settings_ui.h / settings_ui.cpp
+│   ├── agent.h / agent.cpp
+│   ├── rag.h / rag.cpp
+│   ├── config.h / config.cpp
+│   ├── llm_client.h / llm_client.cpp
 │   ├── ime.h / ime.cpp
 │   ├── font.h / font.cpp
-│   └── llm_client.h / llm_client.cpp
+│   └── macos_window.h / macos_window.mm   (macOS のみ)
+├── python/                 (Python + Tk 版。ビルド不要)
 └── .vscode/
     ├── settings.json
     ├── tasks.json
@@ -110,11 +134,19 @@ LocalLLM/
 | ファイル | 役割 |
 |---|---|
 | src/main.cpp | SDL3 + ImGui の初期化、イベント処理、メインループ |
-| src/chat.h/.cpp | 会話の状態、ワーカースレッド管理 |
+| src/chat.h/.cpp | 会話の状態、ワーカースレッド管理、ChatGPT への聞き直し |
 | src/chat_ui.h/.cpp | チャット画面 |
+| src/settings_ui.h/.cpp | 設定画面 |
+| src/agent.h/.cpp | ルーター・回答役・ChatGPT・書き直しのエージェント |
+| src/rag.h/.cpp | RAG のインデックス作成と検索 |
+| src/config.h/.cpp | 設定ファイルの読み書き、API キー |
+| src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理、埋め込み |
 | src/ime.h/.cpp | IME の変換中の文字列の表示 |
 | src/font.h/.cpp | 日本語フォントの読み込み |
-| src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理 |
+| src/macos_window.h/.mm | macOS のタイトルバーの設定 |
+| config/ | 設定の既定値 (ビルド時に実行ファイルの隣へコピー。[doc/config.md](doc/config.md)) |
+| rag/ | RAG の資料 (ビルド時に実行ファイルの隣へコピー。[doc/rag.md](doc/rag.md)) |
+| python/ | Python + Tk 版のクライアント ([doc/python-app.md](doc/python-app.md)) |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | scripts/ | llama-server の起動スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
