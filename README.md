@@ -16,6 +16,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - メッセージを右クリックでコピー
 - `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
 - 資料を参照するかを質問ごとに判断するルーターと、口調の違う 2 つの回答役 (資料に基づくアシスタント / 時代劇口調の侍) ([説明](doc/agent.md))
+- 回答役の人格をテンプレート (侍・悟空風・バカボンのパパ風・大阪のおばちゃん・執事・猫など) から選び、設定画面で好みに直せる
 
 ## 必要なもの
 
@@ -99,6 +100,7 @@ cmake --build build --parallel
 
 - 背景の不透明度・文字の大きさ・色は、設定画面で動かすとすぐに反映されます (キャンセルで元に戻ります)。フォントファイルは再起動後に反映されます。
 - system プロンプトは 1 行が `system_prompt` の配列の 1 要素です (送るときは行をそのままつなげます)。
+- 回答役のタブでは、`config/personas.json` の人格のテンプレートを選んで「このテンプレートにする」で名前とプロンプトを読み込めます。そこから直して保存します (テンプレート自体は変わりません)。
 - 保存すると、読み込んでいるフォルダーの JSON を書き換えます。設定画面に出ない項目はそのまま残ります。
 
 `config/` はビルドのたびに実行ファイルの隣 (`build/config/`) にコピーされ、C++ 版はそちらを読みます (Python 版はリポジトリの `config/` を読みます)。
@@ -118,6 +120,7 @@ cmake --build build --parallel
 | サーバーの URL | `config/server.json` の `chat_url` |
 | 埋め込みサーバーの URL (RAG) | `config/server.json` の `embed_url` |
 | システムプロンプト | `config/agents.json` (`router` / `assistant` / `general`、[説明](doc/agent.md)) |
+| 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |
 | 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
 | 背景の不透明度 | `config/ui.json` の `window_opacity` (0〜1、既定 0.85) |

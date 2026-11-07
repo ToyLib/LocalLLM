@@ -54,6 +54,18 @@ struct AgentSettings
 
     // 元の system_prompt が文字列だったか (保存するときに形を変えない)
     bool promptIsString = false;
+
+    // テンプレートの選択欄で選んでいるもの (SettingsState::templates の番号)
+    int templateIndex = 0;
+};
+
+// system プロンプトのテンプレート (config/personas.json の1件)
+// 設定画面で回答役の名前とプロンプトに読み込んで、そこから直して使う
+struct PromptTemplate
+{
+    std::string name;
+    std::string prompt;
+    bool promptIsString = false;
 };
 
 // 設定画面の状態 (UIスレッドだけが触る)
@@ -73,6 +85,7 @@ struct SettingsState
     std::string chatUrl;
     std::string embedUrl;
     std::vector<AgentSettings> agents;
+    std::vector<PromptTemplate> templates;
 
     // 開いたときに読んだファイルの中身 (設定画面で扱わない項目もそのまま残して保存する)
     nlohmann::ordered_json uiJson;
@@ -81,6 +94,7 @@ struct SettingsState
 
     // 読めなかった・保存できなかったときのメッセージ
     std::string loadError;
+    std::string templateError;
     std::string saveError;
 };
 

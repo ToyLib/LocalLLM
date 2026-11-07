@@ -135,6 +135,24 @@ class SettingsDialog:
 
         self.load_error = "\n".join(errors)
 
+        # テンプレートは読めなくても設定は保存できるように、別に扱う
+        self.templates: list[tuple[str, Any]] = []
+        self.template_error = ""
+
+        try:
+            templates = config.load_for_edit("personas.json").get("templates")
+        except config.ConfigError as e:
+            self.template_error = str(e)
+        else:
+            if isinstance(templates, list):
+                self.templates = [
+                    (str(t.get("name", "(名前なし)")), t["system_prompt"])
+                    for t in templates
+                    if isinstance(t, dict) and "system_prompt" in t
+                ]
+            else:
+                self.template_error = "personas.json に templates (配列) がありません"
+
         if self.load_error:
             self.load_error += "\n(ファイルを直すまで保存できません)"
 
@@ -235,8 +253,10 @@ class SettingsDialog:
         agents = ttk.Notebook(tab)
         agents.pack(side="top", fill="both", expand=True)
 
-        # key → (名前, プロンプトの入力欄, 元が文字列だったか)
-        self.agent_widgets: dict[str, tuple[tk.StringVar, tk.Text, bool]] = {}
+        # key → (名前, プロンプトの入力欄)
+        self.agent_widgets: dict[str, tuple[tk.StringVar, tk.Text]] = {}
+        # key → system_prompt が文字列か (テンプレートを読み込むと変わる)
+        self.prompt_is_string: dict[str, bool] = {}
 
         for key, label in AGENT_ENTRIES:
             entry = self.agents_json.get(key)
@@ -247,6 +267,10 @@ class SettingsDialog:
             page = ttk.Frame(agents, padding=8)
             agents.add(page, text=label)
 
+            # 回答役は、人格のテンプレートから選んで直せる
+            if key != "router":
+                self._build_template_picker(page, key, entry.get("name"))
+
             row = ttk.Frame(page)
             row.pack(side="top", fill="x", pady=(0, 6))
             ttk.Label(row, text="名前").pack(side="left")
@@ -254,11 +278,6 @@ class SettingsDialog:
             ttk.Entry(row, textvariable=name).pack(
                 side="left", fill="x", expand=True, padx=(8, 0))
 
-            if is_string:
-                ttk.Label(
-                    page, foreground=NOTE_COLOR,
-                    text="(この system_prompt は1つの文字列で書かれています。改行もそのまま送ります)",
-                ).pack(side="top", fill="x", pady=(0, 6))
 
             box = ttk.Frame(page)
             box.pack(side="top", fill="both", expand=True)
@@ -274,9 +293,54 @@ class SettingsDialog:
             text.insert("1.0", prompt_to_text(prompt))
             text.edit_reset()
 
-            self.agent_widgets[key] = (name, text, is_string)
+            self.agent_widgets[key] = (name, text)
+            self.prompt_is_string[key] = is_string
 
         return tab
+
+    def _build_template_picker(
+            self, page: ttk.Frame, key: str, current_name: Any) -> None:
+        """テンプレートの選択欄と、選んだものを読み込むボタン"""
+
+        if self.template_error:
+            ttk.Label(
+                page, foreground=NOTE_COLOR,
+                text=f"テンプレートを読めません: {self.template_error}",
+            ).pack(side="top", fill="x", pady=(0, 6))
+            return
+
+        if not self.templates:
+            return
+
+        names = [name for name, _prompt in self.templates]
+
+        row = ttk.Frame(page)
+        row.pack(side="top", fill="x", pady=(0, 6))
+        ttk.Label(row, text="テンプレート").pack(side="left")
+
+        # 今の名前と同じテンプレートを選んだ状態で開く
+        choice = ttk.Combobox(row, values=names, state="readonly", width=20)
+        choice.current(names.index(current_name) if current_name in names else 0)
+        choice.pack(side="left", padx=(8, 0))
+
+        ttk.Button(
+            row, text="このテンプレートにする",
+            command=lambda: self._apply_template(key, choice.current()),
+        ).pack(side="left", padx=(6, 0))
+
+    def _apply_template(self, key: str, index: int) -> None:
+        """名前とプロンプトを置き換える (保存するまではファイルは変わらない)"""
+
+        if not 0 <= index < len(self.templates):
+            return
+
+        template_name, prompt = self.templates[index]
+        name, text = self.agent_widgets[key]
+
+        name.set(template_name)
+        text.delete("1.0", "end")
+        text.insert("1.0", prompt_to_text(prompt))
+        self.prompt_is_string[key] = isinstance(prompt, str)
 
     def _build_server_tab(self, parent: ttk.Notebook) -> ttk.Frame:
         tab = ttk.Frame(parent, padding=12)
@@ -378,7 +442,8 @@ class SettingsDialog:
         for key, variable in self.urls.items():
             self.server_json[key] = variable.get()
 
-        for key, (name, text, is_string) in self.agent_widgets.items():
+        for key, (name, text) in self.agent_widgets.items():
+            is_string = self.prompt_is_string[key]
             entry = self.agents_json.get(key)
 
             if not isinstance(entry, dict):

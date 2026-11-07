@@ -152,6 +152,106 @@ std::string StringOr(
         : fallback;
 }
 
+// config/personas.json のテンプレートを読む
+// 読めなくても設定は保存できるように、loadError ではなく templateError に入れる
+void LoadTemplates(SettingsState& settings)
+{
+    settings.templates.clear();
+    settings.templateError.clear();
+
+    ordered_json config;
+
+    try
+    {
+        config = LoadConfigForEdit("personas.json");
+    }
+    catch (const std::exception& e)
+    {
+        settings.templateError = e.what();
+        return;
+    }
+
+    if (!config.contains("templates") || !config["templates"].is_array())
+    {
+        settings.templateError = "personas.json に templates (配列) がありません";
+        return;
+    }
+
+    for (const auto& entry : config["templates"])
+    {
+        if (!entry.is_object() || !entry.contains("system_prompt"))
+        {
+            continue;
+        }
+
+        PromptTemplate item;
+        item.name = StringOr(entry, "name", "(名前なし)");
+        item.prompt = PromptToText(entry["system_prompt"]);
+        item.promptIsString = entry["system_prompt"].is_string();
+        settings.templates.push_back(std::move(item));
+    }
+}
+
+// テンプレートの選択欄と、選んだものを読み込むボタン
+void DrawTemplatePicker(SettingsState& settings, AgentSettings& agent)
+{
+    if (!settings.templateError.empty())
+    {
+        ImGui::TextDisabled("テンプレートを読めません: %s", settings.templateError.c_str());
+        return;
+    }
+
+    if (settings.templates.empty())
+    {
+        return;
+    }
+
+    agent.templateIndex = std::clamp(
+        agent.templateIndex, 0, static_cast<int>(settings.templates.size()) - 1);
+
+    const float buttonWidth = ImGui::CalcTextSize("このテンプレートにする").x +
+        ImGui::GetStyle().FramePadding.x * 2.0f;
+
+    ImGui::SetNextItemWidth(std::max(
+        ImGui::GetContentRegionAvail().x * 0.4f,
+        ImGui::GetFontSize() * 10.0f));
+
+    if (ImGui::BeginCombo(
+            "##template", settings.templates[agent.templateIndex].name.c_str()))
+    {
+        for (int i = 0; i < static_cast<int>(settings.templates.size()); ++i)
+        {
+            const bool selected = i == agent.templateIndex;
+
+            if (ImGui::Selectable(settings.templates[i].name.c_str(), selected))
+            {
+                agent.templateIndex = i;
+            }
+
+            if (selected)
+            {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    ImGui::SameLine();
+
+    // 名前とプロンプトを置き換える (保存するまではファイルは変わらない)
+    if (ImGui::Button("このテンプレートにする", ImVec2(buttonWidth, 0.0f)))
+    {
+        const PromptTemplate& item = settings.templates[agent.templateIndex];
+        agent.name = item.name;
+        agent.prompt = item.prompt;
+        agent.promptIsString = item.promptIsString;
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("テンプレート");
+}
+
 // 設定ファイルを読み直して、編集用の値を作る
 void LoadSettings(SettingsState& settings)
 {
@@ -203,6 +303,20 @@ void LoadSettings(SettingsState& settings)
         }
 
         settings.agents.push_back(std::move(agent));
+    }
+
+    LoadTemplates(settings);
+
+    // 選択欄は、今の名前と同じテンプレートを選んだ状態で開く
+    for (auto& agent : settings.agents)
+    {
+        for (size_t i = 0; i < settings.templates.size(); ++i)
+        {
+            if (settings.templates[i].name == agent.name)
+            {
+                agent.templateIndex = static_cast<int>(i);
+            }
+        }
     }
 
     if (!errors.empty())
@@ -336,6 +450,12 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         if (!ImGui::BeginTabItem(label.c_str()))
         {
             continue;
+        }
+
+        // 回答役は、人格のテンプレートから選んで直せる
+        if (agent.key != "router")
+        {
+            DrawTemplatePicker(settings, agent);
         }
 
         ImGui::InputText("名前", &agent.name);
