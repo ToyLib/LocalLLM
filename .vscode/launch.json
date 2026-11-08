@@ -93,6 +93,16 @@
             "externalConsole": false,
             "MIMode": "lldb",
             "preLaunchTask": "CMake: build (Release)"
+        },
+        {
+            // Python 版 (全 OS 共通、ビルド不要)。インタープリターは VS Code で選択中のものを使う
+            "name": "Launch LocalLLM (Python)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/python/main.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
         }
     ]
 }
