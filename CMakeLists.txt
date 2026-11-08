@@ -79,6 +79,7 @@ add_executable(LocalLLM
     src/ime.cpp
     src/llm_client.cpp
     src/rag.cpp
+    src/server_manager.cpp
     src/settings_ui.cpp
 )
 
@@ -103,6 +104,73 @@ target_link_libraries(LocalLLM PRIVATE
     imgui
     Threads::Threads
 )
+
+# llama-server の公式リリースを取得して同梱する (タグとハッシュは llama-release.json)
+option(LOCALLLM_BUNDLE_LLAMA "Download the official llama-server release and bundle it" ON)
+
+if(LOCALLLM_BUNDLE_LLAMA)
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" LLAMA_CPU)
+
+    if(LLAMA_CPU MATCHES "^(x86_64|amd64)$")
+        set(LLAMA_CPU "x64")
+    elseif(LLAMA_CPU MATCHES "^(arm64|aarch64)$")
+        set(LLAMA_CPU "arm64")
+    endif()
+
+    if(WIN32)
+        set(LLAMA_PLATFORM "windows-${LLAMA_CPU}")
+    elseif(APPLE)
+        set(LLAMA_PLATFORM "macos-${LLAMA_CPU}")
+    else()
+        set(LLAMA_PLATFORM "linux-${LLAMA_CPU}")
+    endif()
+
+    set_property(DIRECTORY APPEND PROPERTY
+        CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/llama-release.json)
+    file(READ ${CMAKE_SOURCE_DIR}/llama-release.json LLAMA_RELEASE)
+    string(JSON LLAMA_TAG GET "${LLAMA_RELEASE}" tag)
+    string(JSON LLAMA_FILE ERROR_VARIABLE LLAMA_FILE_ERROR
+        GET "${LLAMA_RELEASE}" assets ${LLAMA_PLATFORM} file)
+
+    if(LLAMA_FILE_ERROR)
+        message(WARNING
+            "No official llama-server release is listed for ${LLAMA_PLATFORM}. "
+            "It will not be bundled; install llama-server yourself.")
+    else()
+        string(JSON LLAMA_SHA256 GET "${LLAMA_RELEASE}" assets ${LLAMA_PLATFORM} sha256)
+
+        FetchContent_Declare(llama_release
+            URL https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_TAG}/${LLAMA_FILE}
+            URL_HASH SHA256=${LLAMA_SHA256}
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        )
+        FetchContent_MakeAvailable(llama_release)
+
+        # llama-server が使わないツールは同梱しない
+        # (ggml-* のライブラリは実行時に読み込まれるので削らない)
+        file(GLOB LLAMA_UNUSED
+            ${llama_release_SOURCE_DIR}/llama
+            ${llama_release_SOURCE_DIR}/llama.exe
+            ${llama_release_SOURCE_DIR}/llama-*
+            ${llama_release_SOURCE_DIR}/ggml-rpc-server*
+            ${llama_release_SOURCE_DIR}/ggml-metal-tuning*
+            ${llama_release_SOURCE_DIR}/*llama-*-impl.*
+        )
+        list(FILTER LLAMA_UNUSED EXCLUDE REGEX "/llama-server(\\.exe)?$")
+        list(FILTER LLAMA_UNUSED EXCLUDE REGEX "/(lib)?llama-server-impl\\.")
+        list(FILTER LLAMA_UNUSED EXCLUDE REGEX "/llama-common\\.dll$")
+        if(LLAMA_UNUSED)
+            file(REMOVE ${LLAMA_UNUSED})
+        endif()
+
+        add_custom_command(TARGET LocalLLM POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${llama_release_SOURCE_DIR}
+                $<TARGET_FILE_DIR:LocalLLM>/llama
+            VERBATIM
+        )
+    endif()
+endif()
 
 # フォントなどのアセットを実行ファイルの隣にコピー
 add_custom_command(TARGET LocalLLM POST_BUILD

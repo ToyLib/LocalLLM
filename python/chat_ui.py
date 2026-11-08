@@ -12,9 +12,11 @@ from typing import NamedTuple
 
 import config
 import rag
+import server_manager
 from chat import (
     ChatState, RagMode, ask_cloud, can_ask_cloud, format_status,
     refresh_cloud_status, send_prompt)
+from server_manager import ServerStatus, ServerView
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
@@ -147,6 +149,7 @@ class ChatApp:
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
+        self._build_server_bar()
         self._build_input()
         self._build_messages()
 
@@ -156,6 +159,9 @@ class ChatApp:
             **DEFAULT_COLORS,
         }
         self._apply_colors(_colors(ui, self.default_colors))
+
+        # server.json の managed がオンなら llama-server を起動する
+        server_manager.start(self._dirty.set)
 
         rag.start_indexing(self.rag)
         self._dirty.set()
@@ -190,6 +196,18 @@ class ChatApp:
 
         self.rag_status = ttk.Label(bar)
         self.rag_status.pack(side="left", padx=(8, 0))
+
+    def _build_server_bar(self) -> None:
+        """llama-server が使えないときだけ出す状態の行"""
+
+        self.server_bar = ttk.Frame(self.root, padding=(8, 0))
+        self.server_bar.pack(side="top", fill="x")
+        self.server_bar.columnconfigure(0, weight=1)
+
+        self.server_lines = [
+            ttk.Label(self.server_bar, wraplength=860) for _ in range(2)]
+        self.server_retry = ttk.Button(
+            self.server_bar, text="もう一度起動", command=server_manager.retry)
 
     def _build_messages(self) -> None:
         """会話表示"""
@@ -304,15 +322,17 @@ class ChatApp:
             self._on_settings_reset, self._on_settings_saved)
 
     def _on_settings_saved(self) -> None:
-        """保存したら、API キーの有無を調べ直す"""
+        """保存したら、API キーの有無とサーバーの設定を読み直す"""
 
         refresh_cloud_status(self.state)
+        server_manager.reload()
         self._dirty.set()
 
     def _on_settings_reset(self) -> None:
         """設定を既定値に戻したあと、画面の設定を読み直して設定画面を開き直す"""
 
         refresh_cloud_status(self.state)
+        server_manager.reload()
         ui = config.load_or_empty("ui.json")
         self._apply_font_size(_font_size(ui))
         self._apply_colors(_colors(ui, self.default_colors))
@@ -334,7 +354,8 @@ class ChatApp:
     def _send(self) -> None:
         prompt = self.input.get("1.0", "end-1c")
 
-        if not prompt.strip():
+        # サーバーの準備ができるまでは送らない (入力は残す)
+        if not prompt.strip() or not server_manager.is_chat_available():
             return
 
         self.input.delete("1.0", "end")
@@ -404,6 +425,10 @@ class ChatApp:
         # 通信中なら止める (ワーカーはデーモンスレッドなので待たない)
         self.state.cancel.cancel()
         self.rag.cancel.cancel()
+
+        # サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
+        self.root.withdraw()
+        server_manager.stop()
         self.root.destroy()
 
     # ---- 描画 ----
@@ -454,6 +479,7 @@ class ChatApp:
             building = self.rag.building
             status = self.rag.status
 
+        self._refresh_server_bar()
         self.rag_status.configure(text=status)
         self.reload_button.state(["disabled" if building else "!disabled"])
         self.error_label.configure(text=f"Error: {error}" if error else "")
@@ -466,12 +492,50 @@ class ChatApp:
                 self.send_button.configure(text="送信", command=self._send)
             self.clear_button.state(["disabled" if busy else "!disabled"])
 
+        self.send_button.state([
+            "disabled" if not busy and not server_manager.is_chat_available()
+            else "!disabled"])
+
         if restored:
             self.input.delete("1.0", "end")
             self.input.insert("1.0", restored)
             self.input.focus_set()
 
         self._render_messages(snapshot)
+
+    def _refresh_server_bar(self) -> None:
+        """読み込み中と失敗のときだけ、サーバーの状態を出す"""
+
+        view = server_manager.view()
+        items: tuple[tuple[str, ServerView], ...] = (
+            ("チャットのサーバー", view.chat), ("埋め込みのサーバー", view.embed))
+        failed = False
+
+        for row, (label, (name, server)) in enumerate(zip(self.server_lines, items)):
+            if not view.enabled or server.status not in (
+                    ServerStatus.STARTING, ServerStatus.FAILED):
+                label.grid_remove()
+                continue
+
+            if server.status == ServerStatus.FAILED:
+                failed = True
+                text = f"{name}: {server.detail}"
+
+                if server.log_tail:
+                    text += "\n" + server.log_tail
+
+                label.configure(text=text, foreground=self.colors["error"])
+            else:
+                label.configure(
+                    text=f"{name}: {server.status.value} ({server.detail})",
+                    foreground=self.colors["sub_text"])
+
+            label.grid(row=row, column=0, sticky="w")
+
+        if failed:
+            self.server_retry.grid(row=2, column=0, sticky="w", pady=(2, 0))
+        else:
+            self.server_retry.grid_remove()
 
     def _render_messages(self, snapshot: list[_Rendered]) -> None:
         # 変わった最初のメッセージから下だけを描き直す
@@ -592,4 +656,9 @@ class ChatApp:
 def main() -> None:
     root = tk.Tk()
     ChatApp(root)
-    root.mainloop()
+
+    try:
+        root.mainloop()
+    finally:
+        # Ctrl+C などでも、起動したサーバーを残さない
+        server_manager.stop()

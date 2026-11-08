@@ -74,6 +74,7 @@ std::vector<std::vector<float>> Embed(
 | --- | --- | --- |
 | `chat_url` | `http://127.0.0.1:8080/v1/chat/completions` | 問い合わせ先 |
 | `embed_url` | `http://127.0.0.1:8081/v1/embeddings` | 埋め込み (RAG) の問い合わせ先 |
+| `managed` | | アプリが `llama-server` を起動するときの設定 ([managed-server.md](managed-server.md))。通信のしかたは変わりません |
 | `cloud` | (OpenAI の既定値) | `LLMOptions::cloud` が true のときの問い合わせ先 ([ChatGPT に聞き直す](chatgpt.md#configserverjson-の-cloud)) |
 
 リクエストの本文にはこのほかに次の値を入れています。

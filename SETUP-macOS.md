@@ -13,7 +13,7 @@ OS によらない部分 (プロジェクト構成、ビルドのプリセット
 | ビルド | CMake + Make (Unix Makefiles) |
 | ウィンドウ・描画 | SDL3 (SDL_Renderer、Metal) |
 | HTTP 通信 | libcurl (macOS 標準) |
-| LLM サーバー | llama.cpp (Metal) |
+| LLM サーバー | llama.cpp (公式リリースの Metal 対応版を同梱) |
 
 ほかのライブラリの構成は [SETUP.md](SETUP.md) の「1. 概要」を参照。
 
@@ -106,39 +106,11 @@ macOS では、同梱フォントに無い文字をヒラギノ (`/System/Librar
 
 ## 5. llama.cpp サーバー
 
-macOS では llama.cpp が Metal (Apple Silicon の GPU) を使う。
+ビルドすると、公式リリースの Metal 対応版が取得され、実行ファイルの隣の `llama/` に同梱される。アプリが起動・停止するので、llama.cpp のビルドも起動も要らない。使い方は [SETUP.md](SETUP.md) の「6. llama.cpp サーバー」を参照。
 
-### Homebrew で入れる場合 (簡単)
+Homebrew の `llama-server` などを使いたいときは、設定画面の「llama-server の場所」か環境変数 `LLAMA_SERVER` で指定する。
 
-```bash
-brew install llama.cpp
-```
-
-`llama-server` や `llama-cli` がそのまま使える。
-
-### ソースからビルドする場合
-
-macOS では Metal が既定で有効になる。
-
-```bash
-git clone https://github.com/ggml-org/llama.cpp.git
-cd llama.cpp
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(sysctl -n hw.ncpu)
-```
-
-この場合、コマンドは `./build/bin/llama-server` になる。
-
-GPU 認識確認：
-
-```bash
-llama-cli --list-devices
-```
-
-Metal のデバイスが表示されることを確認する。
-
-### 起動
+### 自分で起動するとき
 
 ```bash
 ./scripts/llama-server-macos.sh

@@ -1,6 +1,7 @@
 #include "chat_ui.h"
 
 #include "ime.h"
+#include "server_manager.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -263,6 +264,52 @@ void DrawRagBar(ChatState& state, RagState& rag, SettingsState& settings)
     }
 }
 
+// llama-server が使えないときだけ、状態を 1 行ずつ出す
+void DrawServerLine(const char* name, const ServerView& view, const UiColors& colors, bool& retry)
+{
+    if (view.status == ServerStatus::Starting)
+    {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled(
+            "%s: %s (%s)", name, ServerStatusText(view.status), view.detail.c_str());
+        ImGui::PopTextWrapPos();
+    }
+    else if (view.status == ServerStatus::Failed)
+    {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextColored(colors.error, "%s: %s", name, view.detail.c_str());
+        ImGui::PopTextWrapPos();
+
+        if (!view.logTail.empty())
+        {
+            ImGui::SetItemTooltip("%s", view.logTail.c_str());
+        }
+
+        ImGui::PushID(name);
+        retry |= ImGui::SmallButton("もう一度起動");
+        ImGui::PopID();
+    }
+}
+
+void DrawServerBar(const UiColors& colors)
+{
+    const ServerManagerView view = GetServerManagerView();
+
+    if (!view.enabled)
+    {
+        return;
+    }
+
+    bool retry = false;
+    DrawServerLine("チャットのサーバー", view.chat, colors, retry);
+    DrawServerLine("埋め込みのサーバー", view.embed, colors, retry);
+
+    if (retry)
+    {
+        RetryServers();
+    }
+}
+
 } // namespace
 
 void DrawUI(
@@ -309,6 +356,7 @@ void DrawUI(
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topInset);
 
     DrawRagBar(state, rag, settings);
+    DrawServerBar(ActiveUiSettings(settings).colors);
 
     // 会話表示 (高さは残りから入力欄などの分を引いたもの)
     ImGui::BeginChild(
@@ -369,7 +417,14 @@ void DrawUI(
     }
     else
     {
-        send = ImGui::Button("送信", buttonSize) || entered;
+        // サーバーの準備ができるまでは送らない (入力は残す)
+        const bool available = IsChatServerAvailable();
+
+        ImGui::BeginDisabled(!available);
+        send = ImGui::Button("送信", buttonSize);
+        ImGui::EndDisabled();
+
+        send = (send || entered) && available;
     }
 
     ImGui::BeginDisabled(busy);
@@ -400,11 +455,12 @@ void DrawUI(
 
     DrawSettings(settings);
 
-    // 設定を保存したら、API キーの有無を調べ直す
+    // 設定を保存したら、API キーの有無とサーバーの設定を読み直す
     if (settings.saved)
     {
         settings.saved = false;
         RefreshCloudStatus(state);
+        ReloadServerManager();
     }
 
     ImGui::End();

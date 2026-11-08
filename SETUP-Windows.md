@@ -17,7 +17,7 @@ OS によらない部分 (プロジェクト構成、フォント、モデル別
 | ウィンドウ・描画 | SDL3 (SDL_Renderer、vcpkg) |
 | HTTP 通信 | libcurl (vcpkg) |
 | JSON | nlohmann/json (vcpkg) |
-| LLM サーバー | llama.cpp (Vulkan。Vulkan のヘッダー・ローダーと glslc は vcpkg) |
+| LLM サーバー | llama.cpp (公式リリースの Vulkan 版を同梱) |
 
 ## 2. 必要なツール
 
@@ -145,63 +145,13 @@ $env:LOCALLLM_FONT = "C:\path\to\font.ttf"
 
 ## 6. llama.cpp サーバー
 
-AMD Radeon などの GPU では Vulkan 版を使う。Vulkan SDK は使わず、ビルドに必要なものは vcpkg (`VCPKG_ROOT`) で入れる。
+ビルドすると、公式リリースの Vulkan 版 (`llama-<タグ>-bin-win-vulkan-x64.zip`) が取得され、`LocalLLM.exe` の隣の `llama\` に同梱される。アプリが起動・停止するので、llama.cpp のビルドも起動も要らない。使い方は [SETUP.md](SETUP.md) の「6. llama.cpp サーバー」を参照。
 
-### 必要なライブラリ (vcpkg)
+Vulkan を実際に動かすのは GPU ドライバー (AMD Software など) なので、GPU ドライバーは最新にしておく。GPU が見つからないときは、設定画面の「サーバー」のタブに注意が出る。
 
-| パッケージ | 役割 |
-|---|---|
-| `vulkan` | Vulkan のヘッダーとローダー (`vulkan-headers`、`vulkan-loader` をまとめたもの) |
-| `shaderc` | シェーダーコンパイラー `glslc` (llama.cpp のビルド時に GPU 用のシェーダーをコンパイルする) |
-| `spirv-headers` | SPIR-V のヘッダー |
-| `openssl` | HTTPS 通信 (`-hf` で Hugging Face からモデルをダウンロードするのに必要) |
+自分で用意した `llama-server.exe` を使うときは、設定画面の「llama-server の場所」か環境変数 `LLAMA_SERVER` で指定する。
 
-```powershell
-& "$env:VCPKG_ROOT\vcpkg.exe" install vulkan shaderc spirv-headers openssl --triplet x64-windows
-```
-
-Vulkan を実際に動かすのは GPU ドライバー (AMD Software など) なので、GPU ドライバーは最新にしておく。
-
-### ビルド
-
-通常の PowerShell で実行する。
-
-```powershell
-cd $env:USERPROFILE\Repos
-git clone https://github.com/ggml-org/llama.cpp.git
-cd llama.cpp
-
-cmake -S . -B build -A x64 `
-    -DGGML_VULKAN=ON `
-    -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-    -DVCPKG_TARGET_TRIPLET=x64-windows `
-    -DVulkan_GLSLC_EXECUTABLE="$env:VCPKG_ROOT/installed/x64-windows/tools/shaderc/glslc.exe"
-
-cmake --build build --config Release
-```
-
-- `-A x64`：`-G` を省くと最新の Visual Studio のジェネレーターが使われる。`-A x64` で 64ビット向けにする。
-- `--config Release`：Visual Studio のジェネレーターでは、Debug / Release をビルド時に選ぶ (`CMAKE_BUILD_TYPE` は使われない)。
-- `Vulkan_GLSLC_EXECUTABLE`：CMake は glslc を Vulkan SDK のフォルダーで探すため、vcpkg の glslc は明示的に指定する。
-- configure の出力に `OpenSSL found` が出ることを確認する。`OpenSSL not found, HTTPS support disabled` と出た場合は `-hf` が使えない。
-- configure の出力に `... not supported by glslc` が出る場合は、glslc が対応していない GPU の機能が無効になる。ビルドは通るが、速度が落ちることがある。
-
-実行ファイルは `build\bin\Release\` に作られる。vcpkg の DLL (`vulkan-1.dll`、`libssl-3-x64.dll` など) も同じフォルダーにコピーされる。
-
-GPU 認識確認：
-
-```powershell
-cd build\bin\Release
-.\llama-cli.exe --list-devices
-```
-
-AMD Radeon などの GPU が Vulkan デバイスとして表示されることを確認する。
-
-### ビルド済みのバイナリを使う場合
-
-ソースからビルドしない場合は、[llama.cpp の Releases](https://github.com/ggml-org/llama.cpp/releases) から Windows の Vulkan 版 (`llama-<バージョン>-bin-win-vulkan-x64.zip`) をダウンロードして展開しても使える。この場合、vcpkg のライブラリは不要。
-
-### 起動
+### 自分で起動するとき
 
 ```powershell
 .\scripts\llama-server-windows.bat

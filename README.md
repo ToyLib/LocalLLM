@@ -55,13 +55,15 @@ cmake --build build --parallel
 
 ## 使い方
 
-1. LLM サーバーを `127.0.0.1:8080` で起動します。`llama-server` の例:
+1. アプリを起動します。
 
    ```bash
-   llama-server -m /path/to/model.gguf --port 8080
+   ./build/LocalLLM
    ```
 
-   モデルをメニューから選んで起動するサンプルスクリプトもあります (Qwen3 4B 2507 / Gemma 3 4B / Phi-4 mini / gpt-oss 20B)。
+   `llama-server` はビルドで同梱され、アプリが起動・停止します ([説明](doc/managed-server.md))。初回はモデルをダウンロードするので時間がかかります。モデルは設定画面で選べます (Qwen3 4B 2507 / Gemma 3 4B / Phi-4 mini / gpt-oss 20B)。
+
+   自分でサーバーを起動しておくこともできます。`127.0.0.1:8080` で応答するサーバーがあれば、アプリはそれを使います。起動用のサンプルスクリプトもあります。
 
    | OS | スクリプト |
    | --- | --- |
@@ -72,12 +74,6 @@ cmake --build build --parallel
    使い方は OS ごとの手順書を参照してください。
 
    スクリプトは RAG 用の埋め込みサーバー (8081 番) も一緒に起動します。不要なら `--no-embed` を付けてください (詳しくは [doc/rag.md](doc/rag.md))。
-
-2. アプリを起動します。
-
-   ```bash
-   ./build/LocalLLM
-   ```
 
 ### 操作
 

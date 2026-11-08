@@ -87,6 +87,16 @@ struct SettingsState
     UiSettings ui;
     std::string chatUrl;
     std::string embedUrl;
+
+    // llama-server の自動起動 (server.json の managed)
+    bool managedEnabled = false;
+    std::string managedServerPath;
+    std::string managedChatModel;
+    std::string managedEmbedModel;
+    int managedContext = 4096;
+    int managedEmbedContext = 8192;
+    int managedGpuLayers = 99;
+
     std::vector<AgentSettings> agents;
     std::vector<PromptTemplate> templates;
 

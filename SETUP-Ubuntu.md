@@ -100,6 +100,10 @@ fc-match -f '%{file}\n' "Noto Sans CJK JP"
 
 ## 5. llama.cpp サーバー
 
+ビルドすると、公式リリースの Vulkan 版 (Ubuntu 向けにビルドされたもの) が取得され、実行ファイルの隣の `llama/` に同梱される。アプリが起動・停止するので、**通常はこの節の作業は要らない** ([SETUP.md](SETUP.md) の「6. llama.cpp サーバー」)。
+
+同梱のものが動かないときや、自分でビルドしたいときは、次の手順で用意する。ビルドしたものは自動で見つかる (同梱のものを使わせないときは、CMake に `-DLOCALLLM_BUNDLE_LLAMA=OFF` を付ける)。
+
 配置場所：
 
 ```text

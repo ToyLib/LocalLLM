@@ -1,0 +1,21 @@
+{
+  "tag": "b12110",
+  "assets": {
+    "windows-x64": {
+      "file": "llama-b12110-bin-win-vulkan-x64.zip",
+      "sha256": "9732a5e48887ca54d0bfe4af4324dc85fd56cd8cda19b52df3542fa6ebe6874f"
+    },
+    "macos-arm64": {
+      "file": "llama-b12110-bin-macos-arm64.tar.gz",
+      "sha256": "4f5b8de12e0b9516658ca6a5764c6ffb3d7c659c3dd538556b1413c7b4050662"
+    },
+    "macos-x64": {
+      "file": "llama-b12110-bin-macos-x64.tar.gz",
+      "sha256": "c8094268b6bf62f4998f0e45656fd9f5e2d4afb6b1cd0044d761db64be1dd47d"
+    },
+    "linux-x64": {
+      "file": "llama-b12110-bin-ubuntu-vulkan-x64.tar.gz",
+      "sha256": "a5d741940956ec62e8783aee7e5a4c7c761af867d6f027c3277a51e1a3ac59b0"
+    }
+  }
+}

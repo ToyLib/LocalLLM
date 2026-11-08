@@ -11,6 +11,7 @@
 │      エージェント (agent)        RAG (rag)            │
 │                      │              │               │
 │              llm_client (HTTP + SSE)                 │
+│  サーバーの管理 (server_manager: 起動・監視・停止)       │
 │  設定 (config: 既定値 config/ → ユーザーごとのフォルダー) │
 └──────────┬───────────────┬──────────────┬──────────┘
            │               │              │ (ボタンを押したときだけ)
@@ -26,6 +27,7 @@
 | エージェント | `agent.cpp` | `agent.py` | [agent.md](agent.md) |
 | RAG | `rag.cpp` | `rag.py` | [rag.md](rag.md) |
 | サーバーとの通信 | `llm_client.cpp` | `llm_client.py` | [llm-client.md](llm-client.md) |
+| サーバーの管理 | `server_manager.cpp` | `server_manager.py` | [managed-server.md](managed-server.md) |
 | 設定 | `config.cpp` | `config.py` | [config.md](config.md) |
 | ChatGPT への聞き直し | (上のすべてにまたがる) | | [chatgpt.md](chatgpt.md) |
 
@@ -71,7 +73,8 @@
 1. 設定ファイルの場所を決める (ユーザーごとのフォルダーの `config/`。無いファイルは既定値からコピーする)。
 2. `ui.json` を読んでウィンドウとフォントを用意する。
 3. API キーがあるかを調べる (`RefreshCloudStatus`)。
-4. 別スレッドで RAG のインデックスを作る (変わっていないファイルは保存済みのベクトルを使い回す)。
+4. `server.json` の `managed` がオンなら、`llama-server` を起動する ([managed-server.md](managed-server.md))。
+5. 別スレッドで RAG のインデックスを作る (埋め込みサーバーの準備を待ち、変わっていないファイルは保存済みのベクトルを使い回す)。
 
 ## スレッド
 
@@ -80,6 +83,7 @@
 | UI スレッド | 画面を描く、ボタンの処理 | `ChatState` / `RagState` をロックして読む |
 | 会話のワーカースレッド (1 本) | ルーター・検索・回答・聞き直し | `ChatState` の `messages` に書く |
 | インデックス作成のスレッド | `rag/` の読み込みと埋め込み | `RagState` のチャンクと状態に書く |
+| サーバー管理のスレッド | `llama-server` の起動・監視・停止 | 状態をロックして公開する |
 
 ワーカースレッドは書き換えたあと UI を起こします (C++ 版は SDL のイベント、Python 版は `threading.Event` を UI スレッドが 30 ミリ秒ごとに見る)。中断は `cancel` のフラグで、どの段階でも止められます。
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+import server_manager
 from llm_client import CancelToken, LLMError, embed
 
 log = logging.getLogger(__name__)
@@ -354,6 +355,11 @@ def _build_index(state: RagState) -> None:
                for chunk in chunks
                if not chunk.vector]
 
+    # 起動直後は埋め込みサーバーの準備ができていない
+    if pending:
+        _set_status(state, "埋め込みサーバーの準備を待っています...")
+        server_manager.wait_for_embed(state.cancel)
+
     for i in range(0, len(pending), EMBED_BATCH):
         _set_status(state, f"インデックス作成中 {i} / {len(pending)}")
 
@@ -421,6 +427,7 @@ def search(state: RagState, query: str, cancel: CancelToken) -> list[RagHit]:
         if not state.chunks:
             raise LLMError("インデックスがありません")
 
+    server_manager.wait_for_embed(cancel)
     query_vector = _normalize(embed([query], cancel)[0])
 
     with state.lock:

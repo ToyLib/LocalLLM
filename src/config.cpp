@@ -408,6 +408,11 @@ ApiKey FindApiKey(const std::string& name)
     return {};
 }
 
+std::string UserDataDirectoryPath()
+{
+    return PathToUtf8(UserDataDirectory());
+}
+
 std::string SecretsFilePath()
 {
     try

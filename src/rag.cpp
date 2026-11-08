@@ -2,6 +2,7 @@
 
 #include "chat.h"
 #include "llm_client.h"
+#include "server_manager.h"
 
 #include <SDL3/SDL.h>
 
@@ -623,6 +624,13 @@ void BuildIndex(RagState& state)
         }
     }
 
+    // 起動直後は埋め込みサーバーの準備ができていない
+    if (!pending.empty())
+    {
+        SetStatus(state, "埋め込みサーバーの準備を待っています...");
+        WaitForEmbedServer(state.cancel);
+    }
+
     for (size_t i = 0; i < pending.size(); i += EMBED_BATCH)
     {
         SetStatus(
@@ -730,6 +738,8 @@ std::vector<RagHit> SearchRag(
             throw std::runtime_error("インデックスがありません");
         }
     }
+
+    WaitForEmbedServer(cancel);
 
     std::vector<float> queryVector = Embed({query}, cancel).front();
     Normalize(queryVector);

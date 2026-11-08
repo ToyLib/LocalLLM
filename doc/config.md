@@ -64,6 +64,13 @@
 | --- | --- | --- |
 | `chat_url` | `http://127.0.0.1:8080/v1/chat/completions` | ローカルのチャット用サーバー |
 | `embed_url` | `http://127.0.0.1:8081/v1/embeddings` | ローカルの埋め込み用サーバー (RAG) |
+| `managed.enabled` | `false` (`config/` の既定値は `true`) | アプリが `llama-server` を起動するか ([managed-server.md](managed-server.md)) |
+| `managed.server_path` | (自動で探す) | 使う `llama-server` |
+| `managed.chat_model` | `unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M` | チャットのモデル (`-hf` の値) |
+| `managed.embed_model` | `ggml-org/bge-m3-Q8_0-GGUF` | 埋め込みのモデル (空なら起動しない) |
+| `managed.context` | `4096` | チャットのコンテキスト長 |
+| `managed.embed_context` | `8192` | 埋め込みのコンテキスト長とバッチサイズ |
+| `managed.gpu_layers` | `99` | GPU に載せる層の数 |
 | `cloud.name` | `ChatGPT` | 画面に出す名前 |
 | `cloud.chat_url` | `https://api.openai.com/v1/chat/completions` | 問い合わせ先 (https のときだけ API キーを送る) |
 | `cloud.model` | `gpt-5-mini` | モデル名 |

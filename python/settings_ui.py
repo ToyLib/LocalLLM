@@ -11,13 +11,15 @@ import re
 import tkinter as tk
 import tkinter.font as tkfont
 from collections.abc import Callable
-from tkinter import colorchooser, messagebox
+from tkinter import colorchooser, filedialog, messagebox
 from tkinter import ttk
 from typing import Any
 
 import config
+import server_manager
 from agent import DEFAULT_AGENTS
 from llm_client import CloudSettings
+from server_manager import ManagerView, ServerView
 
 ERROR_COLOR = "#e05555"
 NOTE_COLOR = "#888888"
@@ -57,6 +59,41 @@ AGENT_ENTRIES = (
 
 # 回答役 (人格のテンプレートと、ChatGPT の回答の書き直しを選べる)
 ANSWERERS = ("assistant", "general")
+
+
+# llama-server で起動するモデルの候補 (表示名, モデル)
+CHAT_MODEL_PRESETS = (
+    ("Qwen3 4B 2507", "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M"),
+    ("Gemma 3 4B", "ggml-org/gemma-3-4b-it-GGUF"),
+    ("Phi-4 mini", "bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M"),
+    ("gpt-oss 20B", "ggml-org/gpt-oss-20b-GGUF:MXFP4"),
+)
+
+# 設定画面のサーバーの状態を読み直す間隔 (ミリ秒)
+SERVER_STATUS_REFRESH_MS = 1000
+
+
+def describe_server(name: str, server: ServerView) -> str:
+    text = f"{name}: {server.status.value}"
+    return f"{text} ({server.detail})" if server.detail else text
+
+
+def describe_manager(view: ManagerView) -> str:
+    """設定画面に出すサーバーの状態"""
+
+    lines = [describe_server("チャットのサーバー", view.chat),
+             describe_server("埋め込みのサーバー", view.embed)]
+
+    if view.binary_path:
+        lines.append(f"使用中: {view.binary_path} ({view.binary_source})")
+
+    if view.warning:
+        lines.append(view.warning)
+
+    if view.log_directory:
+        lines.append(f"ログ: {view.log_directory}")
+
+    return "\n".join(lines)
 
 
 def mask_key(key: str) -> str:
@@ -235,6 +272,7 @@ class SettingsDialog:
         notebook.add(self._build_ui_tab(notebook), text="画面")
         notebook.add(self._build_prompt_tab(notebook), text="システムプロンプト")
         notebook.add(self._build_server_tab(notebook), text="サーバー")
+        notebook.add(self._build_managed_tab(notebook), text="llama-server")
 
     def _build_ui_tab(self, parent: ttk.Notebook) -> ttk.Frame:
         tab = ttk.Frame(parent, padding=12)
@@ -506,6 +544,95 @@ class SettingsDialog:
 
         return tab
 
+    def _build_managed_tab(self, parent: ttk.Notebook) -> ttk.Frame:
+        """llama-server の自動起動 (server.json の managed)"""
+
+        tab = ttk.Frame(parent, padding=12)
+        tab.columnconfigure(1, weight=1)
+
+        managed = server_manager.load_managed_settings()
+
+        self.managed_enabled = tk.BooleanVar(value=managed.enabled)
+        ttk.Checkbutton(
+            tab, variable=self.managed_enabled,
+            text="アプリから llama-server を起動する",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+
+        ttk.Label(tab, text="モデルの候補").grid(row=1, column=0, sticky="w")
+        names = [name for name, _model in CHAT_MODEL_PRESETS]
+        self.model_preset = ttk.Combobox(tab, values=names, state="readonly")
+        self.model_preset.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=2)
+        self.model_preset.bind("<<ComboboxSelected>>", self._on_model_preset)
+
+        self.managed_text: dict[str, tk.StringVar] = {}
+
+        for row, (key, label, value) in enumerate((
+                ("chat_model", "チャットのモデル", managed.chat_model),
+                ("embed_model", "埋め込みのモデル (空なら起動しない)", managed.embed_model),
+                ("server_path", "llama-server の場所 (空なら自動で探す)", managed.server_path),
+        ), start=2):
+            variable = tk.StringVar(value=value)
+            ttk.Label(tab, text=label).grid(row=row, column=0, sticky="w")
+            ttk.Entry(tab, textvariable=variable).grid(
+                row=row, column=1, sticky="ew", padx=(8, 0), pady=2)
+            self.managed_text[key] = variable
+
+        ttk.Button(tab, text="参照...", command=self._browse_server_path).grid(
+            row=4, column=2, sticky="w", padx=(6, 0))
+
+        self.managed_numbers: dict[str, tuple[tk.StringVar, str, int]] = {}
+
+        for row, (key, label, value, minimum) in enumerate((
+                ("context", "チャットのコンテキスト", managed.context, 1),
+                ("embed_context", "埋め込みのコンテキスト", managed.embed_context, 1),
+                ("gpu_layers", "GPU に載せる層の数", managed.gpu_layers, 0),
+        ), start=5):
+            variable = tk.StringVar(value=str(value))
+            ttk.Label(tab, text=label).grid(row=row, column=0, sticky="w")
+            ttk.Entry(tab, textvariable=variable, width=10).grid(
+                row=row, column=1, sticky="w", padx=(8, 0), pady=2)
+            self.managed_numbers[key] = (variable, label, minimum)
+
+        self.managed_text["chat_model"].trace_add(
+            "write", lambda *_: self._select_model_preset())
+        self._select_model_preset()
+
+        self.managed_status = ttk.Label(
+            tab, foreground=NOTE_COLOR, wraplength=560, justify="left")
+        self.managed_status.grid(
+            row=8, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        self._refresh_managed_status()
+
+        return tab
+
+    def _select_model_preset(self) -> None:
+        model = self.managed_text["chat_model"].get()
+        models = [model_id for _name, model_id in CHAT_MODEL_PRESETS]
+
+        if model in models:
+            self.model_preset.current(models.index(model))
+        else:
+            self.model_preset.set("(その他)")
+
+    def _on_model_preset(self, _event: tk.Event) -> None:
+        self.managed_text["chat_model"].set(
+            CHAT_MODEL_PRESETS[self.model_preset.current()][1])
+
+    def _browse_server_path(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self.window, title="llama-server を選ぶ")
+
+        if path:
+            self.managed_text["server_path"].set(path)
+
+    def _refresh_managed_status(self) -> None:
+        if not self.window.winfo_exists():
+            return
+
+        self.managed_status.configure(
+            text=describe_manager(server_manager.view()))
+        self.window.after(SERVER_STATUS_REFRESH_MS, self._refresh_managed_status)
+
     def _update_key_status(self) -> None:
         self.key_status.configure(
             text="API キー: " + describe_api_key(self.cloud["api_key_name"].get()))
@@ -590,6 +717,19 @@ class SettingsDialog:
                 text=f"色は #RRGGBB の形で書いてください: {'、'.join(invalid)}")
             return
 
+        managed_numbers: dict[str, int] = {}
+
+        for key, (variable, label, minimum) in self.managed_numbers.items():
+            try:
+                managed_numbers[key] = int(variable.get())
+            except ValueError:
+                managed_numbers[key] = minimum - 1
+
+            if managed_numbers[key] < minimum:
+                self.save_error.configure(
+                    text=f"{label}は {minimum} 以上の整数にしてください")
+                return
+
         colors = self._current_colors()
 
         self.ui_json["python_font_size"] = size
@@ -603,6 +743,18 @@ class SettingsDialog:
 
         for key, variable in self.urls.items():
             self.server_json[key] = variable.get()
+
+        managed = self.server_json.get("managed")
+
+        if not isinstance(managed, dict):
+            managed = self.server_json["managed"] = {}
+
+        managed["enabled"] = self.managed_enabled.get()
+
+        for key, variable in self.managed_text.items():
+            managed[key] = variable.get()
+
+        managed.update(managed_numbers)
 
         # auth など、画面で扱わない項目はそのまま残す
         cloud = self.server_json.get("cloud")

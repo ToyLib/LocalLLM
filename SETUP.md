@@ -13,7 +13,7 @@ OS によらない環境構築の手順と説明をまとめた手順書。パ�
 
 C++20 と SDL3 + Dear ImGui を使ったローカル LLM チャットクライアントの開発環境を構築する。
 
-LLM 本体は別プロセスの `llama-server` で実行し、クライアントは OpenAI 互換の HTTP API を通じて通信する。
+LLM 本体は別プロセスの `llama-server` で実行し、クライアントは OpenAI 互換の HTTP API を通じて通信する。`llama-server` はアプリが起動・停止するので、手で立ち上げる必要はない。
 
 | 項目 | 構成 |
 |---|---|
@@ -32,11 +32,10 @@ LLM 本体は別プロセスの `llama-server` で実行し、クライアント
 |---|---|
 | 1. コンパイラとライブラリを入れる | OS ごとの手順書 |
 | 2. LocalLLM をビルドする | 「4. ビルド」と OS ごとの手順書 |
-| 3. llama.cpp を入れる (ビルドするか、パッケージやビルド済みのバイナリを使う) | OS ごとの手順書 |
-| 4. llama-server を起動する | 「6. llama.cpp サーバー」と OS ごとの手順書 |
-| 5. つながることを確かめる | 「7. クライアントとサーバーの接続」「8. 動作確認手順」 |
+| 3. アプリを起動する (`llama-server` はビルドで同梱され、アプリが起動する) | 「6. llama.cpp サーバー」 |
+| 4. つながることを確かめる | 「8. 動作確認手順」 |
 
-Python 版 (`python/`) はビルドが要らず、Python 3.10 以上と Tk があれば `python3 python/main.py` で動く (README の「Python 版」と [doc/python-app.md](doc/python-app.md))。llama-server は C++ 版と同じものを使う。
+Python 版 (`python/`) はビルドが要らず、Python 3.10 以上と Tk があれば `python3 python/main.py` で動く (README の「Python 版」と [doc/python-app.md](doc/python-app.md))。`llama-server` が見つからなければ、初回の起動時に公式リリースをユーザーごとのフォルダーへダウンロードする。
 
 ## 3. プロジェクト構成
 
@@ -51,6 +50,7 @@ LocalLLM/
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md
 ├── LICENSE
+├── llama-release.json  (同梱する llama-server の公式リリースのタグとハッシュ)
 ├── config/                 (設定の既定値)
 │   ├── ui.json
 │   ├── server.json
@@ -113,6 +113,7 @@ LocalLLM/
 | src/rag.h/.cpp | RAG のインデックス作成と検索 |
 | src/config.h/.cpp | 設定ファイルの読み書き、API キー |
 | src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理、埋め込み |
+| src/server_manager.h/.cpp | llama-server の起動・監視・停止 ([doc/managed-server.md](doc/managed-server.md)) |
 | src/ime.h/.cpp | IME の変換中の文字列の表示 |
 | src/font.h/.cpp | 日本語フォントの読み込み |
 | src/macos_window.h/.mm | macOS のタイトルバーの設定 |
@@ -120,7 +121,8 @@ LocalLLM/
 | rag/ | RAG の資料 (ビルド時に実行ファイルの隣へコピー。[doc/rag.md](doc/rag.md)) |
 | python/ | Python + Tk 版のクライアント ([doc/python-app.md](doc/python-app.md)) |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
-| scripts/ | llama-server の起動スクリプトと、ダウンロードしたモデルの削除スクリプト (OS 別) |
+| llama-release.json | ビルド時 (Python 版は初回の起動時) に取得する `llama-server` の公式リリース |
+| scripts/ | llama-server の起動スクリプト (自分で起動したいとき用) と、ダウンロードしたモデルの削除スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
 
@@ -227,9 +229,23 @@ ImGui 1.92 はフォントの文字を必要なときに読み込むため、日
 
 ## 6. llama.cpp サーバー
 
-llama.cpp はクライアントとは独立して起動する。入れ方 (ソースからのビルド、パッケージ、ビルド済みのバイナリ) は OS ごとの手順書を参照。ソースからビルドする場合の置き場所は、どの OS でも `~/Repos/llama.cpp/` (Windows は `%USERPROFILE%\Repos\llama.cpp\`) を前提にしている。
+ビルドすると [llama-release.json](llama-release.json) の公式リリースが取得され、実行ファイルの隣の `llama/` に同梱される。アプリを起動すると、チャット用と埋め込み用の `llama-server` を起動し、終了するときに止める。自分で llama.cpp をビルドしたり起動したりする必要はない。
 
-### 起動スクリプト
+- 使うモデルは設定画面の「サーバー」のタブ (Python 版は「llama-server」のタブ) で選ぶ。保存すると起動し直す。既定は Qwen3 4B 2507。
+- 初回はモデルをダウンロードするので時間がかかる (下の「ダウンロードしたモデルの保存場所と削除」)。その間は画面の上部に状態が出て、送信ボタンは押せない。
+- サーバーのログは、ユーザーごとのフォルダーの `logs/` に出る (場所は設定画面に表示される)。
+- 動きの詳細は [doc/managed-server.md](doc/managed-server.md) を参照。
+
+### 自分で用意した llama-server を使う場合
+
+次のどちらかで、同梱のものの代わりに使える。
+
+- 設定画面の「llama-server の場所」で指定するか、環境変数 `LLAMA_SERVER` で指定する。
+- 自分で起動しておく。`/health` に応答するサーバーがあれば、アプリは新しく起動せず、それを使う (止めることもしない)。
+
+ビルド時に公式リリースを取得したくないときは、CMake に `-DLOCALLLM_BUNDLE_LLAMA=OFF` を付ける。
+
+### 起動スクリプト (自分で起動するとき)
 
 モデルをメニューから選んで起動するサンプルスクリプトを `scripts/` に置いてある。
 
@@ -351,16 +367,14 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 ## 8. 動作確認手順
 
-1. `llama-server` を起動する。
-2. `/health` でサーバーの応答を確認する。
-3. `LocalLLM` を起動する。
-4. 日本語で質問を入力する。
-5. Enter キーで送信する (Shift+Enter で改行)。
-6. 回答がストリーミング表示されることを確認する。
-7. 続けて質問し、会話履歴が保持されることを確認する。
-8. 受信中に「中断」を押し、途中で止まることを確認する。
-9. 画面上部に `6 ファイル / 54 チャンク` のように RAG のインデックスの状態が出ることを確認し、「ミケのおやつは 1 日何本まで？」のように資料についての質問をする ([doc/rag.md](doc/rag.md))。
-10. サーバーを別のモデルで起動し直して比較する。
+1. `LocalLLM` を起動し、画面上部の「読み込み中」の表示が消えるまで待つ (初回はモデルのダウンロードがある)。
+2. 日本語で質問を入力する。
+3. Enter キーで送信する (Shift+Enter で改行)。
+4. 回答がストリーミング表示されることを確認する。
+5. 続けて質問し、会話履歴が保持されることを確認する。
+6. 受信中に「中断」を押し、途中で止まることを確認する。
+7. 画面上部に `6 ファイル / 54 チャンク` のように RAG のインデックスの状態が出ることを確認し、「ミケのおやつは 1 日何本まで？」のように資料についての質問をする ([doc/rag.md](doc/rag.md))。
+8. 設定画面で別のモデルを選んで保存し、比較する。
 
 ## 9. 注意事項
 

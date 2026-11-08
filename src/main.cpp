@@ -4,6 +4,7 @@
 #include "font.h"
 #include "ime.h"
 #include "rag.h"
+#include "server_manager.h"
 #include "settings_ui.h"
 
 #include <SDL3/SDL.h>
@@ -102,6 +103,9 @@ int main(int, char**)
     std::string input;
     bool focusInput = true;
 
+    // server.json の managed がオンなら llama-server を起動する
+    StartServerManager();
+
     // rag/ の資料のインデックスをバックグラウンドで作る
     StartRagIndexing(rag);
 
@@ -179,6 +183,10 @@ int main(int, char**)
 
     rag.cancel = true;
     JoinRagWorker(rag);
+
+    // サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
+    SDL_HideWindow(window);
+    StopServerManager();
 
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();

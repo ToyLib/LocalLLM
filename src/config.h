@@ -38,6 +38,10 @@ void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& confi
 // 設定ファイルを読み書きするフォルダー (設定画面に出す)
 std::string ConfigDirectoryPath();
 
+// ユーザーごとのフォルダー (ログなど、設定のほかに書き込むものの置き場所)
+// 分からなければ std::runtime_error
+std::string UserDataDirectoryPath();
+
 // 設定を既定値に戻せるか (LOCALLLM_CONFIG_DIR を指定しているときは、そのフォルダーが既定値なので戻せない)
 bool CanResetConfig();
 

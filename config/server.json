@@ -1,6 +1,15 @@
 {
   "chat_url": "http://127.0.0.1:8080/v1/chat/completions",
   "embed_url": "http://127.0.0.1:8081/v1/embeddings",
+  "managed": {
+    "enabled": true,
+    "server_path": "",
+    "chat_model": "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M",
+    "embed_model": "ggml-org/bge-m3-Q8_0-GGUF",
+    "context": 4096,
+    "embed_context": 8192,
+    "gpu_layers": 99
+  },
   "cloud": {
     "name": "ChatGPT",
     "chat_url": "https://api.openai.com/v1/chat/completions",

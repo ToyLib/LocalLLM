@@ -2,7 +2,9 @@
 
 #include "agent.h"
 #include "config.h"
+#include "chat.h"
 #include "llm_client.h"
+#include "server_manager.h"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -12,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <exception>
+#include <mutex>
 
 using ordered_json = nlohmann::ordered_json;
 
@@ -24,6 +27,37 @@ constexpr const char* RESET_POPUP_NAME = "既定に戻す";
 // 文字の大きさを選べる範囲 (ピクセル)
 constexpr int MIN_FONT_SIZE = 10;
 constexpr int MAX_FONT_SIZE = 48;
+
+// llama-server で起動するモデルの候補
+struct ModelPreset
+{
+    const char* name;
+    const char* model;
+};
+
+constexpr ModelPreset CHAT_MODEL_PRESETS[] = {
+    {"Qwen3 4B 2507", "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M"},
+    {"Gemma 3 4B", "ggml-org/gemma-3-4b-it-GGUF"},
+    {"Phi-4 mini", "bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M"},
+    {"gpt-oss 20B", "ggml-org/gpt-oss-20b-GGUF:MXFP4"},
+};
+
+// ファイル選択ダイアログの結果 (ダイアログのコールバックは別のスレッドから呼ばれることがある)
+std::mutex pickedServerPathMutex;
+std::string pickedServerPath;
+
+void SDLCALL OnServerPathPicked(void*, const char* const* files, int)
+{
+    if (files && files[0])
+    {
+        {
+            std::lock_guard lock(pickedServerPathMutex);
+            pickedServerPath = files[0];
+        }
+
+        WakeUI();
+    }
+}
 
 // ui.json の colors のキーと、画面に出す説明
 struct ColorEntry
@@ -339,6 +373,15 @@ void LoadSettings(SettingsState& settings)
     settings.chatUrl = StringOr(settings.serverJson, "chat_url", "");
     settings.embedUrl = StringOr(settings.serverJson, "embed_url", "");
 
+    const ManagedSettings managed = LoadManagedSettings();
+    settings.managedEnabled = managed.enabled;
+    settings.managedServerPath = managed.serverPath;
+    settings.managedChatModel = managed.chatModel;
+    settings.managedEmbedModel = managed.embedModel;
+    settings.managedContext = managed.context;
+    settings.managedEmbedContext = managed.embedContext;
+    settings.managedGpuLayers = managed.gpuLayers;
+
     // cloud が無い (前の版の設定ファイル) ときは既定値
     const CloudSettings defaults;
     const ordered_json cloud =
@@ -434,6 +477,21 @@ bool SaveSettings(SettingsState& settings)
 
     settings.serverJson["chat_url"] = settings.chatUrl;
     settings.serverJson["embed_url"] = settings.embedUrl;
+
+    ordered_json& managed = settings.serverJson["managed"];
+
+    if (!managed.is_object())
+    {
+        managed = ordered_json::object();
+    }
+
+    managed["enabled"] = settings.managedEnabled;
+    managed["server_path"] = settings.managedServerPath;
+    managed["chat_model"] = settings.managedChatModel;
+    managed["embed_model"] = settings.managedEmbedModel;
+    managed["context"] = (std::max)(settings.managedContext, 1);
+    managed["embed_context"] = (std::max)(settings.managedEmbedContext, 1);
+    managed["gpu_layers"] = (std::max)(settings.managedGpuLayers, 0);
 
     // auth など、画面で扱わない項目はそのまま残す
     ordered_json& cloud = settings.serverJson["cloud"];
@@ -622,12 +680,113 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
     ImGui::EndTabBar();
 }
 
+void DrawChatModelPicker(SettingsState& settings)
+{
+    const char* preview = "(その他)";
+
+    for (const auto& preset : CHAT_MODEL_PRESETS)
+    {
+        if (settings.managedChatModel == preset.model)
+        {
+            preview = preset.name;
+        }
+    }
+
+    if (ImGui::BeginCombo("モデルの候補", preview))
+    {
+        for (const auto& preset : CHAT_MODEL_PRESETS)
+        {
+            if (ImGui::Selectable(preset.name, settings.managedChatModel == preset.model))
+            {
+                settings.managedChatModel = preset.model;
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+}
+
+void DrawServerStatusLine(const char* name, const ServerView& view)
+{
+    ImGui::PushTextWrapPos(0.0f);
+
+    if (view.detail.empty())
+    {
+        ImGui::Text("%s: %s", name, ServerStatusText(view.status));
+    }
+    else
+    {
+        ImGui::Text("%s: %s (%s)", name, ServerStatusText(view.status), view.detail.c_str());
+    }
+
+    ImGui::PopTextWrapPos();
+}
+
+void DrawManagedServer(SettingsState& settings)
+{
+    ImGui::SeparatorText("llama-server の自動起動");
+    ImGui::Checkbox("アプリから llama-server を起動する", &settings.managedEnabled);
+
+    {
+        std::lock_guard lock(pickedServerPathMutex);
+
+        if (!pickedServerPath.empty())
+        {
+            settings.managedServerPath = std::move(pickedServerPath);
+            pickedServerPath.clear();
+        }
+    }
+
+    ImGui::BeginDisabled(!settings.managedEnabled);
+
+    DrawChatModelPicker(settings);
+    ImGui::InputText("チャットのモデル", &settings.managedChatModel);
+    ImGui::InputText("埋め込みのモデル (空なら起動しない)", &settings.managedEmbedModel);
+    ImGui::InputInt("チャットのコンテキスト", &settings.managedContext, 0);
+    ImGui::InputInt("埋め込みのコンテキスト", &settings.managedEmbedContext, 0);
+    ImGui::InputInt("GPU に載せる層の数", &settings.managedGpuLayers, 0);
+
+    ImGui::InputText("llama-server の場所 (空なら自動で探す)", &settings.managedServerPath);
+    ImGui::SameLine();
+
+    if (ImGui::SmallButton("参照..."))
+    {
+        SDL_ShowOpenFileDialog(
+            OnServerPathPicked, nullptr, nullptr, nullptr, 0, nullptr, false);
+    }
+
+    ImGui::EndDisabled();
+
+    const ServerManagerView view = GetServerManagerView();
+
+    DrawServerStatusLine("チャットのサーバー", view.chat);
+    DrawServerStatusLine("埋め込みのサーバー", view.embed);
+
+    if (!view.binaryPath.empty())
+    {
+        ImGui::TextDisabled(
+            "使用中: %s (%s)", view.binaryPath.c_str(), view.binarySource.c_str());
+    }
+
+    if (!view.warning.empty())
+    {
+        ImGui::TextColored(ActiveUiSettings(settings).colors.error, "%s", view.warning.c_str());
+    }
+
+    if (!view.logDirectory.empty())
+    {
+        ImGui::TextDisabled("ログ: %s", view.logDirectory.c_str());
+    }
+}
+
 void DrawServerTab(SettingsState& settings)
 {
     ImGui::SeparatorText("ローカル");
     ImGui::InputText("チャット", &settings.chatUrl);
     ImGui::InputText("埋め込み (RAG)", &settings.embedUrl);
     ImGui::TextDisabled("保存すると次の質問から反映されます。");
+
+    DrawManagedServer(settings);
 
     ImGui::SeparatorText("ChatGPT (「聞き直す」ボタンで使う)");
     ImGui::InputText("表示名", &settings.cloudName);
