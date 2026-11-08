@@ -1,4 +1,4 @@
-"""役割ごとの LLM の呼び出し (ルーター / アシスタント / 侍)"""
+"""役割ごとの LLM の呼び出し (ルーター / 回答役)"""
 
 from __future__ import annotations
 
@@ -172,7 +172,7 @@ def create_assistant() -> Agent:
 
 def create_general() -> Agent:
     """資料の要らない質問 (雑談や一般的な質問) に答える
-    口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)"""
+    口調は config/agents.json の system プロンプトで決まる (既定は assistant と同じアシスタント)"""
 
     return _load_agent("general")
 

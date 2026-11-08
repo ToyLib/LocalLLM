@@ -40,7 +40,7 @@ json RunAgentJson(
 Agent CreateAssistant();
 
 // 資料の要らない質問 (雑談や一般的な質問) に答える
-// 口調は config/agents.json の system プロンプトで決まる (既定は時代劇の侍の口調)
+// 口調は config/agents.json の system プロンプトで決まる (既定は assistant と同じアシスタント)
 Agent CreateGeneral();
 
 // key (assistant / general) の回答役

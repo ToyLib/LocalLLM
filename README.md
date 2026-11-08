@@ -15,7 +15,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 半透明のチャット画面
 - メッセージを右クリックでコピー
 - `rag/` フォルダの資料 (.md / .txt) を参照した回答 (RAG、[説明](doc/rag.md))
-- 資料を参照するかを質問ごとに判断するルーターと、口調の違う 2 つの回答役 (資料に基づくアシスタント / 時代劇口調の侍) ([説明](doc/agent.md))
+- 資料を参照するかを質問ごとに判断するルーターと、2 つの回答役 (資料を参照する質問用 / 資料の要らない質問用。既定はどちらもアシスタント) ([説明](doc/agent.md))
 - 物足りない回答は「ChatGPT に聞き直す」ボタンで ChatGPT (OpenAI API) に聞き直し、回答役の口調で言い直して表示 ([説明](doc/chatgpt.md))
 - 回答役の人格をテンプレート (侍・悟空風・バカボンのパパ風・大阪のおばちゃん・執事・猫など) から選び、設定画面で好みに直せる
 
@@ -213,7 +213,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | --- | --- |
 | `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
 | `src/chat.cpp` / `src/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
-| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出し (ルーター / アシスタント / 侍) |
+| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
 | `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
 | `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
 | `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
