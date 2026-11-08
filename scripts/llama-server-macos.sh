@@ -4,7 +4,7 @@ set -euo pipefail
 
 # --------------------------------------------------
 # llama.cpp server launcher (macOS / Metal)
-# Qwen3 / Gemma3 / Phi-4 mini
+# Qwen3 / Gemma3 / Phi-4 mini / gpt-oss
 #
 # Also starts the embedding server for RAG (BGE-M3, port 8081) in the
 # background and stops it when the chat server exits.
@@ -72,18 +72,19 @@ echo "=================================="
 echo " Local LLM Server Launcher"
 echo "=================================="
 echo
-echo "  1) Qwen3 4B"
+echo "  1) Qwen3 4B 2507"
 echo "  2) Gemma 3 4B"
 echo "  3) Phi-4 mini"
+echo "  4) gpt-oss 20B"
 echo "  q) Quit"
 echo
 
-read -rp "Select model [1-3]: " choice
+read -rp "Select model [1-4]: " choice
 
 case "$choice" in
     1)
-        NAME="Qwen3 4B"
-        MODEL="Qwen/Qwen3-4B-GGUF:Q4_K_M"
+        NAME="Qwen3 4B 2507"
+        MODEL="unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M"
         ;;
     2)
         NAME="Gemma 3 4B"
@@ -92,6 +93,10 @@ case "$choice" in
     3)
         NAME="Phi-4 mini"
         MODEL="bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M"
+        ;;
+    4)
+        NAME="gpt-oss 20B"
+        MODEL="ggml-org/gpt-oss-20b-GGUF:MXFP4"
         ;;
     q|Q)
         exit 0

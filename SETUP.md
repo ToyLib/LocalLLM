@@ -24,7 +24,7 @@ LLM 本体は別プロセスの `llama-server` で実行し、クライアント
 | HTTP 通信 | libcurl |
 | JSON | nlohmann/json |
 | LLM サーバー | llama.cpp (Linux / Windows: Vulkan、macOS: Metal) |
-| 対応モデル | Qwen3 4B / Gemma 3 4B / Phi-4 mini |
+| 対応モデル | Qwen3 4B 2507 / Gemma 3 4B / Phi-4 mini / gpt-oss 20B |
 
 ## 2. 手順の流れ
 
@@ -256,15 +256,16 @@ llama.cpp はクライアントとは独立して起動する。入れ方 (ソ�
 
 | モデル | `-hf` の値 |
 |---|---|
-| Qwen3 4B | `Qwen/Qwen3-4B-GGUF:Q4_K_M` |
+| Qwen3 4B 2507 | `unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M` |
 | Gemma 3 4B | `ggml-org/gemma-3-4b-it-GGUF` |
 | Phi-4 mini | `bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M` |
+| gpt-oss 20B | `ggml-org/gpt-oss-20b-GGUF:MXFP4` |
 
-例 (Qwen3 4B。`llama-server` の場所と行の継続の書き方は OS ごとの手順書を参照)：
+例 (Qwen3 4B 2507。`llama-server` の場所と行の継続の書き方は OS ごとの手順書を参照)：
 
 ```bash
 llama-server \
-    -hf Qwen/Qwen3-4B-GGUF:Q4_K_M \
+    -hf unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M \
     -ngl 99 \
     -c 4096 \
     --alias local \

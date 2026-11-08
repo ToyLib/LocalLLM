@@ -218,11 +218,11 @@ $env:LLAMA_SERVER = "C:\path\to\llama-server.exe"
 .\scripts\llama-server-windows.bat
 ```
 
-スクリプトを使わずに起動する場合は、`build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う (Qwen3 4B。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)。
+スクリプトを使わずに起動する場合は、`build\bin\Release\` (ビルド済みのバイナリの場合は展開したフォルダー) で実行する。PowerShell では、行の継続にバッククォート (`` ` ``) を使う (Qwen3 4B 2507。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)。
 
 ```powershell
 .\llama-server.exe `
-    -hf Qwen/Qwen3-4B-GGUF:Q4_K_M `
+    -hf unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M `
     -ngl 99 `
     -c 4096 `
     --alias local `

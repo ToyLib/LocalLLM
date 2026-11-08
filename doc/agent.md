@@ -131,9 +131,9 @@ llama-server はスキーマから文法を作って出力を縛るので、4B �
 
 | 設定 | 値 | 理由 |
 | --- | --- | --- |
-| `maxTokens` | 128 | 判断と短い理由だけなので |
+| `maxTokens` | 256 | 判断と短い理由だけなので。gpt-oss は推論のトークンもここに含まれるので少し余裕を持たせている |
 | `temperature` | 0 | 同じ質問には同じ判断を返すように |
-| `disableThinking` | true | Qwen3 などの考える過程を出すモデルで、考えずにすぐ答えさせる (`chat_template_kwargs.enable_thinking = false`) |
+| `disableThinking` | true | Qwen3 などの考える過程を出すモデルで、考えずにすぐ答えさせる (`chat_template_kwargs.enable_thinking = false`)。gpt-oss は推論を切れないので `reasoning_effort = "low"` も送って推論を最小にする |
 
 スキーマでは `reason` を `use_rag` より先に置いています。先に理由を書かせてから結論を出させるほうが、判断が安定します。
 

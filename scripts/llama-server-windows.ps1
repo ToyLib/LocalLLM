@@ -1,6 +1,6 @@
 # --------------------------------------------------
 # llama.cpp server launcher (Windows / Vulkan)
-# Qwen3 / Gemma3 / Phi-4 mini
+# Qwen3 / Gemma3 / Phi-4 mini / gpt-oss
 #
 # Also starts the embedding server for RAG (BGE-M3, port 8081) in the
 # background and stops it when the chat server exits.
@@ -51,18 +51,19 @@ Write-Host '=================================='
 Write-Host ' Local LLM Server Launcher'
 Write-Host '=================================='
 Write-Host ''
-Write-Host '  1) Qwen3 4B'
+Write-Host '  1) Qwen3 4B 2507'
 Write-Host '  2) Gemma 3 4B'
 Write-Host '  3) Phi-4 mini'
+Write-Host '  4) gpt-oss 20B'
 Write-Host '  q) Quit'
 Write-Host ''
 
-$choice = Read-Host 'Select model [1-3]'
+$choice = Read-Host 'Select model [1-4]'
 
 switch ($choice) {
     '1' {
-        $Name = 'Qwen3 4B'
-        $Model = 'Qwen/Qwen3-4B-GGUF:Q4_K_M'
+        $Name = 'Qwen3 4B 2507'
+        $Model = 'unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M'
     }
     '2' {
         $Name = 'Gemma 3 4B'
@@ -71,6 +72,10 @@ switch ($choice) {
     '3' {
         $Name = 'Phi-4 mini'
         $Model = 'bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M'
+    }
+    '4' {
+        $Name = 'gpt-oss 20B'
+        $Model = 'ggml-org/gpt-oss-20b-GGUF:MXFP4'
     }
     'q' {
         # switch is case-insensitive, so 'Q' also matches

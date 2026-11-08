@@ -161,7 +161,8 @@ Agent CreateRouter()
     Agent agent = LoadAgent("router");
 
     // 判断だけなので短く、毎回同じ答えになるように
-    agent.options.maxTokens = 128;
+    // (gpt-oss は推論のトークンもここに含まれるので、少し余裕を持たせる)
+    agent.options.maxTokens = 256;
     agent.options.temperature = 0.0f;
     agent.options.disableThinking = true;
 

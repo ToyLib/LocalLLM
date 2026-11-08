@@ -61,7 +61,7 @@ cmake --build build --parallel
    llama-server -m /path/to/model.gguf --port 8080
    ```
 
-   モデルをメニューから選んで起動するサンプルスクリプトもあります (Qwen3 4B / Gemma 3 4B / Phi-4 mini)。
+   モデルをメニューから選んで起動するサンプルスクリプトもあります (Qwen3 4B 2507 / Gemma 3 4B / Phi-4 mini / gpt-oss 20B)。
 
    | OS | スクリプト |
    | --- | --- |

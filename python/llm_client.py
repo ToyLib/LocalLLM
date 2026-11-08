@@ -88,6 +88,7 @@ class LLMOptions:
     schema: dict[str, Any] | None = None
 
     # 考える過程を出すモデル (Qwen3 など) で、考えずに答えさせる
+    # (gpt-oss は推論を切れないので、推論の量を最小にする)
     disable_thinking: bool = False
 
     # True ならローカルの LLM ではなく、クラウド (ChatGPT など、server.json の cloud) に送る
@@ -341,7 +342,12 @@ def ask_llm(
             }
 
         if options.disable_thinking:
-            request["chat_template_kwargs"] = {"enable_thinking": False}
+            # enable_thinking: Qwen3 など。gpt-oss は推論を切れないので reasoning_effort を最小にする
+            # (テンプレートが使わない項目は無視される)
+            request["chat_template_kwargs"] = {
+                "enable_thinking": False,
+                "reasoning_effort": "low",
+            }
 
     answer: list[str] = []
     done = False

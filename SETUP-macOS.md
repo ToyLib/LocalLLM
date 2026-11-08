@@ -152,11 +152,11 @@ llama-server は次の順に探す。
 2. `$LLAMA_DIR/build/bin/llama-server` (ソースからビルドしたもの。`LLAMA_DIR` の既定は `~/Repos/llama.cpp`)
 3. PATH 上の `llama-server` (Homebrew で入れたもの)
 
-スクリプトを使わずに起動する場合 (Qwen3 4B。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)：
+スクリプトを使わずに起動する場合 (Qwen3 4B 2507。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)：
 
 ```bash
 llama-server \
-    -hf Qwen/Qwen3-4B-GGUF:Q4_K_M \
+    -hf unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M \
     -ngl 99 \
     -c 4096 \
     --alias local \

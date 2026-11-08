@@ -393,7 +393,12 @@ std::string AskLLM(
 
         if (options.disableThinking)
         {
-            request["chat_template_kwargs"] = {{"enable_thinking", false}};
+            // enable_thinking: Qwen3 など。gpt-oss は推論を切れないので reasoning_effort を最小にする
+            // (テンプレートが使わない項目は無視される)
+            request["chat_template_kwargs"] = {
+                {"enable_thinking", false},
+                {"reasoning_effort", "low"}
+            };
         }
     }
 

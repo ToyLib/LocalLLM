@@ -25,6 +25,7 @@ struct LLMOptions
     json schema = nullptr;
 
     // 考える過程を出すモデル (Qwen3 など) で、考えずに答えさせる
+    // (gpt-oss は推論を切れないので、推論の量を最小にする)
     bool disableThinking = false;
 
     // true ならローカルの LLM ではなく、クラウド (ChatGPT など、server.json の cloud) に送る

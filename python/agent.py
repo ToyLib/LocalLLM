@@ -148,7 +148,8 @@ def _create_router() -> Agent:
         # 判断だけなので短く、毎回同じ答えになるように
         # 先に理由を書かせてから結論を出させる
         LLMOptions(
-            max_tokens=128,
+            # gpt-oss は推論のトークンもここに含まれるので、少し余裕を持たせる
+            max_tokens=256,
             temperature=0.0,
             disable_thinking=True,
             schema={

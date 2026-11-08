@@ -194,13 +194,13 @@ LLAMA_DIR=/path/to/llama.cpp ./scripts/llama-server-linux.sh
 LLAMA_SERVER=/path/to/llama-server ./scripts/llama-server-linux.sh
 ```
 
-スクリプトを使わずに起動する場合 (Qwen3 4B。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)：
+スクリプトを使わずに起動する場合 (Qwen3 4B 2507。ほかのモデルの `-hf` の値は [SETUP.md](SETUP.md) の「モデル別の起動」)：
 
 ```bash
 cd ~/Repos/llama.cpp
 
 ./build/bin/llama-server \
-    -hf Qwen/Qwen3-4B-GGUF:Q4_K_M \
+    -hf unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M \
     -ngl 99 \
     -c 4096 \
     --alias local \
