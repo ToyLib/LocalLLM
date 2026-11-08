@@ -188,9 +188,9 @@ C++ 版は SDL3 の `SDL_CreateProcessWithProperties` を使い、OS ごとの�
 
 ## 10. 実装時に確かめること
 
-実装のときに確かめられたのは macOS (Apple Silicon) だけです。次の点は実機で確かめていません。
+macOS (Apple Silicon) と Windows では、C++ 版と Python 版の動作を確かめました。次の点は実機で確かめていません。
 
-- Windows: ビルド (`AttachToAppLifetime` などの Windows 専用のコード)、VC++ ランタイムが要るか (Windows Sandbox などのまっさらな環境で確認)、`SDL_KillProcess` の挙動。
+- Windows: まっさらな環境で VC++ ランタイムが要るか (Windows Sandbox などで確認)。
 - Linux: 公式リリースが Ubuntu と Arch の両方で動くか。動かない OS があれば、その手順書のビルド手順を残す。
 - モデルのダウンロード中の `/health` の挙動 (時間で打ち切らないので、どちらでも動く想定)。
 

@@ -89,7 +89,7 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | Linux | `$XDG_CONFIG_HOME/LocalLLM/secrets.json` (無ければ `~/.config/LocalLLM/secrets.json`) |
 | Windows | `%APPDATA%\LocalLLM\secrets.json` |
 
-- 設定画面の「サーバー」タブで「新しい API キー」に貼り付けて保存すると、秘密ファイルに書きます。C++ 版と Python 版は同じファイルを使います。
+- 設定画面の「ChatGPT」タブ (Python 版は「サーバー」タブ) で「新しい API キー」に貼り付けて保存すると、秘密ファイルに書きます。C++ 版と Python 版は同じファイルを使います。
 - 画面には末尾 4 文字だけを表示します (例: `設定済み (…abcd)`)。
 - 「秘密ファイルから削除」を押してから保存すると、キーを消します。環境変数のキーは画面からは消せません。
 - macOS / Linux では、秘密ファイルを本人だけが読み書きできる権限 (`0600`) で作ります。
@@ -131,7 +131,7 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | `reasoning_effort` | (送らない) | 推論の深さ (`minimal` / `low` / `medium` / `high`) |
 
 - `cloud` が無い (前の版の) `server.json` でも、既定値で動きます。設定画面で保存すると `cloud` が書き足されます。
-- 表示名・URL・モデル・API キーの名前は、設定画面の「サーバー」タブでも変えられます。
+- 表示名・URL・モデル・API キーの名前は、設定画面の「ChatGPT」タブ (Python 版は「サーバー」タブ) でも変えられます。
 - ChatGPT には `max_tokens`・`temperature`・`chat_template_kwargs` (llama-server 専用) を送りません。OpenAI の推論モデルは `temperature` を受け付けないためです。
 
 ### config/agents.json

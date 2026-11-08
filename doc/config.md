@@ -12,7 +12,7 @@
 | `personas.json` | 回答役の人格のテンプレート | 設定画面を開くたび | [agent.md](agent.md#人格のテンプレート-configpersonasjson) |
 | `secrets.json` | API キー (**`config/` には置かない**) | ボタンを押せるかの確認時と、ChatGPT に送るとき | [chatgpt.md](chatgpt.md#api-キーの登録) |
 
-`server.json` と `agents.json` は使うたびに読み直すので、書き換えれば再起動しなくても次の質問から反映されます。
+`server.json` と `agents.json` は使うたびに読み直すので、書き換えれば再起動しなくても次の質問から反映されます。ただし `server.json` の `managed` を読むのは、アプリの起動時と設定画面で保存したときだけです。
 
 ## どこから読むか
 

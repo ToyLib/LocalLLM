@@ -80,6 +80,8 @@ LocalLLM/
 │   ├── rag.md            (RAG)
 │   ├── chatgpt.md        (ChatGPT に聞き直す)
 │   ├── chatgpt-plan.md   (ChatGPT 連携の設計メモ)
+│   ├── managed-server.md (llama-server の自動起動)
+│   ├── managed-server-plan.md (自動起動の設計メモ)
 │   └── python-app.md     (Python 版)
 ├── src/
 │   ├── main.cpp
@@ -90,6 +92,7 @@ LocalLLM/
 │   ├── rag.h / rag.cpp
 │   ├── config.h / config.cpp
 │   ├── llm_client.h / llm_client.cpp
+│   ├── server_manager.h / server_manager.cpp
 │   ├── ime.h / ime.cpp
 │   ├── font.h / font.cpp
 │   └── macos_window.h / macos_window.mm   (macOS のみ)

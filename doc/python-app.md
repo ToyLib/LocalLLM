@@ -22,6 +22,7 @@ python3 python/main.py
 | `llm_client.py` | `llm_client.cpp` | ストリーミング送信と SSE の解析、埋め込み (`ask_llm` / `embed`) |
 | `rag.py` | `rag.cpp` | RAG のインデックス作成と検索 |
 | `config.py` | `config.cpp` | 設定ファイルの読み書き、API キーと秘密ファイル |
+| `server_manager.py` | `server_manager.cpp` | `llama-server` の起動・監視・停止 ([managed-server.md](managed-server.md))。公式リリースのダウンロードは Python 版だけ |
 | — | `ime.cpp` / `font.cpp` / `macos_window.mm` | Tk が自分で扱うので要らない |
 
 関数名は C++ 版の `SendPrompt` → `send_prompt` のように、snake_case にしただけでそろえています。片方を直したら、もう片方の同じ名前の関数も直してください。
@@ -120,11 +121,12 @@ C++ 版と Python 版で、`ui.json` の別の項目を使います。
 
 ## 設定画面 (settings_ui.py)
 
-`tk.Toplevel` に `ttk.Notebook` で「画面」「システムプロンプト」「サーバー」のタブを並べます。開いている間は `grab_set` で後ろのチャット画面を操作できなくします。
+`tk.Toplevel` に `ttk.Notebook` で「画面」「システムプロンプト」「サーバー」「llama-server」のタブを並べます。開いている間は `grab_set` で後ろのチャット画面を操作できなくします。
 
 - 「画面」タブで変えられるのは Python 版の `python_font_size` と `python_colors` だけです (C++ 版の画面の設定は C++ 版で変えます)。動かすたびに画面に反映し、キャンセルすると元に戻します。「色を既定に戻す」もあります。
 - 「システムプロンプト」タブは、エージェントごとのタブに `tk.Text` を置き、1 行を `system_prompt` の配列の 1 要素にします。回答役のタブには、人格のテンプレートの選択欄と「書き直す」のチェックがあります。
 - 「サーバー」タブには、ローカルの URL、ChatGPT の接続先と API キーの登録欄があります。キーは `save_api_key` で秘密ファイルに書き、画面には末尾 4 文字だけを出します (`mask_key`)。
+- 「llama-server」タブでは、自動起動のオン・オフ、モデル、`llama-server` の場所を変えられます ([managed-server.md](managed-server.md))。
 - 下の「すべて既定に戻す」は、確認したうえで、ユーザーごとの設定を `config/` の内容で上書きし、画面の設定を読み直してから設定画面を開き直します。
 - 読めないファイルがあるときは、壊れたファイルを上書きしないように保存できなくします (C++ 版と同じ)。
 - 保存したら `on_saved` で `refresh_cloud_status` を呼び、「ChatGPT に聞き直す」ボタンを押せるかを調べ直します。

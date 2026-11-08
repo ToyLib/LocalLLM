@@ -290,7 +290,7 @@ ImGui の入力欄は確定した文字列しか扱わないため、何もし�
 
 RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を立て、`DrawSettings()` が次のフレームで `ui.json` / `server.json` / `agents.json` を読み直してモーダル (`BeginPopupModal`) を開きます。
 
-- タブは「画面」「システムプロンプト」「サーバー」の 3 つです。「システムプロンプト」はエージェントごとのタブで、回答役には人格のテンプレート (`personas.json`) の選択欄と「書き直す」(`rewrite`) のチェックがあります。「サーバー」には ChatGPT の接続先と API キーの登録欄があります ([chatgpt.md](chatgpt.md#api-キーの登録))。
+- タブは「画面」「システムプロンプト」「サーバー」「ChatGPT」の 4 つです。下端のボタンが隠れないように、中身は `DrawScrollableTab` でスクロールさせます。「システムプロンプト」はエージェントごとのタブで、回答役には人格のテンプレート (`personas.json`) の選択欄と「書き直す」(`rewrite`) のチェックがあります。「サーバー」にはローカルの URL と `llama-server` の自動起動 ([managed-server.md](managed-server.md))、「ChatGPT」には ChatGPT の接続先と API キーの登録欄があります ([chatgpt.md](chatgpt.md#api-キーの登録))。
 - API キーは `server.json` ではなく秘密ファイルに `SaveApiKey()` で書きます。保存したら `SettingsState::saved` を立て、チャット画面が `RefreshCloudStatus` でキーの有無を調べ直します。
 - ファイルは `LoadConfigForEdit()` で `nlohmann::ordered_json` として読みます。項目の順番を保ち、設定画面で扱わない項目 (`python_font_size` など) もそのまま残して保存するためです。読めないファイルがあるときは、上書きして中身を消さないように保存ボタンを無効にします。
 - 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。保存先 (`ConfigDirectoryPath()`) は設定画面の上に出します。
