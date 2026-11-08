@@ -127,8 +127,8 @@ C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり�
 
 - CMake Tools：`CMakePresets.json` を使う設定にしてあり、Windows では configure のプリセット「Windows (Visual Studio, x64)」だけが表示される。
 - タスク (Ctrl+Shift+B)：Windows では自動でプリセット `windows` / `windows-debug` を使う。
-- F5：構成「Debug LocalLLM (Windows)」を選ぶと、Debug ビルドしてから Visual Studio のデバッガーで `build\Debug\LocalLLM.exe` をデバッグする。
-  - 「実行とデバッグ」パネル (Ctrl+Shift+D) の上のプルダウンで、最初に「**Debug LocalLLM (Windows)**」を選んでおく。既定で選ばれる先頭の「Debug LocalLLM」は Linux / macOS 用で、Windows では起動に失敗する。一度選べば次回からはそれが使われる。
+- F5：「実行とデバッグ」パネル (Ctrl+Shift+D) の上のプルダウンで選んだ構成で、ビルドしてから Visual Studio のデバッガーで起動する。
+  - 「**Launch LocalLLM (Windows, Debug)**」は `build\Debug\LocalLLM.exe`、「**Launch LocalLLM (Windows, Release)**」は `build\Release\LocalLLM.exe` を起動する。一度選べば次回からはそれが使われる。
 
 ## 5. 日本語フォント
 

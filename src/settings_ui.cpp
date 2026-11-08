@@ -646,7 +646,7 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         else if (agent.key == "cloud")
         {
             ImGui::TextDisabled(
-                "「ChatGPT に聞き直す」で送る system プロンプトです (名前はサーバーのタブで決めます)。");
+                "「ChatGPT に聞き直す」で送る system プロンプトです (名前は ChatGPT のタブで決めます)。");
         }
         else if (agent.key == "rewriter")
         {
@@ -742,17 +742,24 @@ void DrawManagedServer(SettingsState& settings)
     DrawChatModelPicker(settings);
     ImGui::InputText("チャットのモデル", &settings.managedChatModel);
     ImGui::InputText("埋め込みのモデル (空なら起動しない)", &settings.managedEmbedModel);
-    ImGui::InputInt("チャットのコンテキスト", &settings.managedContext, 0);
-    ImGui::InputInt("埋め込みのコンテキスト", &settings.managedEmbedContext, 0);
-    ImGui::InputInt("GPU に載せる層の数", &settings.managedGpuLayers, 0);
 
-    ImGui::InputText("llama-server の場所 (空なら自動で探す)", &settings.managedServerPath);
+    ImGui::InputTextWithHint(
+        "llama-server の場所", "空なら自動で探す", &settings.managedServerPath);
     ImGui::SameLine();
 
     if (ImGui::SmallButton("参照..."))
     {
         SDL_ShowOpenFileDialog(
             OnServerPathPicked, nullptr, nullptr, nullptr, 0, nullptr, false);
+    }
+
+    // めったに変えない項目は畳んでおく
+    if (ImGui::TreeNode("詳細"))
+    {
+        ImGui::InputInt("チャットのコンテキスト", &settings.managedContext, 0);
+        ImGui::InputInt("埋め込みのコンテキスト", &settings.managedEmbedContext, 0);
+        ImGui::InputInt("GPU に載せる層の数", &settings.managedGpuLayers, 0);
+        ImGui::TreePop();
     }
 
     ImGui::EndDisabled();
@@ -787,8 +794,11 @@ void DrawServerTab(SettingsState& settings)
     ImGui::TextDisabled("保存すると次の質問から反映されます。");
 
     DrawManagedServer(settings);
+}
 
-    ImGui::SeparatorText("ChatGPT (「聞き直す」ボタンで使う)");
+void DrawCloudTab(SettingsState& settings)
+{
+    ImGui::TextDisabled("「聞き直す」ボタンで使います。");
     ImGui::InputText("表示名", &settings.cloudName);
     ImGui::InputText("URL", &settings.cloudUrl);
     ImGui::InputText("モデル", &settings.cloudModel);
@@ -972,6 +982,20 @@ const UiSettings& ActiveUiSettings(const SettingsState& settings)
     return settings.editing ? settings.ui : settings.current;
 }
 
+namespace
+{
+
+// タブの中身が長くても下端のボタンが隠れないように、中身だけをスクロールさせる
+template <typename Draw>
+void DrawScrollableTab(const char* id, float footerHeight, Draw draw)
+{
+    ImGui::BeginChild(id, ImVec2(0.0f, -footerHeight));
+    draw();
+    ImGui::EndChild();
+}
+
+} // namespace
+
 void DrawSettings(SettingsState& settings)
 {
     if (settings.requestOpen)
@@ -1020,7 +1044,7 @@ void DrawSettings(SettingsState& settings)
     {
         if (ImGui::BeginTabItem("画面"))
         {
-            DrawUiTab(settings);
+            DrawScrollableTab("ui", footerHeight, [&] { DrawUiTab(settings); });
             ImGui::EndTabItem();
         }
 
@@ -1032,7 +1056,13 @@ void DrawSettings(SettingsState& settings)
 
         if (ImGui::BeginTabItem("サーバー"))
         {
-            DrawServerTab(settings);
+            DrawScrollableTab("server", footerHeight, [&] { DrawServerTab(settings); });
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("ChatGPT"))
+        {
+            DrawScrollableTab("cloud", footerHeight, [&] { DrawCloudTab(settings); });
             ImGui::EndTabItem();
         }
 

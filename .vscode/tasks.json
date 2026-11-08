@@ -60,6 +60,12 @@
             "problemMatcher": ["$gcc", "$msCompile"]
         },
         {
+            "label": "CMake: build (Debug + Release)",
+            "dependsOrder": "sequence",
+            "dependsOn": ["CMake: build (Debug)", "CMake: build (Release)"],
+            "problemMatcher": []
+        },
+        {
             "label": "CMake: clean",
             "type": "shell",
             "command": "cmake",
@@ -77,6 +83,20 @@
                 "command": "${workspaceFolder}/build/Debug/LocalLLM.exe"
             },
             "dependsOn": "CMake: build",
+            "presentation": {
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run LocalLLM (Release)",
+            "type": "shell",
+            "command": "${workspaceFolder}/build-release/LocalLLM",
+            "windows": {
+                "command": "${workspaceFolder}/build/Release/LocalLLM.exe"
+            },
+            "dependsOn": "CMake: build (Release)",
             "presentation": {
                 "focus": true,
                 "panel": "dedicated"

@@ -96,7 +96,7 @@ cmake -S . -B build \
 C/C++ と CMake Tools の拡張機能を入れて開く。
 
 - Ctrl+Shift+B (⇧⌘B)：ビルド
-- F5：Debug ビルドして lldb でデバッグ (構成「Debug LocalLLM」)
+- F5：「実行とデバッグ」パネルで選んだ構成で、ビルドして lldb で起動する (構成「Launch LocalLLM (macOS, Debug)」または「Launch LocalLLM (macOS, Release)」)
 
 ## 4. 日本語フォント
 

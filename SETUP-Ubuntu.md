@@ -84,7 +84,7 @@ cmake --build build -j$(nproc)
 
 Release やプリセットの一覧、`build/` を作り直すときは [SETUP.md](SETUP.md) の「4. ビルド」を参照。
 
-VS Code では Ctrl+Shift+B でビルド、F5 で Debug ビルドして gdb でデバッグできる (構成「Debug LocalLLM」)。
+VS Code では Ctrl+Shift+B でビルド、F5 で「実行とデバッグ」パネルで選んだ構成をビルドして gdb で起動できる (構成「Launch LocalLLM (Linux, Debug)」または「Launch LocalLLM (Linux, Release)」)。
 
 ## 4. 日本語フォント
 
