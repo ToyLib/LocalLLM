@@ -130,6 +130,21 @@ C/C++ と CMake Tools の拡張機能を入れる。VS Code は通常どおり�
 - F5：「実行とデバッグ」パネル (Ctrl+Shift+D) の上のプルダウンで選んだ構成で、ビルドしてから Visual Studio のデバッガーで起動する。
   - 「**Launch LocalLLM (Windows, Debug)**」は `build\Debug\LocalLLM.exe`、「**Launch LocalLLM (Windows, Release)**」は `build\Release\LocalLLM.exe` を起動する。一度選べば次回からはそれが使われる。
 
+### 配布用の ZIP を作る
+
+Visual Studio や vcpkg が無い PC でも動く ZIP を作る。通常の PowerShell で実行する (Developer PowerShell は使わない)。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
+```
+
+Release をビルドし、`dist\LocalLLM-windows-x64-<バージョン>.zip` を作る。バージョンは既定で git のコミット (`-Version 1.0.0` で指定できる)。今の `build\Release` をそのまま使うときは `-SkipBuild` を付ける。
+
+- Visual C++ ランタイムを `LocalLLM.exe` の隣と `llama\` の両方に同梱するので、受け取る側のインストールは要らない。
+- `rag\` は `README.md` と `samples\` だけを同梱する。自分で追加した文書と、生成された `rag-index.json` は入らない。
+- 同梱ライブラリのライセンスは `licenses\` に入る。llama.cpp のライセンスは公式リリースに含まれないので、実行時に GitHub から取得する。
+- 利用者向けの説明は [scripts/package-windows-readme.txt](scripts/package-windows-readme.txt) で、ZIP の `README.txt` になる。
+
 ## 5. 日本語フォント
 
 フォントの探し方は [SETUP.md](SETUP.md) の「5. 日本語フォントと入力」を参照。

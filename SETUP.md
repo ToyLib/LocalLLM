@@ -63,7 +63,9 @@ LocalLLM/
 │   ├── llama-server-linux.sh
 │   ├── llama-server-macos.sh
 │   ├── llama-server-windows.bat
-│   └── llama-server-windows.ps1   (bat から呼ばれる本体)
+│   ├── llama-server-windows.ps1   (bat から呼ばれる本体)
+│   ├── package-windows.ps1        (Windows の配布用 ZIP を作る)
+│   └── package-windows-readme.txt (ZIP に入れる利用者向けの説明)
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)

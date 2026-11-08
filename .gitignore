@@ -1,6 +1,7 @@
 # ビルド成果物
 build/
 build-*/
+dist/
 
 # ImGui の設定ファイル (io.IniFilename を有効にした場合)
 imgui.ini

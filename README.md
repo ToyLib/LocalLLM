@@ -226,7 +226,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
 | `SETUP.md` | 環境構築手順 (OS によらない部分) |
 | `SETUP-Ubuntu.md` / `SETUP-Arch.md` / `SETUP-macOS.md` / `SETUP-Windows.md` | 環境構築手順 (Ubuntu / Arch 系 / macOS / Windows) |
-| `scripts/` | llama-server を自分で起動するときのスクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) と、ダウンロードしたモデルの削除スクリプト |
+| `scripts/` | llama-server を自分で起動するときのスクリプト (チャット用と RAG の埋め込み用をまとめて起動、Linux / macOS / Windows) と、ダウンロードしたモデルの削除スクリプト、Windows の配布用 ZIP を作るスクリプト |
 | `rag/` | RAG で参照する文書 (`samples/` は架空のサンプル、ビルド時に実行ファイルの隣へコピー) |
 | `Asset/` | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 
