@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -24,15 +25,125 @@ std::string PathToUtf8(const fs::path& path)
     return std::string(text.begin(), text.end());
 }
 
-fs::path ConfigDirectory()
+// ユーザーごとのフォルダー (リポジトリやビルドフォルダーの外)
+// 設定ファイル (config/) と API キーの秘密ファイルを置く
+fs::path UserDataDirectory()
 {
-    if (const char* env = SDL_getenv("LOCALLLM_CONFIG_DIR"))
+    fs::path directory;
+
+#if defined(_WIN32)
+    if (const char* appData = SDL_getenv("APPDATA"); appData && *appData)
+    {
+        directory = Utf8ToPath(appData);
+    }
+#elif defined(__APPLE__)
+    if (const char* home = SDL_getenv("HOME"); home && *home)
+    {
+        directory = Utf8ToPath(home) / "Library" / "Application Support";
+    }
+#else
+    if (const char* xdg = SDL_getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+    {
+        directory = Utf8ToPath(xdg);
+    }
+    else if (const char* home = SDL_getenv("HOME"); home && *home)
+    {
+        directory = Utf8ToPath(home) / ".config";
+    }
+#endif
+
+    if (directory.empty())
+    {
+        throw std::runtime_error("ユーザーごとのフォルダーが分かりません");
+    }
+
+    return directory / "LocalLLM";
+}
+
+// 既定値 (実行ファイルの隣の config/。ビルドのたびにリポジトリの config/ からコピーされる)
+fs::path DefaultConfigDirectory()
+{
+    const char* basePath = SDL_GetBasePath();
+    return Utf8ToPath(basePath ? basePath : "") / "config";
+}
+
+// 設定画面で書き換える設定 (C++ 版と Python 版で共有)
+fs::path UserConfigDirectory()
+{
+    return UserDataDirectory() / "config";
+}
+
+// 環境変数 LOCALLLM_CONFIG_DIR (指定していなければ空)
+fs::path ConfigDirectoryFromEnv()
+{
+    if (const char* env = SDL_getenv("LOCALLLM_CONFIG_DIR"); env && *env)
     {
         return Utf8ToPath(env);
     }
 
-    const char* basePath = SDL_GetBasePath();
-    return Utf8ToPath(basePath ? basePath : "") / "config";
+    return {};
+}
+
+std::mutex copyMutex;
+bool copied = false;
+
+// 既定値の設定ファイル (*.json) をユーザーごとのフォルダーにコピーする
+// overwrite が false なら、コピー先に無いファイルだけをコピーする
+// (あとから既定値に増えたファイルも、次の起動でコピーされる)
+void CopyDefaults(bool overwrite)
+{
+    const fs::path source = DefaultConfigDirectory();
+    const fs::path destination = UserConfigDirectory();
+
+    try
+    {
+        fs::create_directories(destination);
+
+        for (const auto& entry : fs::directory_iterator(source))
+        {
+            if (!entry.is_regular_file() || entry.path().extension() != ".json")
+            {
+                continue;
+            }
+
+            const fs::path target = destination / entry.path().filename();
+
+            if (overwrite || !fs::exists(target))
+            {
+                fs::copy_file(
+                    entry.path(), target, fs::copy_options::overwrite_existing);
+            }
+        }
+    }
+    catch (const fs::filesystem_error& e)
+    {
+        throw std::runtime_error(
+            "既定の設定を " + PathToUtf8(destination) + " にコピーできません: " + e.what());
+    }
+}
+
+// 環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/
+// (無いファイルは初めて使うときに既定値からコピーする)
+fs::path ConfigDirectory()
+{
+    if (fs::path env = ConfigDirectoryFromEnv(); !env.empty())
+    {
+        return env;
+    }
+
+    // ワーカースレッドからも呼ばれるので、コピーは1回だけ
+    // (失敗したら、次に読むときにもう一度試す)
+    {
+        std::lock_guard lock(copyMutex);
+
+        if (!copied)
+        {
+            CopyDefaults(false);
+            copied = true;
+        }
+    }
+
+    return UserConfigDirectory();
 }
 
 // 秘密ファイルの JSON を読む。無ければ空のオブジェクト、読めなければ std::runtime_error
@@ -72,35 +183,7 @@ fs::path SecretsPath()
         return Utf8ToPath(env);
     }
 
-    fs::path directory;
-
-#if defined(_WIN32)
-    if (const char* appData = SDL_getenv("APPDATA"); appData && *appData)
-    {
-        directory = Utf8ToPath(appData);
-    }
-#elif defined(__APPLE__)
-    if (const char* home = SDL_getenv("HOME"); home && *home)
-    {
-        directory = Utf8ToPath(home) / "Library" / "Application Support";
-    }
-#else
-    if (const char* xdg = SDL_getenv("XDG_CONFIG_HOME"); xdg && *xdg)
-    {
-        directory = Utf8ToPath(xdg);
-    }
-    else if (const char* home = SDL_getenv("HOME"); home && *home)
-    {
-        directory = Utf8ToPath(home) / ".config";
-    }
-#endif
-
-    if (directory.empty())
-    {
-        throw std::runtime_error("秘密ファイルを置くフォルダーが分かりません");
-    }
-
-    return directory / "LocalLLM" / "secrets.json";
+    return UserDataDirectory() / "secrets.json";
 }
 
 // ファイルを読む。開けなければ false
@@ -258,6 +341,40 @@ void SaveConfig(const std::string& fileName, const nlohmann::ordered_json& confi
         throw std::runtime_error(
             "設定ファイルを置き換えられません: " + PathToUtf8(path));
     }
+}
+
+std::string ConfigDirectoryPath()
+{
+    try
+    {
+        if (fs::path env = ConfigDirectoryFromEnv(); !env.empty())
+        {
+            return PathToUtf8(env);
+        }
+
+        return PathToUtf8(UserConfigDirectory());
+    }
+    catch (const std::exception& e)
+    {
+        return e.what();
+    }
+}
+
+bool CanResetConfig()
+{
+    return ConfigDirectoryFromEnv().empty();
+}
+
+void ResetConfigToDefaults()
+{
+    if (!CanResetConfig())
+    {
+        return;
+    }
+
+    std::lock_guard lock(copyMutex);
+    CopyDefaults(true);
+    copied = true;
 }
 
 ApiKey FindApiKey(const std::string& name)

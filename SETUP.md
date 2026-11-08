@@ -51,8 +51,6 @@ LocalLLM/
 ├── SETUP-macOS.md
 ├── SETUP-Windows.md
 ├── LICENSE
-├── cmake/
-│   └── sync_config.cmake   (config/ を実行ファイルの隣へコピー)
 ├── config/                 (設定の既定値)
 │   ├── ui.json
 │   ├── server.json
@@ -138,7 +136,7 @@ LocalLLM/
 - `FetchContent` で Dear ImGui v1.92.9b を取得 (初回の configure でネット接続が必要)
 - ImGui 本体、SDL3 / SDL_Renderer 用バックエンド、`imgui_stdlib` を静的ライブラリ `imgui` としてビルド
 - 実行ファイル `LocalLLM` (`src/` 以下の `.cpp`) にリンク
-- ビルド後に `Asset/`、`rag/` (`sync_rag`)、`config/` (`sync_config`) を実行ファイルの隣へコピー
+- ビルド後に `Asset/`、`rag/` (`sync_rag`)、既定値の `config/` (`sync_config`) を実行ファイルの隣へコピー
 
 ```cmake
 FetchContent_Declare(imgui
@@ -193,7 +191,7 @@ C/C++ と CMake Tools の拡張機能を入れて開く。Ctrl+Shift+B (macOS �
 - 以前に Ninja など別のジェネレーターで configure した (`Does not match the generator used previously`)
 - ライブラリやツールを後から入れた・入れ替えた
 
-`build/` を消すと、設定画面で保存した `build/config/` と RAG のインデックス (`build/rag-index.json`) も消える。
+`build/` を消すと、RAG のインデックス (`build/rag-index.json`) も消える (作り直すだけ)。設定画面で保存した設定はユーザーごとのフォルダーにあるので消えない。
 
 ## 5. 日本語フォントと入力
 

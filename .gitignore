@@ -23,5 +23,5 @@ __pycache__/
 python/rag-index.json
 python/rag-index.json.tmp
 
-# Python 版の設定画面で書き換える設定 (初回の起動時に config/ からコピー)
+# 以前の版の設定の置き場所 (今はユーザーごとのフォルダーに置く)
 user-config/

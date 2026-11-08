@@ -1,7 +1,8 @@
 """設定ファイル (JSON) の読み込みと保存
 
 既定値はリポジトリの config/ (git で管理し、アプリからは書き換えない)。
-初めて使うときに、git で無視する user-config/ へコピーして、以後はそちらを読み書きする。
+初めて使うときに、ユーザーごとのフォルダーの config/ へコピーして、以後はそちらを読み書きする
+(リポジトリの外。C++ 版と共有。場所は user_config_directory)。
 """
 
 from __future__ import annotations
@@ -20,9 +21,6 @@ BASE_DIRECTORY = Path(__file__).resolve().parent.parent
 # 既定値の設定ファイル
 DEFAULT_DIRECTORY = BASE_DIRECTORY / "config"
 
-# 設定画面で書き換える設定ファイル (.gitignore で除外している)
-USER_DIRECTORY = BASE_DIRECTORY / "user-config"
-
 _copy_lock = threading.Lock()
 _copied = False
 
@@ -31,27 +29,59 @@ class ConfigError(Exception):
     pass
 
 
-def _copy_defaults(overwrite: bool) -> None:
-    """config/ の設定ファイルを user-config/ にコピーする
-    overwrite が False なら、user-config/ に無いファイルだけをコピーする
-    (あとから config/ に増えたファイルも、次の起動でコピーされる)"""
+def user_data_directory() -> Path:
+    """ユーザーごとのフォルダー (リポジトリの外。設定ファイルと API キーの秘密ファイルを置く)
+    macOS: ~/Library/Application Support/LocalLLM
+    Linux: $XDG_CONFIG_HOME/LocalLLM (無ければ ~/.config/LocalLLM)
+    Windows: %APPDATA%\\LocalLLM"""
 
     try:
-        USER_DIRECTORY.mkdir(exist_ok=True)
+        if sys.platform == "win32":
+            base = os.environ.get("APPDATA")
+            directory = Path(base) if base else None
+        elif sys.platform == "darwin":
+            directory = Path.home() / "Library" / "Application Support"
+        else:
+            xdg = os.environ.get("XDG_CONFIG_HOME")
+            directory = Path(xdg) if xdg else Path.home() / ".config"
+    except RuntimeError:
+        directory = None
+
+    if directory is None:
+        raise ConfigError("ユーザーごとのフォルダーが分かりません")
+
+    return directory / "LocalLLM"
+
+
+def user_config_directory() -> Path:
+    """設定画面で書き換える設定ファイルのフォルダー (C++ 版と共有)"""
+
+    return user_data_directory() / "config"
+
+
+def _copy_defaults(overwrite: bool) -> None:
+    """config/ の設定ファイルをユーザーごとのフォルダーにコピーする
+    overwrite が False なら、コピー先に無いファイルだけをコピーする
+    (あとから config/ に増えたファイルも、次の起動でコピーされる)"""
+
+    directory = user_config_directory()
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
 
         for source in sorted(DEFAULT_DIRECTORY.glob("*.json")):
-            destination = USER_DIRECTORY / source.name
+            destination = directory / source.name
 
             if overwrite or not destination.exists():
                 shutil.copyfile(source, destination)
     except OSError as e:
         raise ConfigError(
-            f"設定ファイルを {USER_DIRECTORY} にコピーできません") from e
+            f"設定ファイルを {directory} にコピーできません") from e
 
 
 def config_directory() -> Path:
-    """環境変数 LOCALLLM_CONFIG_DIR、無ければリポジトリの user-config/
-    (user-config/ は初めて使うときに config/ からコピーして作る)"""
+    """環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/
+    (無いファイルは初めて使うときに config/ からコピーする)"""
 
     global _copied
 
@@ -64,7 +94,7 @@ def config_directory() -> Path:
             _copy_defaults(overwrite=False)
             _copied = True
 
-    return USER_DIRECTORY
+    return user_config_directory()
 
 
 def reset_to_defaults() -> None:
@@ -168,19 +198,7 @@ def secrets_file_path() -> Path:
     if env := os.environ.get("LOCALLLM_SECRETS_FILE"):
         return Path(env)
 
-    if sys.platform == "win32":
-        base = os.environ.get("APPDATA")
-        directory = Path(base) if base else None
-    elif sys.platform == "darwin":
-        directory = Path.home() / "Library" / "Application Support"
-    else:
-        xdg = os.environ.get("XDG_CONFIG_HOME")
-        directory = Path(xdg) if xdg else Path.home() / ".config"
-
-    if directory is None:
-        raise ConfigError("秘密ファイルを置くフォルダーが分かりません")
-
-    return directory / "LocalLLM" / "secrets.json"
+    return user_data_directory() / "secrets.json"
 
 
 def _load_secrets(path: Path) -> dict[str, Any]:

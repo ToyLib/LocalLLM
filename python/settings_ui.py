@@ -656,7 +656,7 @@ class SettingsDialog:
             self.on_saved()
 
     def _reset(self) -> None:
-        """user-config/ を config/ の内容で上書きする"""
+        """ユーザーごとの設定を config/ の内容で上書きする"""
 
         if not messagebox.askyesno(
                 "既定に戻す",

@@ -293,7 +293,8 @@ RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を�
 - タブは「画面」「システムプロンプト」「サーバー」の 3 つです。「システムプロンプト」はエージェントごとのタブで、回答役には人格のテンプレート (`personas.json`) の選択欄と「書き直す」(`rewrite`) のチェックがあります。「サーバー」には ChatGPT の接続先と API キーの登録欄があります ([chatgpt.md](chatgpt.md#api-キーの登録))。
 - API キーは `server.json` ではなく秘密ファイルに `SaveApiKey()` で書きます。保存したら `SettingsState::saved` を立て、チャット画面が `RefreshCloudStatus` でキーの有無を調べ直します。
 - ファイルは `LoadConfigForEdit()` で `nlohmann::ordered_json` として読みます。項目の順番を保ち、設定画面で扱わない項目 (`python_font_size` など) もそのまま残して保存するためです。読めないファイルがあるときは、上書きして中身を消さないように保存ボタンを無効にします。
-- 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。
+- 保存は `SaveConfig()` で、一時ファイルに書いてから置き換えます。保存先 (`ConfigDirectoryPath()`) は設定画面の上に出します。
+- 「すべて既定に戻す」は、確認したうえで `ResetConfigToDefaults()` でユーザーごとの設定を既定値で上書きし、`ui.json` を読み直して反映してから、編集中の値を読み直します (API キーの有無も調べ直します)。`LOCALLLM_CONFIG_DIR` を指定しているときは、そのフォルダーが既定値なのでボタンを出しません。
 - 背景の不透明度・文字の大きさ・色は、動かすたびに `ApplyUiSettings()` で反映します。背景・文字・補足の文字の色は ImGui のスタイル (`WindowBg` / `Text` / `TextDisabled`) に入れ、送信者名とエラーの色は描くときに `ActiveUiSettings()` から読みます (設定画面を開いている間は編集中の値)。文字の大きさはフレームの途中で `style.FontSizeBase` を変えても戻されるので、`style._NextFrameFontSizeBase` で次のフレームの始めに変えます (ImGui 1.92 のフォントは大きさを後から変えられます)。キャンセルすると開く前の値 (`SettingsState::current`) に戻します。
 - フォントファイルは起動時に読み込むので、変えても再起動するまで反映されません。
 

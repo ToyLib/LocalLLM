@@ -19,6 +19,7 @@ namespace
 {
 
 constexpr const char* POPUP_NAME = "設定";
+constexpr const char* RESET_POPUP_NAME = "既定に戻す";
 
 // 文字の大きさを選べる範囲 (ピクセル)
 constexpr int MIN_FONT_SIZE = 10;
@@ -312,6 +313,7 @@ void LoadSettings(SettingsState& settings)
 {
     settings.loadError.clear();
     settings.saveError.clear();
+    settings.configDirectory = ConfigDirectoryPath();
     settings.ui = settings.current;
     settings.agents.clear();
 
@@ -741,6 +743,71 @@ void ApplyUiSettings(const UiSettings& ui)
     style._NextFrameFontSizeBase = ui.fontSize;
 }
 
+namespace
+{
+
+// 「すべて既定に戻す」の確認。戻したら、画面の設定を反映して編集中の値を読み直す
+void DrawResetConfirm(SettingsState& settings)
+{
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (!ImGui::BeginPopupModal(
+            RESET_POPUP_NAME, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    ImGui::TextUnformatted(
+        "画面の設定・システムプロンプト・サーバーの URL・人格のテンプレートを、\n"
+        "すべて既定値に戻します。\n"
+        "保存した設定は消えて、元に戻せません。よろしいですか？\n"
+        "(API キーは消えません)");
+    ImGui::Spacing();
+
+    const float buttonWidth = ImGui::CalcTextSize("キャンセル").x * 1.6f;
+
+    if (ImGui::Button("既定に戻す", ImVec2(buttonWidth, 0.0f)))
+    {
+        try
+        {
+            ResetConfigToDefaults();
+
+            settings.current = ReadUiSettings(LoadConfigOrEmpty("ui.json"));
+            ApplyUiSettings(settings.current);
+            ClearApiKeyInput(settings);
+            settings.deleteApiKey = false;
+            LoadSettings(settings);
+
+            // チャット画面に API キーの有無を調べ直させる
+            settings.saved = true;
+        }
+        catch (const std::exception& e)
+        {
+            settings.saveError = e.what();
+        }
+
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    // Enter で消してしまわないように、キャンセルにフォーカスを置く
+    if (ImGui::IsWindowAppearing())
+    {
+        ImGui::SetKeyboardFocusHere();
+    }
+
+    if (ImGui::Button("キャンセル", ImVec2(buttonWidth, 0.0f)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+} // namespace
+
 const UiSettings& ActiveUiSettings(const SettingsState& settings)
 {
     return settings.editing ? settings.ui : settings.current;
@@ -780,6 +847,8 @@ void DrawSettings(SettingsState& settings)
     // 下端のボタン (と保存のエラー) の高さ
     const float footerHeight = ImGui::GetFrameHeightWithSpacing() +
         (settings.saveError.empty() ? 0.0f : lineHeight);
+
+    ImGui::TextDisabled("保存先: %s", settings.configDirectory.c_str());
 
     if (!settings.loadError.empty())
     {
@@ -845,6 +914,23 @@ void DrawSettings(SettingsState& settings)
         settings.editing = false;
         ClearApiKeyInput(settings);
         ImGui::CloseCurrentPopup();
+    }
+
+    // LOCALLLM_CONFIG_DIR を指定しているときは、そのフォルダーが既定値なので戻せない
+    // (読めないファイルがあるときも、既定に戻せば直せる)
+    if (CanResetConfig())
+    {
+        const char* resetLabel = "すべて既定に戻す";
+        const float resetWidth =
+            ImGui::CalcTextSize(resetLabel).x + style.FramePadding.x * 2.0f;
+        ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - resetWidth);
+
+        if (ImGui::Button(resetLabel))
+        {
+            ImGui::OpenPopup(RESET_POPUP_NAME);
+        }
+
+        DrawResetConfirm(settings);
     }
 
     ImGui::EndPopup();

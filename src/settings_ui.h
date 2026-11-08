@@ -114,6 +114,9 @@ struct SettingsState
     nlohmann::ordered_json serverJson;
     nlohmann::ordered_json agentsJson;
 
+    // 設定ファイルを読み書きするフォルダー (開いたときに調べて表示する)
+    std::string configDirectory;
+
     // 読めなかった・保存できなかったときのメッセージ
     std::string loadError;
     std::string templateError;

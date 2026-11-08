@@ -221,7 +221,7 @@ GUI の「中断」ボタンを押すと、`std::atomic<bool>` の `cancel` が 
 
 ## 別のサーバーに問い合わせたいとき
 
-- 接続先を変えるときは、`config/server.json` の `chat_url` を書き換えます (ビルドし直す必要はありません。ビルド済みの C++ 版は `build/config/server.json` を読みます)。OpenAI 互換の API を持つサーバー (Ollama や LM Studio など) であれば、そのまま使えます。
+- 接続先を変えるときは、設定画面の「サーバー」タブで `chat_url` を変えます (ユーザーごとのフォルダーの `config/server.json` を書き換えます。ビルドし直す必要はありません)。OpenAI 互換の API を持つサーバー (Ollama や LM Studio など) であれば、そのまま使えます。
 - 認証が必要なサーバー (ChatGPT など) は、`LLMOptions::cloud` を true にして `server.json` の `cloud` に送ります。API キーは環境変数か秘密ファイルから読み、https の URL のときだけ `Authorization: Bearer ...` (または `api-key:`) ヘッダーで送ります ([説明](chatgpt.md))。
 - クラウドには `max_tokens`・`temperature`・`chat_template_kwargs` を送りません。HTTP のエラーは本文の `error.message` も表示します (401 / 429 には説明を付けます)。
 - `max_tokens` や `temperature` は `LLMOptions` で変えられます。`model` など、ほかのパラメーターは `AskLLM` の中の `request` で変更できます。
