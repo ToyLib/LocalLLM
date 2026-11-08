@@ -1,3 +1,5 @@
+// 設定画面 (ImGui) と、ui.json の画面の設定の反映
+
 #include "settings_ui.h"
 
 #include "agent.h"

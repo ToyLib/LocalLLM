@@ -1,3 +1,5 @@
+// 役割ごとの LLM の呼び出し (ルーター / 回答役 / 聞き直し / 書き直し / 違いのまとめ)
+
 #include "agent.h"
 
 #include "config.h"
@@ -45,7 +47,6 @@ constexpr size_t ROUTER_HISTORY_MESSAGES = 4;
 constexpr size_t ROUTER_HISTORY_BYTES = 300;
 
 // config/agents.json から key のエージェントの名前と system プロンプトを読む
-// 質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
 // system_prompt は文字列か、文字列の配列 (つなげて1つにする)
 Agent LoadAgent(const std::string& key)
 {
@@ -91,8 +92,7 @@ Agent LoadAgent(const std::string& key)
     return agent;
 }
 
-// key のエージェントを読む。agents.json に無ければ name と prompt を使う
-// (設定ファイルが前の版のままでも動くように)
+// key のエージェントを読む。agents.json に無ければ name と prompt を使う (前の版の設定ファイル向け)
 Agent LoadAgentOr(
     const std::string& key, const std::string& name, const std::string& prompt)
 {

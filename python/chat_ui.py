@@ -55,7 +55,7 @@ class _Rendered(NamedTuple):
     cloud_original: str = ""
     original_open: bool = False
 
-    # 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安。まとめていなければ空)
+    # 聞き直す前の回答との違いのまとめ (まとめていなければ空)
     compare_verdict: str = ""
     compare_points: tuple[str, ...] = ()
 
@@ -167,7 +167,7 @@ class ChatApp:
         self._dirty.set()
         self._poll()
 
-    # ---- 画面の部品 ----
+    # --- 画面の部品 ---
 
     def _build_rag_bar(self) -> None:
         """RAG のオン/オフとインデックスの状態"""
@@ -283,7 +283,7 @@ class ChatApp:
         self.input.bind("<Shift-Return>", self._on_shift_return)
         self.input.focus_set()
 
-    # ---- 操作 ----
+    # --- 操作 ---
 
     def _apply_font_size(self, size: int) -> None:
         """文字の大きさを変える (フォントを使っている所はすべて描き直される)"""
@@ -431,7 +431,7 @@ class ChatApp:
         server_manager.stop()
         self.root.destroy()
 
-    # ---- 描画 ----
+    # --- 描画 ---
 
     def _poll(self) -> None:
         # 受信中は、何も届かなくても経過時間が進むように描き直す
@@ -609,7 +609,7 @@ class ChatApp:
                 text.insert(
                     "end", message.cloud_original + "\n", ("original", tag))
 
-        # 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安)
+        # 聞き直す前の回答との違いのまとめ
         if message.compare_verdict:
             text.insert(
                 "end", "聞き直す前の回答との違い (ローカルの LLM による目安): ",

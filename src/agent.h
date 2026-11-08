@@ -35,23 +35,19 @@ json RunAgentJson(
     const json& messages,
     const std::atomic<bool>& cancel);
 
-// 回答役のエージェント (口調を変えて、どちらが答えたか分かるようにする)
 // 資料を参照する質問に、資料に基づいて普通の口調で答える
 Agent CreateAssistant();
 
 // 資料の要らない質問 (雑談や一般的な質問) に答える
-// 口調は config/agents.json の system プロンプトで決まる (既定は assistant と同じアシスタント)
 Agent CreateGeneral();
 
 // key (assistant / general) の回答役
 Agent CreateAnswerer(const std::string& key);
 
 // ChatGPT (server.json の cloud) に聞き直すエージェント
-// system プロンプトは agents.json の cloud (無ければ既定のもの)
 Agent CreateCloud();
 
 // クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)
-// 書き直しの指示は agents.json の rewriter (無ければ既定のもの)
 std::string RewriteAnswer(
     const Agent& persona,
     const std::string& question,
@@ -70,7 +66,7 @@ struct Comparison
 };
 
 // 同じ質問へのローカルの回答 localAnswer と、クラウドの回答 cloudAnswer の違いを
-// ローカルの LLM でまとめる。指示は agents.json の comparer (無ければ既定のもの)
+// ローカルの LLM でまとめる
 // onDelta には受け取った JSON の断片が来る (進み具合の表示に使う)
 Comparison CompareAnswers(
     const std::string& question,

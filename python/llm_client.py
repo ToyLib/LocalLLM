@@ -287,6 +287,7 @@ def ask_llm(
 
     options = options or LLMOptions()
 
+    # リクエストを作る (送り先はクラウドか、ローカルの llama-server)
     request: dict[str, Any] = {"messages": messages, "stream": True}
     headers = {"Accept": "text/event-stream"}
 
@@ -349,6 +350,7 @@ def ask_llm(
                 "reasoning_effort": "low",
             }
 
+    # 送信して、SSE を 1 行ずつ処理する
     answer: list[str] = []
     done = False
     connection = None

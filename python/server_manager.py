@@ -706,6 +706,8 @@ class _Manager:
         return found
 
     def _launch(self, slot: _Slot) -> None:
+        """llama-server を起動する (出力はログファイルへ)"""
+
         binary = self._resolve_binary(slot)
 
         if binary.error:
@@ -747,11 +749,14 @@ class _Manager:
             _forget_process(slot)
 
     def _step(self, slot: _Slot) -> None:
+        """1つのサーバーの状態を確かめて、必要なら起動する (_run から定期的に呼ぶ)"""
+
         if not slot.spec.run:
             self._stop_processes([slot])
             self._set_view(slot, ServerStatus.OFF)
             return
 
+        # 自分で起動したサーバーの監視: 落ちていないか、準備ができたか
         if slot.process is not None:
             code = slot.process.poll()
 
@@ -779,6 +784,7 @@ class _Manager:
                 _shorten(lines[-1]) if lines else "起動中")
             return
 
+        # 失敗したら、再試行を頼まれるまで起動しない
         if slot.view.status == ServerStatus.FAILED:
             return
 
@@ -795,6 +801,8 @@ class _Manager:
             self._launch(slot)
 
     def _apply_settings(self) -> None:
+        """server.json を読み直し、内容が変わったサーバーを止める (次の _step で起動し直す)"""
+
         server = config.load_or_empty(SERVER_CONFIG)
         settings = load_managed_settings()
 
@@ -831,6 +839,8 @@ class _Manager:
             self._view.enabled = settings.enabled
 
     def _run(self) -> None:
+        """管理用のスレッドの本体: 要求を待ち (最長 1 秒)、設定を反映して、各サーバーの _step を呼ぶ"""
+
         try:
             with self._condition:
                 self._view.log_directory = str(_log_directory())
@@ -852,6 +862,7 @@ class _Manager:
                 self._reload = self._retry = False
 
             try:
+                # 前回の異常終了で残ったサーバーを片付ける
                 if first:
                     first = False
 

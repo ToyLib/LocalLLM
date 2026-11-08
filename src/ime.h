@@ -8,8 +8,7 @@
 // 変換中の文字列はアプリで描画することをSDLに伝える (SDL_Init の前に呼ぶ)
 void SetImeHint();
 
-// 入力カーソルの位置を受け取るため、ImGuiのバックエンドの処理を包む
-// (ImGui_ImplSDL3_Init の後に呼ぶ)
+// 入力カーソルの位置を受け取るため、ImGuiのバックエンドの処理を包む (ImGui_ImplSDL3_Init の後に呼ぶ)
 void InstallImeHook();
 
 void HandleCompositionEvent(const SDL_Event& event);

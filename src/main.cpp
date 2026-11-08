@@ -1,3 +1,5 @@
+// アプリの入口: ウィンドウと ImGui の初期化、メインループ、終了処理
+
 #include "chat.h"
 #include "chat_ui.h"
 #include "config.h"
@@ -85,7 +87,7 @@ int main(int, char**)
     style.ScaleAllSizes(scale);
     style.FontScaleDpi = scale;
 
-    // 画面の設定は config/ui.json に書く (設定画面からも変えられる)
+    // 画面の設定は config/ui.json に書く
     SettingsState settings;
     settings.current = ReadUiSettings(LoadConfigOrEmpty("ui.json"));
 
@@ -147,6 +149,7 @@ int main(int, char**)
             continue;
         }
 
+        // 1フレーム描画する
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -177,7 +180,7 @@ int main(int, char**)
         }
     }
 
-    // 受信中なら中断してから終了
+    // 終了処理: 受信とインデックス作成を中断して、スレッドの終了を待つ
     state.cancel = true;
     JoinWorker(state);
 

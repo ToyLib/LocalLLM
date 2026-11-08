@@ -1,3 +1,5 @@
+// macOS 専用のウィンドウの見た目の設定
+
 #include "macos_window.h"
 
 #import <AppKit/AppKit.h>

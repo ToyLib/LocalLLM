@@ -305,7 +305,6 @@ def _find_documents(directory: Path) -> list[Path]:
             if name.startswith(".") or not path.is_file():
                 continue
 
-            # rag/README.md はフォルダの説明なので対象外
             if path == directory / "README.md":
                 continue
 
@@ -316,6 +315,9 @@ def _find_documents(directory: Path) -> list[Path]:
 
 
 def _build_index(state: RagState) -> None:
+    """インデックスを作る: 文書を読む → 変更があったものをチャンクに分割
+    → 未埋め込みのチャンクを埋め込む → 保存して検索用に差し替える"""
+
     directory = rag_directory()
 
     if not directory.is_dir():
@@ -420,8 +422,7 @@ def join_worker(state: RagState) -> None:
 
 
 def search(state: RagState, query: str, cancel: CancelToken) -> list[RagHit]:
-    """質問に近いチャンクを返す (埋め込みサーバーに問い合わせるので
-    ワーカースレッドから呼ぶ)"""
+    """質問に近いチャンクを返す (埋め込みサーバーに問い合わせるのでワーカースレッドから呼ぶ)"""
 
     with state.lock:
         if not state.chunks:

@@ -5,12 +5,9 @@
 #include <string>
 
 // 設定ファイル (JSON) を読む
-// 環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/ から探す (Python 版と共有)
-// macOS: ~/Library/Application Support/LocalLLM/config/
-// Linux: $XDG_CONFIG_HOME/LocalLLM/config/ (無ければ ~/.config/LocalLLM/config/)
-// Windows: %APPDATA%\LocalLLM\config
+// 場所は環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/ (Python 版と共有)
 // 無いファイルは、初めて使うときに既定値 (実行ファイルの隣の config/) からコピーする
-// 呼ぶたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
+// 呼ぶたびに読み直すので、アプリを再起動しなくても反映される
 // ファイルが無い・JSON のオブジェクトとして読めないときは std::runtime_error を投げる
 nlohmann::json LoadConfig(const std::string& fileName);
 
@@ -68,10 +65,7 @@ struct ApiKey
 // API キーを探す。見つからなければ value が空 (source は None)
 ApiKey FindApiKey(const std::string& name);
 
-// 秘密ファイルの場所 (リポジトリやビルドフォルダーの外。環境変数 LOCALLLM_SECRETS_FILE で変えられる)
-// macOS: ~/Library/Application Support/LocalLLM/secrets.json
-// Linux: $XDG_CONFIG_HOME/LocalLLM/secrets.json (無ければ ~/.config/LocalLLM/secrets.json)
-// Windows: %APPDATA%\LocalLLM\secrets.json
+// 秘密ファイルの場所 (ユーザーごとのフォルダーの secrets.json。環境変数 LOCALLLM_SECRETS_FILE で変えられる)
 std::string SecretsFilePath();
 
 // 秘密ファイルに API キーを書く (value が空なら消す)

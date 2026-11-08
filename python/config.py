@@ -30,10 +30,7 @@ class ConfigError(Exception):
 
 
 def user_data_directory() -> Path:
-    """ユーザーごとのフォルダー (リポジトリの外。設定ファイルと API キーの秘密ファイルを置く)
-    macOS: ~/Library/Application Support/LocalLLM
-    Linux: $XDG_CONFIG_HOME/LocalLLM (無ければ ~/.config/LocalLLM)
-    Windows: %APPDATA%\\LocalLLM"""
+    """ユーザーごとのフォルダー (リポジトリの外。設定ファイルと API キーの秘密ファイルを置く)"""
 
     try:
         if sys.platform == "win32":
@@ -61,8 +58,7 @@ def user_config_directory() -> Path:
 
 def _copy_defaults(overwrite: bool) -> None:
     """config/ の設定ファイルをユーザーごとのフォルダーにコピーする
-    overwrite が False なら、コピー先に無いファイルだけをコピーする
-    (あとから config/ に増えたファイルも、次の起動でコピーされる)"""
+    overwrite が False なら、コピー先に無いファイルだけをコピーする"""
 
     directory = user_config_directory()
 
@@ -80,8 +76,7 @@ def _copy_defaults(overwrite: bool) -> None:
 
 
 def config_directory() -> Path:
-    """環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/
-    (無いファイルは初めて使うときに config/ からコピーする)"""
+    """設定ファイルのフォルダー (無いファイルは初めて使うときに config/ からコピーする)"""
 
     global _copied
 
@@ -110,7 +105,7 @@ def reset_to_defaults() -> None:
 
 def load(file_name: str) -> dict[str, Any]:
     """設定ファイルを読む
-    呼ぶたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される"""
+    呼ぶたびに読み直すので、アプリを再起動しなくても反映される"""
 
     path = config_directory() / file_name
 
@@ -190,10 +185,7 @@ API_KEY_SECRETS_FILE = "secrets_file"
 
 
 def secrets_file_path() -> Path:
-    """秘密ファイルの場所 (リポジトリやビルドフォルダーの外。環境変数 LOCALLLM_SECRETS_FILE で変えられる)
-    macOS: ~/Library/Application Support/LocalLLM/secrets.json
-    Linux: $XDG_CONFIG_HOME/LocalLLM/secrets.json (無ければ ~/.config/LocalLLM/secrets.json)
-    Windows: %APPDATA%\\LocalLLM\\secrets.json"""
+    """秘密ファイルの場所 (ユーザーごとのフォルダーの secrets.json。環境変数 LOCALLLM_SECRETS_FILE で変えられる)"""
 
     if env := os.environ.get("LOCALLLM_SECRETS_FILE"):
         return Path(env)

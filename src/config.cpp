@@ -1,3 +1,5 @@
+// 設定ファイル (JSON) と API キーの秘密ファイルの読み書き
+
 #include "config.h"
 
 #include <SDL3/SDL.h>
@@ -89,7 +91,6 @@ bool copied = false;
 
 // 既定値の設定ファイル (*.json) をユーザーごとのフォルダーにコピーする
 // overwrite が false なら、コピー先に無いファイルだけをコピーする
-// (あとから既定値に増えたファイルも、次の起動でコピーされる)
 void CopyDefaults(bool overwrite)
 {
     const fs::path source = DefaultConfigDirectory();
@@ -122,8 +123,7 @@ void CopyDefaults(bool overwrite)
     }
 }
 
-// 環境変数 LOCALLLM_CONFIG_DIR、無ければユーザーごとのフォルダーの config/
-// (無いファイルは初めて使うときに既定値からコピーする)
+// 設定ファイルのフォルダー (無いファイルは初めて使うときに既定値からコピーする)
 fs::path ConfigDirectory()
 {
     if (fs::path env = ConfigDirectoryFromEnv(); !env.empty())
@@ -131,8 +131,7 @@ fs::path ConfigDirectory()
         return env;
     }
 
-    // ワーカースレッドからも呼ばれるので、コピーは1回だけ
-    // (失敗したら、次に読むときにもう一度試す)
+    // ワーカースレッドからも呼ばれるので、コピーは1回だけ (失敗したら次に読むときに再試行)
     {
         std::lock_guard lock(copyMutex);
 

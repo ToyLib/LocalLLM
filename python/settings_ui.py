@@ -188,7 +188,7 @@ class SettingsDialog:
         self.window.wait_visibility()
         self.window.grab_set()
 
-    # ---- 読み込み ----
+    # --- 読み込み ---
 
     def _load(self) -> None:
         errors: list[str] = []
@@ -228,7 +228,7 @@ class SettingsDialog:
         if self.load_error:
             self.load_error += "\n(ファイルを直すまで保存できません)"
 
-    # ---- 画面の部品 ----
+    # --- 画面の部品 ---
 
     def _build(self) -> None:
         frame = ttk.Frame(self.window, padding=8)
@@ -653,7 +653,7 @@ class SettingsDialog:
             text="削除をやめる" if self.delete_api_key else "秘密ファイルから削除")
         self._update_key_hint()
 
-    # ---- 操作 ----
+    # --- 操作 ---
 
     def _current_font_size(self) -> int | None:
         try:

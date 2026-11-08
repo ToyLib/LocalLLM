@@ -44,8 +44,7 @@ void StartRagIndexing(RagState& state);
 
 void JoinRagWorker(RagState& state);
 
-// 質問に近いチャンクを返す (埋め込みサーバーに問い合わせるので
-// ワーカースレッドから呼ぶ)
+// 質問に近いチャンクを返す (埋め込みサーバーに問い合わせるのでワーカースレッドから呼ぶ)
 std::vector<RagHit> SearchRag(
     RagState& state,
     const std::string& query,

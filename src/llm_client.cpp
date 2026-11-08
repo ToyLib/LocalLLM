@@ -1,3 +1,5 @@
+// OpenAI 互換 API へのストリーミング送信と SSE の解析、埋め込みの取得
+
 #include "llm_client.h"
 
 #include "config.h"
@@ -310,6 +312,7 @@ std::string AskLLM(
     const std::atomic<bool>& cancel,
     const LLMOptions& options)
 {
+    // リクエストを作る (送り先はクラウドか、ローカルの llama-server)
     json request = {
         {"messages", messages},
         {"stream", true}
@@ -402,6 +405,7 @@ std::string AskLLM(
         }
     }
 
+    // 送信する (受信したテキストは WriteCallback から onDelta に渡る)
     CURL* curl = curl_easy_init();
 
     if (!curl)

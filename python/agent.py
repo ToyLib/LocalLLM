@@ -102,7 +102,6 @@ def _truncate(text: str, max_bytes: int) -> str:
 
 def _load_agent(key: str, options: LLMOptions | None = None) -> Agent:
     """config/agents.json から key のエージェントの名前と system プロンプトを読む
-    質問のたびに読み直すので、ファイルを書き換えればアプリを再起動しなくても反映される
     system_prompt は文字列か、文字列の配列 (つなげて1つにする)"""
 
     entry = config.load("agents.json").get(key)
@@ -132,8 +131,7 @@ def _load_agent(key: str, options: LLMOptions | None = None) -> Agent:
 
 
 def _load_agent_or_default(key: str) -> Agent:
-    """key のエージェントを読む。agents.json に無ければ既定のもの
-    (設定ファイルが前の版のままでも動くように)"""
+    """key のエージェントを読む。agents.json に無ければ既定のもの (前の版の設定ファイル向け)"""
 
     if key in config.load("agents.json"):
         return _load_agent(key)
@@ -171,8 +169,7 @@ def create_assistant() -> Agent:
 
 
 def create_general() -> Agent:
-    """資料の要らない質問 (雑談や一般的な質問) に答える
-    口調は config/agents.json の system プロンプトで決まる (既定は assistant と同じアシスタント)"""
+    """資料の要らない質問 (雑談や一般的な質問) に答える"""
 
     return _load_agent("general")
 
@@ -187,8 +184,7 @@ def create_answerer(key: str) -> Agent:
 
 
 def create_cloud() -> Agent:
-    """ChatGPT (server.json の cloud) に聞き直すエージェント
-    system プロンプトは agents.json の cloud (無ければ既定のもの)"""
+    """ChatGPT (server.json の cloud) に聞き直すエージェント"""
 
     cloud = load_cloud_settings()
     agent = _load_agent_or_default("cloud")
@@ -206,8 +202,7 @@ def rewrite_answer(
     on_delta: DeltaCallback | None,
     cancel: CancelToken,
 ) -> str:
-    """クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)
-    書き直しの指示は agents.json の rewriter (無ければ既定のもの)"""
+    """クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)"""
 
     rewriter = _load_agent_or_default("rewriter")
 
@@ -231,7 +226,7 @@ def compare_answers(
     cancel: CancelToken,
 ) -> Comparison:
     """同じ質問へのローカルの回答 local_answer と、クラウドの回答 cloud_answer の違いを
-    ローカルの LLM でまとめる。指示は agents.json の comparer (無ければ既定のもの)
+    ローカルの LLM でまとめる
     on_delta には受け取った JSON の断片が来る (進み具合の表示に使う)"""
 
     agent = _load_agent_or_default("comparer")

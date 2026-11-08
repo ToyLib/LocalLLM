@@ -1,3 +1,5 @@
+// llama-server の管理: 専用のスレッドが 1 秒ごとに各サーバーの状態を見て、起動・監視する
+
 #include "server_manager.h"
 
 #include "chat.h"
@@ -148,9 +150,7 @@ bool StopRequested()
     return manager.stop;
 }
 
-// --------------------------------------------------
-// 設定
-// --------------------------------------------------
+// --- 設定 ---
 
 // http://127.0.0.1:8080/... の形ならポートを返す (ローカルでなければ空)
 std::optional<int> LocalPort(const std::string& url)
@@ -224,9 +224,7 @@ ServerSpec MakeSpec(
     return spec;
 }
 
-// --------------------------------------------------
-// llama-server を探す
-// --------------------------------------------------
+// --- llama-server を探す ---
 
 bool IsExecutable(const fs::path& path)
 {
@@ -361,9 +359,7 @@ FoundBinary FindBinary(const std::string& serverPath)
     return {"", "", "llama-server が見つかりません。設定画面のサーバーのタブで場所を指定してください"};
 }
 
-// --------------------------------------------------
-// プロセス
-// --------------------------------------------------
+// --- プロセス ---
 
 // 標準出力と標準エラーを out に流して起動する
 SDL_Process* CreateProcess(const std::vector<std::string>& args, SDL_IOStream* out)
@@ -573,9 +569,7 @@ fs::path LogPath(const Slot& slot)
     return LogDirectory() / (std::string(slot.fileName) + ".log");
 }
 
-// --------------------------------------------------
-// アプリが異常終了したときの後始末
-// --------------------------------------------------
+// --- アプリが異常終了したときの後始末 ---
 
 #if defined(_WIN32)
 
@@ -719,9 +713,7 @@ void CleanUpOrphan(const Slot& slot)
 
 #endif
 
-// --------------------------------------------------
-// 状態の公開
-// --------------------------------------------------
+// --- 状態の公開 ---
 
 bool SameView(const ServerView& a, const ServerView& b)
 {
@@ -759,10 +751,9 @@ void SetView(Slot& slot, ServerStatus status, std::string detail, std::string lo
     Publish(slot);
 }
 
-// --------------------------------------------------
-// サーバーの起動と停止
-// --------------------------------------------------
+// --- サーバーの起動と停止 ---
 
+// /health で状態を見る (200: 準備完了、503: モデルの読み込み中)
 Health ProbeHealth(int port)
 {
     CURL* curl = curl_easy_init();
@@ -888,6 +879,7 @@ const FoundBinary& ResolveBinary(const std::string& serverPath)
     return *foundBinary;
 }
 
+// llama-server を起動する (出力はログファイルへ)
 void Launch(Slot& slot)
 {
     const FoundBinary& binary = ResolveBinary(slot.spec.serverPath);
@@ -927,6 +919,7 @@ void Launch(Slot& slot)
     SetView(slot, ServerStatus::Starting, "起動中");
 }
 
+// 1つのサーバーの状態を確かめて、必要なら起動する (Run から定期的に呼ぶ)
 void Step(Slot& slot)
 {
     if (!slot.spec.run)
@@ -936,6 +929,7 @@ void Step(Slot& slot)
         return;
     }
 
+    // 自分で起動したサーバーの監視: 落ちていないか、準備ができたか
     if (slot.process)
     {
         int exitCode = 0;
@@ -980,6 +974,7 @@ void Step(Slot& slot)
         return;
     }
 
+    // 失敗したら、再試行を頼まれるまで起動しない
     if (slot.view.status == ServerStatus::Failed)
     {
         return;
@@ -1003,6 +998,7 @@ void Step(Slot& slot)
     Launch(slot);
 }
 
+// server.json を読み直し、内容が変わったサーバーを止める (次の Step で起動し直す)
 void ApplySettings()
 {
     const json server = LoadConfigOrEmpty(SERVER_CONFIG);
@@ -1051,6 +1047,7 @@ void ApplySettings()
     manager.view.enabled = settings.enabled;
 }
 
+// 管理用のスレッドの本体: 要求を待ち (最長 1 秒)、設定を反映して、各サーバーの Step を呼ぶ
 void Run()
 {
     {
@@ -1094,6 +1091,7 @@ void Run()
 
         try
         {
+            // 前回の異常終了で残ったサーバーを片付ける
             if (first)
             {
                 CleanUpOrphan(chatSlot);

@@ -1,3 +1,5 @@
+// 会話の状態と、ワーカースレッドでの送受信 (通常の質問 / ChatGPT への聞き直し)
+
 #include "chat.h"
 
 #include "agent.h"
@@ -118,6 +120,9 @@ void JoinWorker(ChatState& state)
     }
 }
 
+// 流れ: 履歴に質問と空の回答を積む → (ワーカー) 資料が要るかをルーターで判断
+//       → 資料を検索して質問に添える → 回答をストリーミングで受信
+// 失敗したら質問を履歴から除いて入力欄に戻す
 void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 {
     JoinWorker(state);
@@ -180,7 +185,6 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
             if (useRag)
             {
                 // 資料は送信する質問にだけ添え、画面の履歴には残さない
-                // (ルーターの判断の下に、参照した資料を続ける)
                 if (!note.empty())
                 {
                     note += "\n";
@@ -195,8 +199,7 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
                         std::string ragPrompt = BuildRagPrompt(hits, prompt);
                         history.back()["content"] = ragPrompt;
 
-                        // ChatGPT に聞き直すときに同じ資料を送れるように、
-                        // また資料を使ったやりとりを ChatGPT 宛ての履歴から除けるように残す
+                        // 聞き直しで同じ資料を送り、資料を使ったやりとりを ChatGPT 宛ての履歴から除くために残す
                         std::lock_guard lock(state.mutex);
                         auto& messages = state.messages;
                         messages[messages.size() - 2].ragPrompt = std::move(ragPrompt);
@@ -481,6 +484,9 @@ bool LastAnswerUsedRag(const ChatState& state)
     return !state.messages.empty() && state.messages.back().usedRag;
 }
 
+// 流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
+//       → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → ローカルの回答との違いをまとめる
+// クラウドに聞けなかったら、聞き直す前の回答に戻す
 void AskCloud(ChatState& state)
 {
     JoinWorker(state);

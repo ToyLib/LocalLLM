@@ -34,8 +34,7 @@ struct Message
     // user: 資料を添えて送った質問 (資料を使わなかったら空)
     std::string ragPrompt;
 
-    // assistant: 資料 (rag/) の内容を使って答えたか
-    // (資料を使ったやりとりは、ChatGPT 宛ての履歴から除く)
+    // assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除く目印)
     bool usedRag = false;
 
     // assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
@@ -44,13 +43,11 @@ struct Message
     // assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     std::string cloudOriginal;
 
-    // assistant: 聞き直す前のローカルの回答との違いのまとめ (ローカルの LLM が作る目安)
-    // compareVerdict が空なら、まとめていない
+    // assistant: 聞き直す前のローカルの回答との違いのまとめ (まとめていなければ compareVerdict は空)
     std::string compareVerdict;
     std::vector<std::string> comparePoints;
 
-    // assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
-    // 画面には FormatStatus で、経過時間と受け取った文字数を添えて出す
+    // assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など。表示は FormatStatus)
     std::string status;
     std::chrono::steady_clock::time_point statusSince;
 
@@ -60,7 +57,6 @@ struct Message
 };
 
 // 回答の途中の状態に、受け取った文字数と経過時間を添えた文 (status が空なら空)
-// 例: 「ChatGPT から受信中… 1,234 文字 (18 秒)」「侍が言い直し中… 340 文字 (元の回答は 1,234 文字) (5 秒)」
 // 呼ぶ側で state.mutex をロックしておく
 std::string FormatStatus(const Message& message);
 
@@ -84,14 +80,12 @@ struct ChatState
     // 質問に rag/ の資料を添えるか (UIスレッドだけが触る)
     RagMode ragMode = RagMode::Auto;
 
-    // クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る)
-    // 起動時と設定を保存したときに調べ直す
+    // クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る。起動時と設定の保存時に調べ直す)
     bool hasCloudKey = false;
     std::string cloudName = "ChatGPT";
 };
 
-// ワーカースレッドからUIスレッドを起こすためのイベントを登録する
-// (SDL_Init の後に1回呼ぶ)
+// ワーカースレッドからUIスレッドを起こすイベントを登録する (SDL_Init の後に1回呼ぶ)
 void RegisterWakeEvent();
 
 // UIスレッドを起こして再描画させる (どのスレッドからでも呼べる)

@@ -1,3 +1,5 @@
+// RAG: rag/ の文書を分割・埋め込みしてインデックスを作り、質問に近いチャンクを検索する
+
 #include "rag.h"
 
 #include "chat.h"
@@ -543,7 +545,6 @@ std::vector<fs::path> FindDocuments(const fs::path& directory)
             continue;
         }
 
-        // rag/README.md はフォルダの説明なので対象外
         if (path == directory / "README.md")
         {
             continue;
@@ -562,6 +563,8 @@ std::vector<fs::path> FindDocuments(const fs::path& directory)
     return files;
 }
 
+// インデックスを作る: 文書を読む → 変更があったものをチャンクに分割
+//                    → 未埋め込みのチャンクを埋め込む → 保存して検索用に差し替える
 void BuildIndex(RagState& state)
 {
     const fs::path directory = RagDirectory();

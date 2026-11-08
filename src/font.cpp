@@ -1,3 +1,5 @@
+// 日本語フォントの読み込み
+
 #include "font.h"
 
 #include <SDL3/SDL.h>

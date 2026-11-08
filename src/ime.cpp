@@ -1,3 +1,5 @@
+// IME で変換中 (未確定) の文字列の表示
+
 #include "ime.h"
 
 #include <imgui.h>

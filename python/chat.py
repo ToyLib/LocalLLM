@@ -40,8 +40,7 @@ class Message:
     # user: 資料を添えて送った質問 (資料を使わなかったら空)
     rag_prompt: str = ""
 
-    # assistant: 資料 (rag/) の内容を使って答えたか
-    # (資料を使ったやりとりは、ChatGPT 宛ての履歴から除く)
+    # assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除く目印)
     used_rag: bool = False
 
     # assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
@@ -50,13 +49,11 @@ class Message:
     # assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     cloud_original: str = ""
 
-    # assistant: 聞き直す前のローカルの回答との違いのまとめ (ローカルの LLM が作る目安)
-    # compare_verdict が空なら、まとめていない
+    # assistant: 聞き直す前のローカルの回答との違いのまとめ (まとめていなければ compare_verdict は空)
     compare_verdict: str = ""
     compare_points: list[str] = field(default_factory=list)
 
-    # assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など)
-    # 画面には format_status で、経過時間と受け取った文字数を添えて出す
+    # assistant: 回答の途中の状態 (「ChatGPT に問い合わせ中…」など。表示は format_status)
     status: str = ""
     status_since: float = 0.0
 
@@ -79,8 +76,7 @@ def _set_status(message: Message, status: str, total_chars: int = 0) -> None:
 
 
 def format_status(message: Message) -> str:
-    """回答の途中の状態に、受け取った文字数と経過時間を添えた文 (status が空なら空)
-    例: 「ChatGPT から受信中… 1,234 文字 (18 秒)」「侍が言い直し中… 340 文字 (元の回答は 1,234 文字) (5 秒)」"""
+    """回答の途中の状態に、受け取った文字数と経過時間を添えた文 (status が空なら空)"""
 
     if not message.status:
         return ""
@@ -125,8 +121,7 @@ class ChatState:
         # 質問に rag/ の資料を添えるか (UIスレッドだけが触る)
         self.rag_mode = RagMode.AUTO
 
-        # クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る)
-        # 起動時と設定を保存したときに調べ直す
+        # クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る。起動時と設定の保存時に調べ直す)
         self.has_cloud_key = False
         self.cloud_name = "ChatGPT"
 
@@ -191,7 +186,10 @@ def join_worker(state: ChatState) -> None:
 
 
 def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
-    """質問を送信してワーカースレッドで回答を受信する"""
+    """質問を送信してワーカースレッドで回答を受信する
+    流れ: 履歴に質問と空の回答を積む → (ワーカー) 資料が要るかをルーターで判断
+          → 資料を検索して質問に添える → 回答をストリーミングで受信
+    失敗したら質問を履歴から除いて入力欄に戻す"""
 
     join_worker(state)
 
@@ -232,7 +230,6 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
 
             if use_rag:
                 # 資料は送信する質問にだけ添え、画面の履歴には残さない
-                # (ルーターの判断の下に、参照した資料を続ける)
                 if note:
                     note += "\n"
 
@@ -243,8 +240,7 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                         rag_prompt = rag.build_prompt(hits, prompt)
                         history[-1]["content"] = rag_prompt
 
-                        # ChatGPT に聞き直すときに同じ資料を送れるように、
-                        # また資料を使ったやりとりを ChatGPT 宛ての履歴から除けるように残す
+                        # 聞き直しで同じ資料を送り、資料を使ったやりとりを ChatGPT 宛ての履歴から除くために残す
                         with state.lock:
                             state.messages[-2].rag_prompt = rag_prompt
                             state.messages[-1].used_rag = True
@@ -387,7 +383,10 @@ def can_ask_cloud(state: ChatState) -> bool:
 def ask_cloud(state: ChatState) -> None:
     """最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
     資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
-    (資料を送ることの確認は、呼ぶ前に UI で済ませておく)"""
+    (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
+    流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
+          → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → ローカルの回答との違いをまとめる
+    クラウドに聞けなかったら、聞き直す前の回答に戻す"""
 
     join_worker(state)
 

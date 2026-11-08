@@ -1,3 +1,5 @@
+// チャット画面の描画 (ImGui)
+
 #include "chat_ui.h"
 
 #include "ime.h"
@@ -112,7 +114,7 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
             ImGui::TreePop();
         }
 
-        // 聞き直す前の回答との違いのまとめ (ローカルの LLM が作った目安)
+        // 聞き直す前の回答との違いのまとめ
         if (!message.compareVerdict.empty() && !message.superseded)
         {
             ImGui::PushTextWrapPos(0.0f);
