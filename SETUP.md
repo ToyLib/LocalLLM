@@ -59,6 +59,9 @@ LocalLLM/
 │   ├── agents.json
 │   └── personas.json
 ├── scripts/
+│   ├── clean-model-cache.sh       (ダウンロードしたモデルの削除、Linux / macOS)
+│   ├── clean-model-cache.bat
+│   ├── clean-model-cache.ps1      (bat から呼ばれる本体)
 │   ├── llama-server-linux.sh
 │   ├── llama-server-macos.sh
 │   ├── llama-server-windows.bat
@@ -119,7 +122,7 @@ LocalLLM/
 | rag/ | RAG の資料 (ビルド時に実行ファイルの隣へコピー。[doc/rag.md](doc/rag.md)) |
 | python/ | Python + Tk 版のクライアント ([doc/python-app.md](doc/python-app.md)) |
 | CMakePresets.json | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |
-| scripts/ | llama-server の起動スクリプト (OS 別) |
+| scripts/ | llama-server の起動スクリプトと、ダウンロードしたモデルの削除スクリプト (OS 別) |
 | Asset/ | 同梱フォントとそのライセンス (ビルド時に実行ファイルの隣へコピー) |
 | .vscode/ | CMake Tools、ビルドタスク、デバッグ (Linux: gdb / macOS: lldb / Windows: Visual Studio) の設定 |
 
@@ -273,7 +276,49 @@ llama-server \
     --port 8080
 ```
 
-モデルを切り替える場合は、現在のサーバーを `Ctrl+C` で終了してから、別のモデルで起動する。Hugging Face から取得したモデルのキャッシュの場所は OS と llama.cpp のバージョンによる (OS ごとの手順書を参照)。
+モデルを切り替える場合は、現在のサーバーを `Ctrl+C` で終了してから、別のモデルで起動する。
+
+### ダウンロードしたモデルの保存場所と削除
+
+`-hf` で指定したモデルは、初回の起動時に Hugging Face からダウンロードされ、次からはそれが使われる。保存場所は OS ではなく llama.cpp のバージョンで決まる。
+
+| OS | 新しい llama.cpp | 古い llama.cpp |
+|---|---|---|
+| macOS | `~/.cache/huggingface/hub/` | `~/Library/Caches/llama.cpp/` |
+| Linux | `~/.cache/huggingface/hub/` | `~/.cache/llama.cpp/` |
+| Windows | `%USERPROFILE%\.cache\huggingface\hub\` | `%LOCALAPPDATA%\llama.cpp\` |
+
+- 新しい llama.cpp は Hugging Face の公式ツールと同じ場所に保存するので、それらとモデルを共有できる (macOS の Homebrew 版 build 12110 で確認)。
+- 環境変数 `HF_HOME` や `LLAMA_CACHE` を設定しているときは、そちらが優先される。
+- 保存済みのモデルの一覧は `llama-server -cl` で確認できる (保存場所は表示されない)。
+
+llama.cpp にはモデルを削除するコマンドが無いので、サーバーを止めてから、モデルごとのフォルダーを削除する。削除したモデルは、次に起動したときにまたダウンロードされる。
+
+削除用のスクリプトを用意している。上の表の場所 (環境変数の指定も含む) からダウンロード済みのモデルを探して、サイズと一緒に一覧にし、番号で選んだものを確認のうえ削除する。
+
+| OS | スクリプト |
+|---|---|
+| macOS / Linux | [scripts/clean-model-cache.sh](scripts/clean-model-cache.sh) |
+| Windows | [scripts/clean-model-cache.bat](scripts/clean-model-cache.bat) (中身は [clean-model-cache.ps1](scripts/clean-model-cache.ps1)) |
+
+- `--list` (PowerShell では `-List`) を付けると、一覧を出すだけで削除しない。
+- 起動スクリプトのメニューにあるモデルには `[launcher]` が付く。`ggml-org/bge-m3-Q8_0-GGUF` は RAG 用の埋め込みモデル。
+- Hugging Face の保存場所はほかのツールと共有なので、`.gguf` を含むフォルダーだけを一覧に出す。
+- 古い llama.cpp の保存場所はすべてのモデルが 1 つのフォルダーに入っているので、フォルダーごとまとめて削除する。
+
+手で削除する場合は、モデルごとのフォルダーを消す。新しい llama.cpp では、フォルダー名は `models--<作者>--<リポジトリ名>` になる。
+
+```bash
+# 例: Qwen3 4B 2507 を削除する (macOS / Linux)
+rm -rf ~/.cache/huggingface/hub/models--unsloth--Qwen3-4B-Instruct-2507-GGUF
+```
+
+```powershell
+# 例: Qwen3 4B 2507 を削除する (Windows / PowerShell)
+Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\huggingface\hub\models--unsloth--Qwen3-4B-Instruct-2507-GGUF"
+```
+
+RAG 用の埋め込みモデル (`models--ggml-org--bge-m3-Q8_0-GGUF`) もここにあるので、まとめて削除するときは注意する。
 
 ## 7. クライアントとサーバーの接続
 

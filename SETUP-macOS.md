@@ -166,7 +166,7 @@ llama-server \
 
 ソースからビルドした場合は `~/Repos/llama.cpp/build/bin/llama-server` を使う。
 
-Hugging Face から取得したモデルは、通常 `~/Library/Caches/llama.cpp/` または `~/.cache/huggingface/hub/` 以下にキャッシュされる (llama.cpp のバージョンによる)。
+ダウンロードしたモデルの保存場所と削除のしかたは [SETUP.md](SETUP.md) の「ダウンロードしたモデルの保存場所と削除」を参照。
 
 ## 6. クライアントとサーバーの接続
 

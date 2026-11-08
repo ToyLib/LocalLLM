@@ -230,7 +230,7 @@ $env:LLAMA_SERVER = "C:\path\to\llama-server.exe"
     --port 8080
 ```
 
-Hugging Face から取得したモデルは、通常 `%LOCALAPPDATA%\llama.cpp\` または `%USERPROFILE%\.cache\huggingface\hub\` 以下にキャッシュされる (llama.cpp のバージョンによる)。
+ダウンロードしたモデルの保存場所と削除のしかたは [SETUP.md](SETUP.md) の「ダウンロードしたモデルの保存場所と削除」を参照。
 
 ## 7. クライアントとサーバーの接続
 

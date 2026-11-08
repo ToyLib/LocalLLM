@@ -208,7 +208,7 @@ cd ~/Repos/llama.cpp
     --port 8080
 ```
 
-Hugging Face から取得したモデルは、通常 `~/.cache/huggingface/hub/` 以下にキャッシュされる。
+ダウンロードしたモデルの保存場所と削除のしかたは [SETUP.md](SETUP.md) の「ダウンロードしたモデルの保存場所と削除」を参照。
 
 ## 6. クライアントとサーバーの接続
 
