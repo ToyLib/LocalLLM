@@ -138,6 +138,10 @@ try {
         Copy-Required (Join-Path $crtFolder $dll) (Join-Path $Stage 'llama')
     }
 
+    # Uninstaller
+    Copy-Required (Join-Path $PSScriptRoot 'uninstall.bat') $Stage
+    Copy-Required (Join-Path $PSScriptRoot 'uninstall.ps1') $Stage
+
     # Documents and licenses
     Copy-Required (Join-Path $PSScriptRoot 'package-windows-readme.txt') (Join-Path $Stage 'README.txt')
     Copy-Required (Join-Path $Repo 'LICENSE') (Join-Path $Stage 'LICENSE.txt')

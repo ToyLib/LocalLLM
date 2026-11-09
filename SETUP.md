@@ -65,7 +65,10 @@ LocalLLM/
 │   ├── llama-server-windows.bat
 │   ├── llama-server-windows.ps1   (bat から呼ばれる本体)
 │   ├── package-windows.ps1        (Windows の配布用 ZIP を作る)
-│   └── package-windows-readme.txt (ZIP に入れる利用者向けの説明)
+│   ├── package-windows-readme.txt (ZIP に入れる利用者向けの説明)
+│   ├── uninstall.sh               (設定とモデルのキャッシュの削除、Linux / macOS)
+│   ├── uninstall.bat
+│   └── uninstall.ps1              (bat から呼ばれる本体)
 ├── Asset/
 │   ├── MPLUSRounded1c-Bold.ttf   (同梱フォント)
 │   └── OFL.txt                   (フォントのライセンス)
@@ -338,6 +341,24 @@ Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\huggingface\hub\models--uns
 ```
 
 RAG 用の埋め込みモデル (`models--ggml-org--bge-m3-Q8_0-GGUF`) もここにあるので、まとめて削除するときは注意する。
+
+### アンインストール
+
+アプリがリポジトリや展開したフォルダーの外に残したものは、次のスクリプトで片付けられる。一覧とサイズを表示したあと、次の 2 つをそれぞれ確認のうえ削除する。
+
+| OS | スクリプト |
+|---|---|
+| macOS / Linux | [scripts/uninstall.sh](scripts/uninstall.sh) |
+| Windows | [scripts/uninstall.bat](scripts/uninstall.bat) (中身は [uninstall.ps1](scripts/uninstall.ps1)) |
+
+| 対象 | 内容 |
+|---|---|
+| 設定とデータ | ユーザーごとのフォルダーの `LocalLLM` 全体 (設定、API キー、ログ、ダウンロードした llama-server) |
+| ダウンロードしたモデル | 上の表の保存場所 (環境変数の指定も含む) にある GGUF モデル |
+
+- `--list` (PowerShell では `-List`) を付けると、一覧を出すだけで削除しない。
+- Hugging Face の保存場所はほかのツールと共有なので、`.gguf` を含むモデルのフォルダーだけを削除する。ほかのツールが使っている GGUF モデルも対象になる。
+- アプリ本体 (リポジトリや展開したフォルダー) と、`LOCALLLM_CONFIG_DIR` で指定したフォルダーは削除しない。
 
 ## 7. クライアントとサーバーの接続
 
