@@ -31,7 +31,40 @@ struct StreamContext
 
     const DeltaCallback* onDelta = nullptr;
     const std::atomic<bool>* cancel = nullptr;
+    std::vector<Citation>* citations = nullptr;
 };
+
+// 画面からブラウザーで開いてよい URL か (モデルの出力なので http / https だけにする)
+bool IsWebUrl(const std::string& url)
+{
+    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
+// SSE の delta の annotations から出典を取り出す
+void ReadCitations(const json& delta, std::vector<Citation>* citations)
+{
+    if (!citations || !delta.contains("annotations") || !delta["annotations"].is_array())
+    {
+        return;
+    }
+
+    for (const auto& annotation : delta["annotations"])
+    {
+        if (!annotation.is_object() || !annotation.contains("url_citation") ||
+            !annotation["url_citation"].is_object())
+        {
+            continue;
+        }
+
+        const json& item = annotation["url_citation"];
+        const std::string url = ConfigStringOr(item, "url", "");
+
+        if (IsWebUrl(url))
+        {
+            citations->push_back({ConfigStringOr(item, "title", ""), url});
+        }
+    }
+}
 
 // SSEの1行を処理
 void ProcessLine(
@@ -101,6 +134,8 @@ void ProcessLine(
     }
 
     const auto& delta = choice["delta"];
+
+    ReadCitations(delta, context.citations);
 
     if (delta.contains("content") &&
         delta["content"].is_string())
@@ -297,6 +332,12 @@ CloudSettings LoadCloudSettings()
         static_cast<float>(settings.maxCompletionTokens)));
     settings.reasoningEffort =
         ConfigStringOr(cloud, "reasoning_effort", settings.reasoningEffort);
+    settings.searchModel = ConfigStringOr(cloud, "search_model", settings.searchModel);
+
+    if (cloud.contains("web_search") && cloud["web_search"].is_boolean())
+    {
+        settings.webSearch = cloud["web_search"].get<bool>();
+    }
 
     return settings;
 }
@@ -304,6 +345,88 @@ CloudSettings LoadCloudSettings()
 bool HasCloudApiKey(const CloudSettings& settings)
 {
     return !FindApiKey(settings.apiKeyName).value.empty();
+}
+
+std::string NumberCitations(const std::string& text, std::vector<Citation>& citations)
+{
+    std::vector<Citation> numbered;
+
+    // url の番号 (1 から)。無ければ title か label を題名にして足す
+    auto numberOf = [&](const std::string& url, const std::string& label)
+    {
+        for (size_t i = 0; i < numbered.size(); ++i)
+        {
+            if (numbered[i].url == url)
+            {
+                return i + 1;
+            }
+        }
+
+        std::string title = label;
+
+        for (const auto& citation : citations)
+        {
+            if (citation.url == url && !citation.title.empty())
+            {
+                title = citation.title;
+                break;
+            }
+        }
+
+        numbered.push_back({title.empty() ? url : title, url});
+        return numbered.size();
+    };
+
+    // [題名](URL) を探す。([題名](URL)) なら外側のかっこも取る
+    std::string result;
+    size_t i = 0;
+
+    while (i < text.size())
+    {
+        size_t close = std::string::npos;
+        size_t end = std::string::npos;
+
+        if (text[i] == '[')
+        {
+            close = text.find_first_of("]\n", i + 1);
+        }
+
+        if (close != std::string::npos && text.compare(close, 2, "](") == 0 &&
+            (text.compare(close + 2, 7, "http://") == 0 ||
+             text.compare(close + 2, 8, "https://") == 0))
+        {
+            end = text.find_first_of(") \t\r\n", close + 2);
+        }
+
+        if (end == std::string::npos || text[end] != ')')
+        {
+            result += text[i];
+            ++i;
+            continue;
+        }
+
+        const size_t number = numberOf(
+            text.substr(close + 2, end - close - 2),
+            text.substr(i + 1, close - i - 1));
+
+        i = end + 1;
+
+        if (!result.empty() && result.back() == '(' && i < text.size() && text[i] == ')')
+        {
+            result.pop_back();
+            ++i;
+        }
+
+        result += "[" + std::to_string(number) + "]";
+    }
+
+    for (const auto& citation : citations)
+    {
+        numberOf(citation.url, citation.title);
+    }
+
+    citations = std::move(numbered);
+    return result;
 }
 
 std::string AskLLM(
@@ -347,14 +470,18 @@ std::string AskLLM(
             ? "api-key: " + key.value
             : "Authorization: Bearer " + key.value;
 
-        request["model"] = cloud.model;
+        request["model"] = options.webSearch ? cloud.searchModel : cloud.model;
 
         if (cloud.maxCompletionTokens > 0)
         {
             request["max_completion_tokens"] = cloud.maxCompletionTokens;
         }
 
-        if (!cloud.reasoningEffort.empty())
+        if (options.webSearch)
+        {
+            request["web_search_options"] = json::object();
+        }
+        else if (!cloud.reasoningEffort.empty())
         {
             request["reasoning_effort"] = cloud.reasoningEffort;
         }
@@ -418,6 +545,7 @@ std::string AskLLM(
     StreamContext context;
     context.onDelta = &onDelta;
     context.cancel = &cancel;
+    context.citations = options.citations;
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(

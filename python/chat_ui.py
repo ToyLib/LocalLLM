@@ -7,6 +7,7 @@ import threading
 import time
 import tkinter as tk
 import tkinter.font as tkfont
+import webbrowser
 from tkinter import messagebox, ttk
 from typing import NamedTuple
 
@@ -14,8 +15,9 @@ import config
 import rag
 import server_manager
 from chat import (
-    ChatState, RagMode, ask_cloud, can_ask_cloud, format_status,
-    refresh_cloud_status, send_prompt)
+    STAGE_LOCAL, STAGE_WEB, ChatState, RagMode, ask_cloud, can_ask_cloud,
+    format_status, next_stage, refresh_cloud_status, send_prompt)
+from llm_client import Citation
 from server_manager import ServerStatus, ServerView
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 
@@ -59,8 +61,13 @@ class _Rendered(NamedTuple):
     compare_verdict: str = ""
     compare_points: tuple[str, ...] = ()
 
-    # 「ChatGPT に聞き直す」ボタン (最新の回答だけ): 出すか、押せるか、資料を使ったか
+    # 回答を作った段階と、Web 検索の出典
+    stage: str = STAGE_LOCAL
+    citations: tuple[Citation, ...] = ()
+
+    # 「ChatGPT に聞き直す」ボタン (最新の回答だけ): 出すか、Web 検索か、押せるか、資料を使ったか
     cloud_button: bool = False
+    web_button: bool = False
     cloud_enabled: bool = False
     used_rag: bool = False
     cloud_name: str = ""
@@ -239,11 +246,16 @@ class ChatApp:
         self.text.tag_configure("conflict", font=self.small)
         self.text.tag_configure(
             "original", font=self.small, lmargin1=12, lmargin2=12, spacing3=4)
+        self.text.tag_configure(
+            "link", font=self.small, underline=True, lmargin1=12, lmargin2=24)
         self.text.tag_bind("toggle", "<Button-1>", self._toggle_original)
-        self.text.tag_bind(
-            "toggle", "<Enter>", lambda _e: self.text.configure(cursor="hand2"))
-        self.text.tag_bind(
-            "toggle", "<Leave>", lambda _e: self.text.configure(cursor="arrow"))
+        self.text.tag_bind("link", "<Button-1>", self._open_citation)
+
+        for clickable in ("toggle", "link"):
+            self.text.tag_bind(
+                clickable, "<Enter>", lambda _e: self.text.configure(cursor="hand2"))
+            self.text.tag_bind(
+                clickable, "<Leave>", lambda _e: self.text.configure(cursor="arrow"))
 
         # 右クリックでコピー (macOS は Button-2 と Control+クリック)
         self.menu = tk.Menu(self.root, tearoff=False)
@@ -306,7 +318,7 @@ class ChatApp:
         self.text.tag_configure("user", foreground=colors["user"])
         self.text.tag_configure("ai", foreground=colors["ai"])
 
-        for tag in ("thinking", "note", "separator", "superseded", "toggle", "comparison"):
+        for tag in ("thinking", "note", "separator", "superseded", "toggle", "comparison", "link"):
             self.text.tag_configure(tag, foreground=colors["sub_text"])
 
         # 違いのまとめの「食い違いあり」は目立たせる
@@ -365,7 +377,7 @@ class ChatApp:
     def _cancel(self) -> None:
         self.state.cancel.cancel()
 
-    def _ask_cloud(self) -> None:
+    def _ask_cloud(self, web_search: bool = False) -> None:
         with self.state.lock:
             if not can_ask_cloud(self.state):
                 return
@@ -379,8 +391,18 @@ class ChatApp:
                 default="no", parent=self.root):
             return
 
-        ask_cloud(self.state)
+        ask_cloud(self.state, web_search)
         self._dirty.set()
+
+    def _open_citation(self, event: tk.Event) -> str:
+        index = self.text.index(f"@{event.x},{event.y}")
+
+        for tag in self.text.tag_names(index):
+            if tag.startswith("citation"):
+                message, number = map(int, tag[len("citation"):].split("_"))
+                webbrowser.open(self._rendered[message].citations[number].url)
+
+        return "break"
 
     def _toggle_original(self, event: tk.Event) -> str:
         index = self.text.index(f"@{event.x},{event.y}")
@@ -455,6 +477,7 @@ class ChatApp:
             self.state.restored_prompt = ""
             cloud_enabled = self.state.has_cloud_key and can_ask_cloud(self.state)
             last = len(self.state.messages) - 1
+            stages = [next_stage(self.state, m) for m in self.state.messages]
             snapshot: list[_Rendered] = [
                 _Rendered(
                     m.role, m.agent, m.content, m.note,
@@ -465,8 +488,12 @@ class ChatApp:
                     original_open=i in self._open_originals,
                     compare_verdict="" if m.superseded else m.compare_verdict,
                     compare_points=tuple(m.compare_points),
+                    stage=m.stage,
+                    citations=() if m.superseded else tuple(m.citations),
                     cloud_button=(i == last and m.role == "assistant" and
-                                  bool(m.agent_key) and not m.superseded),
+                                  bool(m.agent_key) and not m.superseded and
+                                  bool(stages[i])),
+                    web_button=stages[i] == STAGE_WEB,
                     cloud_enabled=i == last and cloud_enabled,
                     used_rag=m.used_rag,
                     cloud_name=self.state.cloud_name,
@@ -583,10 +610,10 @@ class ChatApp:
         if message.role == "user":
             text.insert("end", "You\n", ("user", tag))
         elif message.superseded:
-            # ChatGPT に聞き直す前の回答は、薄く残す
+            # 聞き直す前の回答は、薄く残す
+            label = "ローカルの回答" if message.stage == STAGE_LOCAL else "Web 検索なしの回答"
             text.insert(
-                "end", (message.agent or "AI") + " (聞き直す前の回答)\n",
-                ("superseded", tag))
+                "end", f"{message.agent or 'AI'} ({label})\n", ("superseded", tag))
         else:
             text.insert("end", (message.agent or "AI") + "\n", ("ai", tag))
 
@@ -609,10 +636,20 @@ class ChatApp:
                 text.insert(
                     "end", message.cloud_original + "\n", ("original", tag))
 
+        # Web 検索の出典 (クリックでブラウザーを開く)
+        if message.citations:
+            text.insert("end", "出典:\n", ("note", tag))
+
+            for number, citation in enumerate(message.citations):
+                text.insert(
+                    "end", f"[{number + 1}] {citation.title}\n",
+                    ("link", tag, f"citation{index}_{number}"))
+
         # 聞き直す前の回答との違いのまとめ
         if message.compare_verdict:
+            before = "Web 検索なしの回答" if message.stage == STAGE_WEB else "聞き直す前の回答"
             text.insert(
-                "end", "聞き直す前の回答との違い (ローカルの LLM による目安): ",
+                "end", f"{before}との違い (ローカルの LLM による目安): ",
                 ("comparison", tag))
             verdict_tag = "conflict" if message.compare_verdict == "食い違いあり" else "comparison"
             text.insert("end", message.compare_verdict + "\n", (verdict_tag, tag))
@@ -633,8 +670,10 @@ class ChatApp:
         """最新の回答の下に「ChatGPT に聞き直す」ボタンを埋め込む"""
 
         button = ttk.Button(
-            self.text, text=f"{message.cloud_name} に聞き直す",
-            command=self._ask_cloud)
+            self.text,
+            text="Web でも調べて比べる" if message.web_button
+                 else f"{message.cloud_name} に聞き直す",
+            command=lambda web_search=message.web_button: self._ask_cloud(web_search))
 
         if not message.cloud_enabled:
             button.state(["disabled"])

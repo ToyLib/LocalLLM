@@ -31,6 +31,18 @@ constexpr const char* DEFAULT_COMPARER_PROMPT =
     "食い違いは無く、聞き直した回答のほうが情報が多ければ「情報が増えた」、"
     "内容がほぼ同じなら「ほぼ同じ」にします。";
 
+constexpr const char* DEFAULT_WEB_COMPARER_PROMPT =
+    "同じ質問への「Web 検索なしの回答」と「Web 検索ありの回答」を比べて、内容の違いを短くまとめてください。"
+    "口調・言い回し・長さ・書き方の違いは書かず、内容の違いだけを書きます。[1] のような出典の番号は無視します。"
+    "points には違いを最大3つ、1つ40文字くらいで書きます。"
+    "食い違いは「検索なしは〜、検索ありは〜」、片方にだけある情報は「検索ありだけ: 〜」のように、どちらの回答の話かが分かるように書きます。"
+    "検索ありの回答にだけある情報、数値や事実の食い違いを優先します。"
+    "違いが無ければ「内容の違いはありません」とだけ書きます。"
+    "回答に書いていないことを推測で書かないでください。"
+    "verdict は、食い違う点が1つでもあれば「食い違いあり」、"
+    "食い違いは無く、検索ありの回答のほうが情報が多ければ「情報が増えた」、"
+    "内容がほぼ同じなら「ほぼ同じ」にします。";
+
 // 違いのまとめの判定
 constexpr const char* VERDICTS[] = {"ほぼ同じ", "情報が増えた", "食い違いあり"};
 
@@ -193,6 +205,11 @@ std::string DefaultAgentName(const std::string& key)
         return "違いのまとめ";
     }
 
+    if (key == "web_comparer")
+    {
+        return "Web 検索の違いのまとめ";
+    }
+
     return key == "rewriter" ? "書き直し" : "";
 }
 
@@ -206,6 +223,11 @@ std::string DefaultAgentPrompt(const std::string& key)
     if (key == "comparer")
     {
         return DEFAULT_COMPARER_PROMPT;
+    }
+
+    if (key == "web_comparer")
+    {
+        return DEFAULT_WEB_COMPARER_PROMPT;
     }
 
     return key == "rewriter" ? DEFAULT_REWRITER_PROMPT : "";
@@ -231,7 +253,7 @@ Agent CreateAnswerer(const std::string& key)
     return LoadAgent(key);
 }
 
-Agent CreateCloud()
+Agent CreateCloud(bool webSearch)
 {
     const CloudSettings cloud = LoadCloudSettings();
     Agent agent = LoadAgentOr("cloud", cloud.name, DefaultAgentPrompt("cloud"));
@@ -239,6 +261,7 @@ Agent CreateCloud()
     // 名前は server.json の cloud.name に合わせる
     agent.name = cloud.name;
     agent.options.cloud = true;
+    agent.options.webSearch = webSearch;
     return agent;
 }
 
@@ -273,10 +296,11 @@ Comparison CompareAnswers(
     const std::string& localAnswer,
     const std::string& cloudAnswer,
     const DeltaCallback& onDelta,
-    const std::atomic<bool>& cancel)
+    const std::atomic<bool>& cancel,
+    bool webSearch)
 {
-    Agent agent = LoadAgentOr(
-        "comparer", DefaultAgentName("comparer"), DefaultAgentPrompt("comparer"));
+    const std::string key = webSearch ? "web_comparer" : "comparer";
+    Agent agent = LoadAgentOr(key, DefaultAgentName(key), DefaultAgentPrompt(key));
 
     agent.options.maxTokens = 512;
     agent.options.temperature = 0.0f;
@@ -299,10 +323,13 @@ Comparison CompareAnswers(
         {"required", {"points", "verdict"}}
     };
 
+    const std::string before = webSearch ? "Web 検索なしの回答" : "ローカルの回答";
+    const std::string after = webSearch ? "Web 検索ありの回答" : "聞き直した回答";
+
     const std::string content =
         "## 質問\n" + Truncate(question, COMPARE_QUESTION_BYTES) +
-        "\n\n## ローカルの回答\n" + Truncate(localAnswer, COMPARE_ANSWER_BYTES) +
-        "\n\n## 聞き直した回答\n" + Truncate(cloudAnswer, COMPARE_ANSWER_BYTES);
+        "\n\n## " + before + "\n" + Truncate(localAnswer, COMPARE_ANSWER_BYTES) +
+        "\n\n## " + after + "\n" + Truncate(cloudAnswer, COMPARE_ANSWER_BYTES);
 
     const std::string answer = RunAgent(
         agent,

@@ -121,6 +121,7 @@ constexpr AgentEntry AGENT_ENTRIES[] = {
     {"cloud", "ChatGPT"},
     {"rewriter", "口調の書き直し"},
     {"comparer", "違いのまとめ"},
+    {"web_comparer", "Web 検索の違いのまとめ"},
 };
 
 bool IsAnswerer(const std::string& key)
@@ -394,6 +395,10 @@ void LoadSettings(SettingsState& settings)
     settings.cloudUrl = StringOr(cloud, "chat_url", defaults.chatUrl);
     settings.cloudModel = StringOr(cloud, "model", defaults.model);
     settings.cloudKeyName = StringOr(cloud, "api_key_name", defaults.apiKeyName);
+    settings.cloudWebSearch = cloud.contains("web_search") && cloud["web_search"].is_boolean()
+        ? cloud["web_search"].get<bool>()
+        : defaults.webSearch;
+    settings.cloudSearchModel = StringOr(cloud, "search_model", defaults.searchModel);
 
     ClearApiKeyInput(settings);
     settings.deleteApiKey = false;
@@ -507,6 +512,8 @@ bool SaveSettings(SettingsState& settings)
     cloud["chat_url"] = settings.cloudUrl;
     cloud["model"] = settings.cloudModel;
     cloud["api_key_name"] = settings.cloudKeyName;
+    cloud["web_search"] = settings.cloudWebSearch;
+    cloud["search_model"] = settings.cloudSearchModel;
 
     if (!cloud.contains("auth"))
     {
@@ -659,6 +666,11 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         {
             ImGui::TextDisabled(
                 "ChatGPT に聞き直した後、聞き直す前の回答との違いをローカルの LLM でまとめるときの指示です。");
+        }
+        else if (agent.key == "web_comparer")
+        {
+            ImGui::TextDisabled(
+                "Web でも調べた後、検索なしの回答との違いをローカルの LLM でまとめるときの指示です。");
         }
         else
         {
@@ -842,6 +854,13 @@ void DrawCloudTab(SettingsState& settings)
 
     ImGui::TextDisabled("秘密ファイル: %s", SecretsFilePath().c_str());
     ImGui::TextDisabled("API キーは https の URL にだけ送ります。");
+
+    ImGui::SeparatorText("Web 検索");
+    ImGui::Checkbox("聞き直した後に「Web でも調べて比べる」を出す", &settings.cloudWebSearch);
+    ImGui::BeginDisabled(!settings.cloudWebSearch);
+    ImGui::InputText("Web 検索のモデル", &settings.cloudSearchModel);
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("押すたびに検索の料金がかかります。資料 (rag/) を使った回答では出しません。");
 }
 
 } // namespace

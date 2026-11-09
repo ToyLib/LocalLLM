@@ -55,6 +55,7 @@ AGENT_ENTRIES = (
     ("cloud", "ChatGPT"),
     ("rewriter", "口調の書き直し"),
     ("comparer", "違いのまとめ"),
+    ("web_comparer", "Web 検索の違いのまとめ"),
 )
 
 # 回答役 (人格のテンプレートと、ChatGPT の回答の書き直しを選べる)
@@ -349,7 +350,7 @@ class SettingsDialog:
             entry = self.agents_json.get(key)
 
             if not isinstance(entry, dict):
-                # 前の版の設定ファイルに無いもの (cloud / rewriter / comparer) は、既定のプロンプトから始める
+                # 前の版の設定ファイルに無いもの (cloud / rewriter / comparer / web_comparer) は、既定のプロンプトから始める
                 default = DEFAULT_AGENTS.get(key)
                 entry = ({"name": default[0], "system_prompt": [default[1]]}
                          if default else {})
@@ -380,6 +381,11 @@ class SettingsDialog:
                 ttk.Label(
                     page, foreground=NOTE_COLOR,
                     text="ChatGPT に聞き直した後、聞き直す前の回答との違いをローカルの LLM でまとめるときの指示です。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            elif key == "web_comparer":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="Web でも調べた後、検索なしの回答との違いをローカルの LLM でまとめるときの指示です。",
                 ).pack(side="top", fill="x", pady=(0, 6))
             else:
                 row = ttk.Frame(page)
@@ -538,6 +544,27 @@ class SettingsDialog:
             tab, foreground=NOTE_COLOR, wraplength=560, justify="left",
             text=f"秘密ファイル: {secrets}\nAPI キーは https の URL にだけ送ります。",
         ).grid(row=13, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        # 聞き直した後の Web 検索
+        web_search = cloud.get("web_search")
+        self.cloud_web_search = tk.BooleanVar(
+            value=web_search if isinstance(web_search, bool) else defaults.web_search)
+        ttk.Checkbutton(
+            tab, variable=self.cloud_web_search,
+            text="聞き直した後に「Web でも調べて比べる」を出す",
+        ).grid(row=14, column=0, columnspan=2, sticky="w", pady=(10, 2))
+
+        search_model = cloud.get("search_model")
+        self.cloud["search_model"] = tk.StringVar(
+            value=search_model if isinstance(search_model, str) else defaults.search_model)
+        ttk.Label(tab, text="Web 検索のモデル").grid(row=15, column=0, sticky="w")
+        ttk.Entry(tab, textvariable=self.cloud["search_model"]).grid(
+            row=15, column=1, sticky="ew", padx=(8, 0), pady=2)
+
+        ttk.Label(
+            tab, foreground=NOTE_COLOR, wraplength=560, justify="left",
+            text="押すたびに検索の料金がかかります。資料 (rag/) を使った回答では出しません。",
+        ).grid(row=16, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         self._update_key_status()
         self._update_key_hint()
@@ -765,6 +792,7 @@ class SettingsDialog:
         for key, variable in self.cloud.items():
             cloud[key] = variable.get()
 
+        cloud["web_search"] = self.cloud_web_search.get()
         cloud.setdefault("auth", "bearer")
 
         for key, (name, text) in self.agent_widgets.items():

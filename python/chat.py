@@ -12,7 +12,9 @@ import rag
 from agent import (
     compare_answers, create_answerer, create_assistant, create_cloud, create_general,
     rewrite_answer, route_question, run_agent)
-from llm_client import CancelToken, LLMError, has_cloud_api_key, load_cloud_settings
+from llm_client import (
+    CancelToken, Citation, LLMError, has_cloud_api_key, load_cloud_settings,
+    number_citations)
 
 
 class RagMode(enum.Enum):
@@ -21,6 +23,12 @@ class RagMode(enum.Enum):
     AUTO = "auto"      # ルーターが質問ごとに判断する
     ALWAYS = "always"
     NEVER = "never"
+
+
+# 回答を作った段階 (ローカル → ChatGPT → ChatGPT + Web 検索)
+STAGE_LOCAL = "local"
+STAGE_CLOUD = "cloud"
+STAGE_WEB = "web"
 
 
 @dataclass
@@ -49,7 +57,13 @@ class Message:
     # assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     cloud_original: str = ""
 
-    # assistant: 聞き直す前のローカルの回答との違いのまとめ (まとめていなければ compare_verdict は空)
+    # assistant: 回答を作った段階
+    stage: str = STAGE_LOCAL
+
+    # assistant: Web 検索の出典 (本文の [1] などの番号の順)
+    citations: list[Citation] = field(default_factory=list)
+
+    # assistant: 聞き直す前の回答との違いのまとめ (まとめていなければ compare_verdict は空)
     compare_verdict: str = ""
     compare_points: list[str] = field(default_factory=list)
 
@@ -124,6 +138,9 @@ class ChatState:
         # クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る。起動時と設定の保存時に調べ直す)
         self.has_cloud_key = False
         self.cloud_name = "ChatGPT"
+
+        # 聞き直した後に Web 検索でも聞き直せるか (server.json の cloud.web_search。UIスレッドだけが触る)
+        self.web_search = False
 
         # UIスレッドに再描画を頼む (どのスレッドからでも呼べる)
         self.notify = notify
@@ -323,9 +340,10 @@ def _build_cloud_history(
     return history
 
 
-def _compare_with_local(
-        state: ChatState, question: str, local_answer: str, cloud_answer: str) -> None:
-    """聞き直す前のローカルの回答と、クラウドの回答 (書き直す前) の違いをまとめて、
+def _compare_with_previous(
+        state: ChatState, question: str, local_answer: str, cloud_answer: str,
+        web_search: bool) -> None:
+    """聞き直す前の回答と、クラウドの回答 (書き直す前) の違いをまとめて、
     最新の回答に添える (ワーカースレッドから呼ぶ)
     失敗しても回答はそのまま残し、補足に理由を出す。中断したら何も添えない"""
 
@@ -333,7 +351,9 @@ def _compare_with_local(
         return
 
     with state.lock:
-        _set_status(state.messages[-1], "聞き直す前の回答と比べ中…")
+        _set_status(
+            state.messages[-1],
+            "Web 検索なしの回答と比べ中…" if web_search else "聞き直す前の回答と比べ中…")
     state.notify()
 
     def on_delta(text: str) -> None:
@@ -343,7 +363,7 @@ def _compare_with_local(
 
     try:
         comparison = compare_answers(
-            question, local_answer, cloud_answer, on_delta, state.cancel)
+            question, local_answer, cloud_answer, on_delta, state.cancel, web_search)
     except Exception as e:
         with state.lock:
             answer = state.messages[-1]
@@ -366,6 +386,7 @@ def refresh_cloud_status(state: ChatState) -> None:
     cloud = load_cloud_settings()
     state.has_cloud_key = has_cloud_api_key(cloud)
     state.cloud_name = cloud.name
+    state.web_search = cloud.web_search
 
 
 def can_ask_cloud(state: ChatState) -> bool:
@@ -380,8 +401,23 @@ def can_ask_cloud(state: ChatState) -> bool:
             bool(last.content) and _last_user_index(state.messages) is not None)
 
 
-def ask_cloud(state: ChatState) -> None:
+def next_stage(state: ChatState, message: Message) -> str:
+    """この回答の次に聞き直せる段階 (STAGE_CLOUD / STAGE_WEB。無ければ空)
+    資料を使った回答は、資料の内容が検索語として外に出ないように Web 検索しない
+    (呼ぶ側で state.lock を取っておく)"""
+
+    if message.stage == STAGE_WEB:
+        return ""
+
+    if message.stage == STAGE_CLOUD and state.web_search and not message.used_rag:
+        return STAGE_WEB
+
+    return STAGE_CLOUD
+
+
+def ask_cloud(state: ChatState, web_search: bool = False) -> None:
     """最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
+    web_search なら、Web 検索用のモデルで聞き直し、検索なしの ChatGPT の回答と比べる
     資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
     (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
     流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
@@ -394,15 +430,21 @@ def ask_cloud(state: ChatState) -> None:
         if not can_ask_cloud(state):
             return
 
+        previous = state.messages[-1]
+
+        if next_stage(state, previous) != (STAGE_WEB if web_search else STAGE_CLOUD):
+            return
+
         last_user = _last_user_index(state.messages)
         assert last_user is not None
-        previous = state.messages[-1]
         user = state.messages[last_user]
 
         history = _build_cloud_history(state.messages, last_user)
         question = user.content
         agent_key = previous.agent_key
-        local_answer = previous.content
+
+        # 口調を書き直した回答は、書き直す前の文章と比べる
+        local_answer = previous.cloud_original or previous.content
 
         # 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
         send_rag = previous.used_rag and bool(user.rag_prompt)
@@ -417,10 +459,15 @@ def ask_cloud(state: ChatState) -> None:
             agent=f"{previous.agent} ({state.cloud_name})",
             agent_key=agent_key,
             used_rag=previous.used_rag,
-            note=f"{state.cloud_name} に聞き直しました" +
-                 (" (資料も送りました)" if send_rag else ""),
+            stage=STAGE_WEB if web_search else STAGE_CLOUD,
+            note=(f"{state.cloud_name} に Web で調べて聞き直しました" if web_search else
+                  f"{state.cloud_name} に聞き直しました" +
+                  (" (資料も送りました)" if send_rag else "")),
         )
-        _set_status(answer, f"{state.cloud_name} に問い合わせ中…")
+        _set_status(
+            answer,
+            f"{state.cloud_name} が Web で検索中…" if web_search
+            else f"{state.cloud_name} に問い合わせ中…")
         state.messages.append(answer)
 
         state.busy = True
@@ -431,10 +478,13 @@ def ask_cloud(state: ChatState) -> None:
     def run() -> None:
         try:
             persona = create_answerer(agent_key)
-            cloud = create_cloud()
+            cloud = create_cloud(web_search)
+            citations: list[Citation] = []
+            cloud.options.citations = citations
+            source = f"{cloud.name} + Web 検索" if web_search else cloud.name
 
             with state.lock:
-                state.messages[-1].agent = f"{persona.name} ({cloud.name})"
+                state.messages[-1].agent = f"{persona.name} ({source})"
             state.notify()
 
             # 画面には流さず、受け取った文字数だけを進み具合として出す
@@ -456,6 +506,13 @@ def ask_cloud(state: ChatState) -> None:
             if not cloud_answer.strip():
                 raise LLMError(f"{cloud.name} の回答が空でした")
 
+            if web_search:
+                # 出典は本文から分けて、書き直しや比較に URL を渡さない
+                cloud_answer, numbered = number_citations(cloud_answer, citations)
+
+                with state.lock:
+                    state.messages[-1].citations = numbered
+
             if not persona.rewrite:
                 with state.lock:
                     answer = state.messages[-1]
@@ -464,7 +521,7 @@ def ask_cloud(state: ChatState) -> None:
             else:
                 with state.lock:
                     answer = state.messages[-1]
-                    answer.agent = f"{persona.name} ({cloud.name} → ローカルで書き直し)"
+                    answer.agent = f"{persona.name} ({source} → ローカルで書き直し)"
                     answer.cloud_original = cloud_answer
                     _set_status(
                         answer, f"{persona.name}が言い直し中…", len(cloud_answer))
@@ -492,7 +549,7 @@ def ask_cloud(state: ChatState) -> None:
                     # (中断しても、途中まで書き直したものがあればそれを残す)
                     if not answer.content.strip():
                         answer.content = cloud_answer
-                        answer.agent = f"{persona.name} ({cloud.name})"
+                        answer.agent = f"{persona.name} ({source})"
                         answer.cloud_original = ""
                         answer.note += (
                             f"\n書き直せなかったので、{cloud.name} の回答をそのまま表示しています" +
@@ -501,7 +558,8 @@ def ask_cloud(state: ChatState) -> None:
                         answer.note += f"\n書き直しが途中で止まりました: {failure}"
 
             if not state.cancel.is_set():
-                _compare_with_local(state, question, local_answer, cloud_answer)
+                _compare_with_previous(
+                    state, question, local_answer, cloud_answer, web_search)
         except Exception as e:
             # ChatGPT に聞けなかった: 聞き直す前の回答に戻す
             with state.lock:

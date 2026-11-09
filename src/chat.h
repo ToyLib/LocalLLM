@@ -1,5 +1,7 @@
 #pragma once
 
+#include "llm_client.h"
+
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -15,6 +17,14 @@ enum class RagMode
     Auto,    // ルーターが質問ごとに判断する
     Always,
     Never
+};
+
+// 回答を作った段階 (ローカル → ChatGPT → ChatGPT + Web 検索)
+enum class AnswerStage
+{
+    Local,
+    Cloud,
+    Web
 };
 
 struct Message
@@ -43,7 +53,13 @@ struct Message
     // assistant: ChatGPT に聞き直した回答の、書き直す前の元の文章 (折りたたんで表示する)
     std::string cloudOriginal;
 
-    // assistant: 聞き直す前のローカルの回答との違いのまとめ (まとめていなければ compareVerdict は空)
+    // assistant: 回答を作った段階
+    AnswerStage stage = AnswerStage::Local;
+
+    // assistant: Web 検索の出典 (本文の [1] などの番号の順)
+    std::vector<Citation> citations;
+
+    // assistant: 聞き直す前の回答との違いのまとめ (まとめていなければ compareVerdict は空)
     std::string compareVerdict;
     std::vector<std::string> comparePoints;
 
@@ -83,6 +99,9 @@ struct ChatState
     // クラウド (ChatGPT) の API キーがあるか (UIスレッドだけが触る。起動時と設定の保存時に調べ直す)
     bool hasCloudKey = false;
     std::string cloudName = "ChatGPT";
+
+    // 聞き直した後に Web 検索でも聞き直せるか (server.json の cloud.web_search。UIスレッドだけが触る)
+    bool webSearch = false;
 };
 
 // ワーカースレッドからUIスレッドを起こすイベントを登録する (SDL_Init の後に1回呼ぶ)
@@ -107,7 +126,13 @@ bool CanAskCloud(const ChatState& state);
 // 呼ぶ側で state.mutex をロックしておく
 bool LastAnswerUsedRag(const ChatState& state);
 
+// この回答の次に聞き直せる段階 (Cloud / Web。もう聞き直せなければ Local)
+// 資料を使った回答は、資料の内容が検索語として外に出ないように Web 検索しない
+// 呼ぶ側で state.mutex をロックしておく
+AnswerStage NextStage(const ChatState& state, const Message& message);
+
 // 最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
+// webSearch なら、Web 検索用のモデルで聞き直し、検索なしの ChatGPT の回答と比べる
 // 資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
 // (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
-void AskCloud(ChatState& state);
+void AskCloud(ChatState& state, bool webSearch = false);

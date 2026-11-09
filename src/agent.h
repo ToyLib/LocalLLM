@@ -45,7 +45,8 @@ Agent CreateGeneral();
 Agent CreateAnswerer(const std::string& key);
 
 // ChatGPT (server.json の cloud) に聞き直すエージェント
-Agent CreateCloud();
+// webSearch なら Web 検索用のモデルで答えさせる
+Agent CreateCloud(bool webSearch = false);
 
 // クラウドの回答 answer を、回答役 persona の口調で書き直す (ローカルの LLM で)
 std::string RewriteAnswer(
@@ -67,15 +68,17 @@ struct Comparison
 
 // 同じ質問へのローカルの回答 localAnswer と、クラウドの回答 cloudAnswer の違いを
 // ローカルの LLM でまとめる
+// webSearch なら、Web 検索なしの回答 localAnswer と Web 検索ありの回答 cloudAnswer を比べる
 // onDelta には受け取った JSON の断片が来る (進み具合の表示に使う)
 Comparison CompareAnswers(
     const std::string& question,
     const std::string& localAnswer,
     const std::string& cloudAnswer,
     const DeltaCallback& onDelta,
-    const std::atomic<bool>& cancel);
+    const std::atomic<bool>& cancel,
+    bool webSearch = false);
 
-// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter / comparer のみ。ほかは空)
+// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter / comparer / web_comparer のみ。ほかは空)
 std::string DefaultAgentName(const std::string& key);
 std::string DefaultAgentPrompt(const std::string& key);
 

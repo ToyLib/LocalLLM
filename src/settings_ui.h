@@ -105,6 +105,8 @@ struct SettingsState
     std::string cloudUrl;
     std::string cloudModel;
     std::string cloudKeyName;
+    bool cloudWebSearch = false;
+    std::string cloudSearchModel;
 
     // 新しく登録する API キー (空なら変えない。保存したら消す)
     std::string apiKeyInput;

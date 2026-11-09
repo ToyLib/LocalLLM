@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import socket
 import threading
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 from urllib.parse import urlsplit
 
 import config
@@ -22,6 +23,13 @@ DeltaCallback = Callable[[str], None]
 
 class LLMError(Exception):
     pass
+
+
+class Citation(NamedTuple):
+    """Web 検索の回答の出典"""
+
+    title: str
+    url: str
 
 
 class Cancelled(LLMError):
@@ -96,6 +104,13 @@ class LLMOptions:
     # (OpenAI の推論モデルは temperature を受け付けず、llama-server 専用の項目も通らないため)
     cloud: bool = False
 
+    # True ならクラウドの Web 検索用のモデル (server.json の cloud.search_model) で答えさせる
+    # 検索用のモデルは reasoning_effort を受け付けるか確認できていないので、送らない
+    web_search: bool = False
+
+    # Web 検索の出典を受け取るリスト (None なら受け取らない)
+    citations: list[Citation] | None = None
+
 
 @dataclass
 class CloudSettings:
@@ -119,6 +134,12 @@ class CloudSettings:
     # 推論の深さ (minimal / low / medium / high)。空なら送らない
     reasoning_effort: str = ""
 
+    # 聞き直した後に、Web 検索でも聞き直せるようにするか
+    web_search: bool = False
+
+    # Web 検索に使うモデル (Chat Completions で検索できる専用のモデル)
+    search_model: str = "gpt-5-search-api"
+
 
 def load_cloud_settings() -> CloudSettings:
     """server.json を読んで、クラウドの設定を返す (読めなければ既定値)"""
@@ -133,7 +154,8 @@ def load_cloud_settings() -> CloudSettings:
         print("Config cloud is not an object (using defaults)")
         return settings
 
-    for key in ("name", "chat_url", "model", "api_key_name", "auth", "reasoning_effort"):
+    for key in ("name", "chat_url", "model", "api_key_name", "auth",
+                "reasoning_effort", "search_model"):
         value = cloud.get(key)
         if isinstance(value, str):
             setattr(settings, key, value)
@@ -141,6 +163,10 @@ def load_cloud_settings() -> CloudSettings:
     tokens = cloud.get("max_completion_tokens")
     if isinstance(tokens, (int, float)) and not isinstance(tokens, bool):
         settings.max_completion_tokens = int(tokens)
+
+    web_search = cloud.get("web_search")
+    if isinstance(web_search, bool):
+        settings.web_search = web_search
 
     return settings
 
@@ -224,7 +250,69 @@ def _post(
         raise
 
 
-def _parse_line(line: str, on_delta: DeltaCallback | None) -> str | None:
+def _is_web_url(url: Any) -> bool:
+    """画面からブラウザーで開いてよい URL か (モデルの出力なので http / https だけにする)"""
+
+    return isinstance(url, str) and url.startswith(("http://", "https://"))
+
+
+def _read_citations(delta: dict[str, Any], citations: list[Citation] | None) -> None:
+    """SSE の delta の annotations から出典を取り出す"""
+
+    annotations = delta.get("annotations")
+
+    if citations is None or not isinstance(annotations, list):
+        return
+
+    for annotation in annotations:
+        item = annotation.get("url_citation") if isinstance(annotation, dict) else None
+
+        if isinstance(item, dict) and _is_web_url(item.get("url")):
+            title = item.get("title")
+            citations.append(Citation(title if isinstance(title, str) else "", item["url"]))
+
+
+# 回答の中の出典のリンク: ([題名](URL)) か [題名](URL)
+_LINK_PATTERN = re.compile(
+    r"\(\[([^\]\n]*)\]\((https?://[^\s)]+)\)\)|\[([^\]\n]*)\]\((https?://[^\s)]+)\)")
+
+
+def number_citations(
+        text: str, citations: list[Citation]) -> tuple[str, list[Citation]]:
+    """回答の中のリンクを [1] のような番号に置き換え、番号順の出典の一覧を返す
+    リンクのままだと、画面で読みにくく、ローカルの LLM の書き直しで URL が壊れるため
+    annotations にだけある出典は、一覧の後ろに足す"""
+
+    titles: dict[str, str] = {}
+
+    for citation in citations:
+        if citation.title:
+            titles.setdefault(citation.url, citation.title)
+
+    numbered: dict[str, Citation] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        label = match.group(1) if match.group(1) is not None else match.group(3)
+        url = match.group(2) or match.group(4)
+
+        if url not in numbered:
+            numbered[url] = Citation(titles.get(url) or label or url, url)
+
+        return f"[{list(numbered).index(url) + 1}]"
+
+    text = _LINK_PATTERN.sub(replace, text)
+
+    for citation in citations:
+        if citation.url not in numbered:
+            numbered[citation.url] = Citation(
+                titles.get(citation.url, citation.url), citation.url)
+
+    return text, list(numbered.values())
+
+
+def _parse_line(
+        line: str, on_delta: DeltaCallback | None,
+        citations: list[Citation] | None = None) -> str | None:
     """SSE の1行を処理する。受信したテキスト片を返す ([DONE] なら None)"""
 
     if not line or line.startswith(":") or not line.startswith("data:"):
@@ -264,6 +352,8 @@ def _parse_line(line: str, on_delta: DeltaCallback | None) -> str | None:
 
     if not isinstance(delta, dict):
         return ""
+
+    _read_citations(delta, citations)
 
     text = delta.get("content")
 
@@ -310,12 +400,14 @@ def ask_llm(
         else:
             headers["Authorization"] = f"Bearer {key}"
 
-        request["model"] = cloud.model
+        request["model"] = cloud.search_model if options.web_search else cloud.model
 
         if cloud.max_completion_tokens > 0:
             request["max_completion_tokens"] = cloud.max_completion_tokens
 
-        if cloud.reasoning_effort:
+        if options.web_search:
+            request["web_search_options"] = {}
+        elif cloud.reasoning_effort:
             request["reasoning_effort"] = cloud.reasoning_effort
 
         if options.schema is not None:
@@ -363,7 +455,7 @@ def ask_llm(
         if response.status == 200:
             for raw in response:
                 line = raw.decode("utf-8").rstrip("\n").rstrip("\r")
-                text = _parse_line(line, on_delta)
+                text = _parse_line(line, on_delta, options.citations)
 
                 if text is None:
                     done = True

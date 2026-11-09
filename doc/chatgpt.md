@@ -43,6 +43,27 @@ ChatGPT が答えを作る (全部受け取るまで画面には流さない)
 - 1 つの回答は先頭の約 1,200 文字 (3,600 バイト) までを比べます。llama-server のコンテキスト (既定 4096 トークン) に収めるためです。
 - 比べている間は「聞き直す前の回答と比べ中…」と出ます。ここで中断しても回答は残り、まとめを付けないだけです。まとめられなかったときは、回答の下の補足に理由を出します。
 
+## Web でも調べて比べる
+
+Web 検索の有無で回答がどう変わるかを見比べるための機能です。既定では出ません。設定画面の「ChatGPT」タブ (Python 版は「サーバー」タブ) で「聞き直した後に「Web でも調べて比べる」を出す」をオンにすると使えます。
+
+```
+ローカルの回答
+   ↓ 「ChatGPT に聞き直す」
+ChatGPT の回答 (検索なし)
+   ↓ 「Web でも調べて比べる」
+ChatGPT の回答 (検索あり) + 出典 + 検索なしの回答との違い
+```
+
+- 同じ質問を、`cloud.search_model` (既定 `gpt-5-search-api`) で聞き直します。このモデルは必ず Web を検索してから答えます。
+- 比べるのは、検索なしの ChatGPT の回答と、検索ありの回答 (どちらも口調を書き直す前) です。まとめの指示は `agents.json` の `web_comparer` です。
+- 回答の中のリンクは `[1]` のような番号に置き換え、回答の下に「出典」として一覧にします。クリックするとブラウザーで開きます。回答によっては出典が付かないことがあります。
+- 出典の URL は、口調の書き直しと違いのまとめには渡しません (小さいモデルが URL を壊さないように)。
+- 資料 (`rag/`) を使った回答では、ボタンを出しません。資料の内容が検索語として外に出ないようにするためです。
+- オフのときは、聞き直した回答の下に、今までどおり「ChatGPT に聞き直す」ボタンが出ます。
+- 押すたびに検索の料金 (モデルの料金とは別) がかかります。金額は [OpenAI の料金ページ](https://developers.openai.com/api/docs/pricing) で確認してください。
+- 検索できなかったときは、検索なしの回答に戻してエラーを表示します。もう一度押せます。
+
 ## 進み具合の表示
 
 ChatGPT の回答は書き直してから表示するので、届くまで本文は出ません。代わりに、回答の上に次のような行を出します。経過時間は、何も届かなくても 1 秒ごとに進みます。
@@ -53,6 +74,7 @@ ChatGPT の回答は書き直してから表示するので、届くまで本文
 | 回答を受け取っている | `ChatGPT から受信中… 1,234 文字 (18 秒)` |
 | 回答役が書き直している (`rewrite` が `true` のとき) | `侍が言い直し中… 340 文字 (元の回答は 1,234 文字) (5 秒)` |
 | 聞き直す前の回答と比べている | `聞き直す前の回答と比べ中… 120 文字 (3 秒)` |
+| Web で検索している | `ChatGPT が Web で検索中… (8 秒)` |
 
 - 推論するモデル (gpt-5 系など) は、考え終わるまで 1 文字も返さないので、最初の段階が長くなることがあります。
 - 最初の文字が届かないまま 20 秒たつと、「時間がかかっています。中断ボタンで止めると、元の回答に戻ります。」と添えます。
@@ -128,7 +150,9 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | `api_key_name` | `OPENAI_API_KEY` | API キーを探す名前 |
 | `auth` | `bearer` | `bearer` なら `Authorization: Bearer`、`api-key` なら `api-key:` ヘッダー (Azure OpenAI 用) |
 | `max_completion_tokens` | (送らない) | 回答の最大トークン数 |
-| `reasoning_effort` | (送らない) | 推論の深さ (`minimal` / `low` / `medium` / `high`) |
+| `reasoning_effort` | (送らない) | 推論の深さ (`minimal` / `low` / `medium` / `high`)。Web 検索のときは送らない |
+| `web_search` | `false` | 聞き直した後に「Web でも調べて比べる」を出すか |
+| `search_model` | `gpt-5-search-api` | Web 検索に使うモデル (Chat Completions で検索できるもの) |
 
 - `cloud` が無い (前の版の) `server.json` でも、既定値で動きます。設定画面で保存すると `cloud` が書き足されます。
 - 表示名・URL・モデル・API キーの名前は、設定画面の「ChatGPT」タブ (Python 版は「サーバー」タブ) でも変えられます。
@@ -142,6 +166,7 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | `cloud` | ChatGPT に送る system プロンプト |
 | `rewriter` | 書き直すときに、回答役の system プロンプトの後ろに付ける指示 |
 | `comparer` | 聞き直す前の回答との違いをまとめるときの system プロンプト |
+| `web_comparer` | Web 検索なしの回答との違いをまとめるときの system プロンプト |
 
 - どれも設定画面の「システムプロンプト」タブで変えられます。
 - 前の版の `agents.json` に無くても、既定のプロンプトで動きます。
@@ -152,8 +177,9 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | --- | --- | --- |
 | API キーと秘密ファイル | `config.cpp` (`FindApiKey` / `SaveApiKey`) | `config.py` (`find_api_key` / `save_api_key`) |
 | クラウドへのリクエスト | `llm_client.cpp` (`LLMOptions::cloud`、`LoadCloudSettings`) | `llm_client.py` |
+| Web 検索の出典 | `llm_client.cpp` (`NumberCitations`) | `llm_client.py` (`number_citations`) |
 | ChatGPT と書き直し役 | `agent.cpp` (`CreateCloud` / `RewriteAnswer`) | `agent.py` |
-| 違いのまとめ | `agent.cpp` (`CompareAnswers`)、`chat.cpp` (`CompareWithLocal`) | `agent.py` (`compare_answers`)、`chat.py` (`_compare_with_local`) |
-| 聞き直しの流れと送る履歴 | `chat.cpp` (`AskCloud`) | `chat.py` (`ask_cloud`) |
+| 違いのまとめ | `agent.cpp` (`CompareAnswers`)、`chat.cpp` (`CompareWithPrevious`) | `agent.py` (`compare_answers`)、`chat.py` (`_compare_with_previous`) |
+| 聞き直しの流れと送る履歴 | `chat.cpp` (`AskCloud` / `NextStage`) | `chat.py` (`ask_cloud` / `next_stage`) |
 | ボタン・確認・表示 | `chat_ui.cpp` | `chat_ui.py` |
 | API キーの登録画面 | `settings_ui.cpp` | `settings_ui.py` |

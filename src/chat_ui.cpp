@@ -5,6 +5,7 @@
 #include "ime.h"
 #include "server_manager.h"
 
+#include <SDL3/SDL.h>
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
@@ -20,13 +21,23 @@ enum class MessageAction
 {
     None,
     AskCloud,
-    ConfirmAskCloud
+    ConfirmAskCloud,
+    AskWeb
 };
 
-// 最新の回答の下の「ChatGPT に聞き直す」ボタン
+// 最新の回答の下の「ChatGPT に聞き直す」「Web でも調べて比べる」ボタン
 MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
 {
-    const std::string label = state.cloudName + " に聞き直す";
+    const AnswerStage next = NextStage(state, message);
+
+    if (next == AnswerStage::Local)
+    {
+        return MessageAction::None;
+    }
+
+    const bool web = next == AnswerStage::Web;
+    const std::string label =
+        web ? std::string("Web でも調べて比べる") : state.cloudName + " に聞き直す";
     const bool enabled = state.hasCloudKey && CanAskCloud(state);
 
     ImGui::BeginDisabled(!enabled);
@@ -45,6 +56,11 @@ MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
     if (!pressed || !enabled)
     {
         return MessageAction::None;
+    }
+
+    if (web)
+    {
+        return MessageAction::AskWeb;
     }
 
     return message.usedRag ? MessageAction::ConfirmAskCloud : MessageAction::AskCloud;
@@ -74,8 +90,10 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
 
         if (message.superseded)
         {
-            // ChatGPT に聞き直す前の回答は、薄く残す
-            ImGui::TextDisabled("%s (聞き直す前の回答)", name);
+            // 聞き直す前の回答は、薄く残す
+            ImGui::TextDisabled(
+                "%s (%s)", name,
+                message.stage == AnswerStage::Local ? "ローカルの回答" : "Web 検索なしの回答");
             ImGui::PushTextWrapPos(0.0f);
             ImGui::TextDisabled("%s", message.content.c_str());
             ImGui::PopTextWrapPos();
@@ -114,11 +132,34 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
             ImGui::TreePop();
         }
 
+        // Web 検索の出典 (クリックでブラウザーを開く)
+        if (!message.citations.empty() && !message.superseded)
+        {
+            ImGui::TextDisabled("出典:");
+
+            for (size_t n = 0; n < message.citations.size(); ++n)
+            {
+                const Citation& citation = message.citations[n];
+                const std::string label =
+                    "[" + std::to_string(n + 1) + "] " + citation.title +
+                    "##citation" + std::to_string(n);
+
+                if (ImGui::TextLink(label.c_str()))
+                {
+                    SDL_OpenURL(citation.url.c_str());
+                }
+
+                ImGui::SetItemTooltip("%s", citation.url.c_str());
+            }
+        }
+
         // 聞き直す前の回答との違いのまとめ
         if (!message.compareVerdict.empty() && !message.superseded)
         {
             ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextDisabled("聞き直す前の回答との違い (ローカルの LLM による目安):");
+            ImGui::TextDisabled(
+                "%sとの違い (ローカルの LLM による目安):",
+                message.stage == AnswerStage::Web ? "Web 検索なしの回答" : "聞き直す前の回答");
             ImGui::SameLine();
 
             if (message.compareVerdict == "食い違いあり")
@@ -372,6 +413,10 @@ void DrawUI(
     if (action == MessageAction::AskCloud)
     {
         AskCloud(state);
+    }
+    else if (action == MessageAction::AskWeb)
+    {
+        AskCloud(state, true);
     }
     else if (action == MessageAction::ConfirmAskCloud)
     {

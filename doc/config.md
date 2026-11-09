@@ -78,6 +78,8 @@
 | `cloud.auth` | `bearer` | `bearer` か `api-key` (Azure OpenAI) |
 | `cloud.max_completion_tokens` | (送らない) | 回答の最大トークン数 |
 | `cloud.reasoning_effort` | (送らない) | 推論の深さ (`minimal` / `low` / `medium` / `high`) |
+| `cloud.web_search` | `false` | 聞き直した後に「Web でも調べて比べる」を出すか |
+| `cloud.search_model` | `gpt-5-search-api` | Web 検索に使うモデル |
 
 `chat_url` / `embed_url` を別のマシンにすると、質問や資料がそのマシンに送られます ([privacy.md](privacy.md))。
 
@@ -90,6 +92,7 @@
 | `cloud` | `name`、`system_prompt` | 既定のプロンプト (名前は `server.json` の `cloud.name`) |
 | `rewriter` | `name`、`system_prompt` | 既定のプロンプト |
 | `comparer` | `name`、`system_prompt` | 既定のプロンプト |
+| `web_comparer` | `name`、`system_prompt` | 既定のプロンプト |
 
 `system_prompt` は文字列か、文字列の配列 (区切りなしでつなげる) です。ルーターの `maxTokens` / `temperature` / JSON スキーマなど、コードと結びついた設定は `agent.cpp` / `agent.py` にあります。
 

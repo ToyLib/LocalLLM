@@ -367,14 +367,15 @@ bool IsBlank(const std::string& text)
     return text.find_first_not_of(" \t\r\n") == std::string::npos;
 }
 
-// 聞き直す前のローカルの回答と、クラウドの回答 (書き直す前) の違いをまとめて、
+// 聞き直す前の回答と、クラウドの回答 (書き直す前) の違いをまとめて、
 // 最新の回答に添える (ワーカースレッドから呼ぶ)
 // 失敗しても回答はそのまま残し、補足に理由を出す。中断したら何も添えない
-void CompareWithLocal(
+void CompareWithPrevious(
     ChatState& state,
     const std::string& question,
     const std::string& localAnswer,
-    const std::string& cloudAnswer)
+    const std::string& cloudAnswer,
+    bool webSearch)
 {
     if (IsBlank(localAnswer))
     {
@@ -383,7 +384,9 @@ void CompareWithLocal(
 
     {
         std::lock_guard lock(state.mutex);
-        SetStatus(state.messages.back(), "聞き直す前の回答と比べ中…");
+        SetStatus(
+            state.messages.back(),
+            webSearch ? "Web 検索なしの回答と比べ中…" : "聞き直す前の回答と比べ中…");
     }
     WakeUI();
 
@@ -400,7 +403,8 @@ void CompareWithLocal(
                 }
                 WakeUI();
             },
-            state.cancel);
+            state.cancel,
+            webSearch);
 
         std::lock_guard lock(state.mutex);
         Message& answer = state.messages.back();
@@ -462,6 +466,7 @@ void RefreshCloudStatus(ChatState& state)
     const CloudSettings cloud = LoadCloudSettings();
     state.hasCloudKey = HasCloudApiKey(cloud);
     state.cloudName = cloud.name;
+    state.webSearch = cloud.webSearch;
 }
 
 bool CanAskCloud(const ChatState& state)
@@ -484,10 +489,25 @@ bool LastAnswerUsedRag(const ChatState& state)
     return !state.messages.empty() && state.messages.back().usedRag;
 }
 
+AnswerStage NextStage(const ChatState& state, const Message& message)
+{
+    if (message.stage == AnswerStage::Web)
+    {
+        return AnswerStage::Local;
+    }
+
+    if (message.stage == AnswerStage::Cloud && state.webSearch && !message.usedRag)
+    {
+        return AnswerStage::Web;
+    }
+
+    return AnswerStage::Cloud;
+}
+
 // 流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
-//       → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → ローカルの回答との違いをまとめる
+//       → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → 聞き直す前の回答との違いをまとめる
 // クラウドに聞けなかったら、聞き直す前の回答に戻す
-void AskCloud(ChatState& state)
+void AskCloud(ChatState& state, bool webSearch)
 {
     JoinWorker(state);
 
@@ -504,14 +524,23 @@ void AskCloud(ChatState& state)
             return;
         }
 
-        const size_t lastUser = *LastUserIndex(state.messages);
         Message& previous = state.messages.back();
+
+        if (NextStage(state, previous) !=
+            (webSearch ? AnswerStage::Web : AnswerStage::Cloud))
+        {
+            return;
+        }
+
+        const size_t lastUser = *LastUserIndex(state.messages);
         const Message& user = state.messages[lastUser];
 
         history = BuildCloudHistory(state.messages, lastUser);
         question = user.content;
         agentKey = previous.agentKey;
-        localAnswer = previous.content;
+
+        // 口調を書き直した回答は、書き直す前の文章と比べる
+        localAnswer = previous.cloudOriginal.empty() ? previous.content : previous.cloudOriginal;
 
         // 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
         const bool sendRag = previous.usedRag && !user.ragPrompt.empty();
@@ -525,9 +554,14 @@ void AskCloud(ChatState& state)
         answer.agent = previous.agent + " (" + state.cloudName + ")";
         answer.agentKey = agentKey;
         answer.usedRag = previous.usedRag;
-        answer.note = state.cloudName + " に聞き直しました" +
-            (sendRag ? std::string(" (資料も送りました)") : std::string());
-        SetStatus(answer, state.cloudName + " に問い合わせ中…");
+        answer.stage = webSearch ? AnswerStage::Web : AnswerStage::Cloud;
+        answer.note = webSearch
+            ? state.cloudName + " に Web で調べて聞き直しました"
+            : state.cloudName + " に聞き直しました" +
+                (sendRag ? std::string(" (資料も送りました)") : std::string());
+        SetStatus(
+            answer,
+            state.cloudName + (webSearch ? " が Web で検索中…" : " に問い合わせ中…"));
 
         previous.superseded = true;
         state.messages.push_back(std::move(answer));
@@ -538,17 +572,20 @@ void AskCloud(ChatState& state)
 
     state.cancel = false;
 
-    state.worker = std::thread([&state, history, question, agentKey, localAnswer]() {
+    state.worker = std::thread([&state, history, question, agentKey, localAnswer, webSearch]() {
         std::string cloudAnswer;
 
         try
         {
             const Agent persona = CreateAnswerer(agentKey);
-            const Agent cloud = CreateCloud();
+            Agent cloud = CreateCloud(webSearch);
+            std::vector<Citation> citations;
+            cloud.options.citations = &citations;
+            const std::string source = webSearch ? cloud.name + " + Web 検索" : cloud.name;
 
             {
                 std::lock_guard lock(state.mutex);
-                state.messages.back().agent = persona.name + " (" + cloud.name + ")";
+                state.messages.back().agent = persona.name + " (" + source + ")";
             }
             WakeUI();
 
@@ -583,11 +620,20 @@ void AskCloud(ChatState& state)
                 throw std::runtime_error(cloud.name + " の回答が空でした");
             }
 
+            if (webSearch)
+            {
+                // 出典は本文から分けて、書き直しや比較に URL を渡さない
+                cloudAnswer = NumberCitations(cloudAnswer, citations);
+
+                std::lock_guard lock(state.mutex);
+                state.messages.back().citations = citations;
+            }
+
             if (!persona.rewrite)
             {
                 std::lock_guard lock(state.mutex);
                 Message& answer = state.messages.back();
-                answer.agent = persona.name + " (" + cloud.name + ")";
+                answer.agent = persona.name + " (" + source + ")";
                 answer.content = cloudAnswer;
                 answer.status.clear();
             }
@@ -597,7 +643,7 @@ void AskCloud(ChatState& state)
                     std::lock_guard lock(state.mutex);
                     Message& answer = state.messages.back();
                     answer.agent =
-                        persona.name + " (" + cloud.name + " → ローカルで書き直し)";
+                        persona.name + " (" + source + " → ローカルで書き直し)";
                     answer.cloudOriginal = cloudAnswer;
                     SetStatus(
                         answer, persona.name + "が言い直し中…", CountChars(cloudAnswer));
@@ -637,7 +683,7 @@ void AskCloud(ChatState& state)
                 if (IsBlank(answer.content))
                 {
                     answer.content = cloudAnswer;
-                    answer.agent = persona.name + " (" + cloud.name + ")";
+                    answer.agent = persona.name + " (" + source + ")";
                     answer.cloudOriginal.clear();
                     answer.note += "\n書き直せなかったので、" + cloud.name +
                         " の回答をそのまま表示しています" +
@@ -651,7 +697,7 @@ void AskCloud(ChatState& state)
 
             if (!state.cancel)
             {
-                CompareWithLocal(state, question, localAnswer, cloudAnswer);
+                CompareWithPrevious(state, question, localAnswer, cloudAnswer, webSearch);
             }
         }
         catch (const std::exception& e)

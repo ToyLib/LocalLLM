@@ -36,6 +36,19 @@ DEFAULT_AGENTS = {
         "食い違いは無く、聞き直した回答のほうが情報が多ければ「情報が増えた」、"
         "内容がほぼ同じなら「ほぼ同じ」にします。",
     ),
+    "web_comparer": (
+        "Web 検索の違いのまとめ",
+        "同じ質問への「Web 検索なしの回答」と「Web 検索ありの回答」を比べて、内容の違いを短くまとめてください。"
+        "口調・言い回し・長さ・書き方の違いは書かず、内容の違いだけを書きます。[1] のような出典の番号は無視します。"
+        "points には違いを最大3つ、1つ40文字くらいで書きます。"
+        "食い違いは「検索なしは〜、検索ありは〜」、片方にだけある情報は「検索ありだけ: 〜」のように、どちらの回答の話かが分かるように書きます。"
+        "検索ありの回答にだけある情報、数値や事実の食い違いを優先します。"
+        "違いが無ければ「内容の違いはありません」とだけ書きます。"
+        "回答に書いていないことを推測で書かないでください。"
+        "verdict は、食い違う点が1つでもあれば「食い違いあり」、"
+        "食い違いは無く、検索ありの回答のほうが情報が多ければ「情報が増えた」、"
+        "内容がほぼ同じなら「ほぼ同じ」にします。",
+    ),
 }
 
 # 違いのまとめの判定
@@ -183,15 +196,16 @@ def create_answerer(key: str) -> Agent:
     return _load_agent(key)
 
 
-def create_cloud() -> Agent:
-    """ChatGPT (server.json の cloud) に聞き直すエージェント"""
+def create_cloud(web_search: bool = False) -> Agent:
+    """ChatGPT (server.json の cloud) に聞き直すエージェント
+    web_search なら Web 検索用のモデルで答えさせる"""
 
     cloud = load_cloud_settings()
     agent = _load_agent_or_default("cloud")
 
     # 名前は server.json の cloud.name に合わせる
     agent.name = cloud.name
-    agent.options = LLMOptions(cloud=True)
+    agent.options = LLMOptions(cloud=True, web_search=web_search)
     return agent
 
 
@@ -224,12 +238,14 @@ def compare_answers(
     cloud_answer: str,
     on_delta: DeltaCallback | None,
     cancel: CancelToken,
+    web_search: bool = False,
 ) -> Comparison:
     """同じ質問へのローカルの回答 local_answer と、クラウドの回答 cloud_answer の違いを
     ローカルの LLM でまとめる
+    web_search なら、Web 検索なしの回答 local_answer と Web 検索ありの回答 cloud_answer を比べる
     on_delta には受け取った JSON の断片が来る (進み具合の表示に使う)"""
 
-    agent = _load_agent_or_default("comparer")
+    agent = _load_agent_or_default("web_comparer" if web_search else "comparer")
     agent.options = LLMOptions(
         max_tokens=512,
         temperature=0.0,
@@ -251,10 +267,13 @@ def compare_answers(
         },
     )
 
+    before, after = (("Web 検索なしの回答", "Web 検索ありの回答") if web_search
+                     else ("ローカルの回答", "聞き直した回答"))
+
     content = (
         f"## 質問\n{_truncate(question, COMPARE_QUESTION_BYTES)}\n\n"
-        f"## ローカルの回答\n{_truncate(local_answer, COMPARE_ANSWER_BYTES)}\n\n"
-        f"## 聞き直した回答\n{_truncate(cloud_answer, COMPARE_ANSWER_BYTES)}")
+        f"## {before}\n{_truncate(local_answer, COMPARE_ANSWER_BYTES)}\n\n"
+        f"## {after}\n{_truncate(cloud_answer, COMPARE_ANSWER_BYTES)}")
 
     answer = run_agent(agent, [{"role": "user", "content": content}], on_delta, cancel)
 
