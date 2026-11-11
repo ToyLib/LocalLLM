@@ -1,0 +1,570 @@
+"""クイズ: 分野の読み込み、出題 (JSON)、採点、先読み、結果のメッセージ"""
+
+from __future__ import annotations
+
+import random
+import threading
+from dataclasses import dataclass, field
+from typing import Callable
+
+import config
+import rag
+from agent import Agent, create_answerer, run_agent, run_agent_json
+from llm_client import CancelToken, Cancelled, LLMError, LLMOptions
+
+QUIZ_CONFIG = "quiz.json"
+
+# 選択肢の数 (この版では 4 択だけ)
+CHOICE_COUNT = 4
+
+# 1 問を作るのを試す回数
+MAX_ATTEMPTS = 3
+
+# 既出の問題として次の出題に渡す件数
+PREVIOUS_QUESTIONS = 10
+
+# 振り返りでねぎらいに添える、間違えた問題の件数
+COMMENT_MISSES = 3
+
+# quiz.json に無いときの既定値
+DEFAULT_QUESTION_COUNT = 10
+DEFAULT_MAX_TOKENS = 1024
+DEFAULT_COMMENT_PERSONA = "assistant"
+
+DEFAULT_GENERATE_PROMPT = (
+    "あなたはクイズの出題者です。指定された分野とトピック (または資料) から、4 択の問題を 1 問だけ作ってください。"
+    "correct には正解の選択肢、wrong には誤りの選択肢を 3 つ、explanation には正解の理由を書いてください。"
+    "explanation で選択肢の番号や記号 (1・A など) は使わず、内容を言葉で書いてください。")
+
+DEFAULT_RESULTS = (
+    (100, "全問正解です。お見事でした！"),
+    (80, "すばらしい成績です。よくがんばりました！"),
+    (50, "いい調子です。間違えた問題を見直すと、さらに伸びます。"),
+    (0, "おつかれさまでした。間違えたところが伸びしろです。もう一度挑戦してみましょう。"),
+)
+
+# 問題の JSON の形 (llama-server が、この形に制限して出力する)
+# 正解の番号ではなく、正解の文と誤りの文を別々に出させる
+# (小さなモデルは番号を 1 始まりで答えたり、解説の番号とずれたりするため。並べ替えはアプリがする)
+QUESTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "question": {"type": "string"},
+        "correct": {"type": "string"},
+        "wrong": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": CHOICE_COUNT - 1,
+            "maxItems": CHOICE_COUNT - 1,
+        },
+        "explanation": {"type": "string"},
+    },
+    "required": ["question", "correct", "wrong", "explanation"],
+}
+
+PHASE_SELECT = "select"
+PHASE_PLAYING = "playing"
+PHASE_RESULT = "result"
+
+
+@dataclass
+class Category:
+    """出題の分野 (config/quiz.json の categories の 1 件)"""
+
+    key: str
+    name: str
+
+    # "llm" (モデルの知識から出題) か "rag" (資料から出題)
+    source: str
+    guide: str = ""
+    topics: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Question:
+    text: str
+    choices: list[str]
+
+    # 正解の選択肢の番号 (シャッフルしたあとの choices での位置)
+    answer: int
+    explanation: str
+
+    # 出題のトピックと、資料の出典 (無ければ空)
+    topic: str = ""
+    origin: str = ""
+
+
+@dataclass
+class QuizSettings:
+    question_count: int = DEFAULT_QUESTION_COUNT
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    comment_persona: str = DEFAULT_COMMENT_PERSONA
+    generate_prompt: str = DEFAULT_GENERATE_PROMPT
+
+    # (正解率の下限 %, メッセージ)。下限の大きい順
+    results: tuple[tuple[int, str], ...] = DEFAULT_RESULTS
+
+
+def _positive_int(entry: dict, key: str, default: int) -> int:
+    value = entry.get(key, default)
+
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return default
+
+    return value
+
+
+def _read_results(entry: dict) -> tuple[tuple[int, str], ...]:
+    results = entry.get("results")
+
+    if not isinstance(results, list):
+        return DEFAULT_RESULTS
+
+    parsed = []
+
+    for item in results:
+        if (isinstance(item, dict) and isinstance(item.get("text"), str)
+                and isinstance(item.get("min_percent"), (int, float))
+                and not isinstance(item.get("min_percent"), bool)):
+            parsed.append((item["min_percent"], item["text"]))
+
+    if not parsed:
+        return DEFAULT_RESULTS
+
+    return tuple(sorted(parsed, key=lambda r: r[0], reverse=True))
+
+
+def load_settings() -> QuizSettings:
+    """config/quiz.json を読む (無い・正しくない項目は既定値)"""
+
+    entry = config.load_or_empty(QUIZ_CONFIG)
+    prompt = entry.get("generate_prompt")
+
+    if isinstance(prompt, list) and prompt and all(isinstance(v, str) for v in prompt):
+        prompt = "\n".join(prompt)
+
+    if not isinstance(prompt, str) or not prompt:
+        prompt = DEFAULT_GENERATE_PROMPT
+
+    persona = entry.get("comment_persona", DEFAULT_COMMENT_PERSONA)
+
+    return QuizSettings(
+        question_count=_positive_int(entry, "question_count", DEFAULT_QUESTION_COUNT),
+        max_tokens=_positive_int(entry, "max_tokens", DEFAULT_MAX_TOKENS),
+        comment_persona=persona if isinstance(persona, str) else DEFAULT_COMMENT_PERSONA,
+        generate_prompt=prompt,
+        results=_read_results(entry),
+    )
+
+
+def load_categories() -> list[Category]:
+    """config/quiz.json の分野の一覧 (正しくない項目は読み飛ばす)"""
+
+    entries = config.load_or_empty(QUIZ_CONFIG).get("categories")
+    categories: list[Category] = []
+
+    if not isinstance(entries, list):
+        return categories
+
+    for entry in entries:
+        if (not isinstance(entry, dict)
+                or not isinstance(entry.get("key"), str)
+                or not isinstance(entry.get("name"), str)
+                or entry.get("source") not in ("llm", "rag")):
+            continue
+
+        topics = entry.get("topics", [])
+        guide = entry.get("guide", "")
+        categories.append(Category(
+            key=entry["key"],
+            name=entry["name"],
+            source=entry["source"],
+            guide=guide if isinstance(guide, str) else "",
+            topics=[t for t in topics if isinstance(t, str) and t]
+            if isinstance(topics, list) else [],
+        ))
+
+    return categories
+
+
+def tier_message(settings: QuizSettings, score: int, total: int) -> str:
+    """点数の帯ごとの固定のメッセージ"""
+
+    percent = 100 * score / total if total else 0
+
+    for minimum, text in settings.results:
+        if percent >= minimum:
+            return text
+
+    return settings.results[-1][1]
+
+
+def validate_question(raw: dict) -> Question:
+    """LLM が返した JSON を検証して、選択肢を並べ替えた問題にする
+    正しくなければ LLMError"""
+
+    text = raw.get("question")
+    correct = raw.get("correct")
+    wrong = raw.get("wrong")
+    explanation = raw.get("explanation")
+
+    if not isinstance(text, str) or not text.strip():
+        raise LLMError("問題文がありません")
+
+    if (not isinstance(correct, str) or not correct.strip()
+            or not isinstance(wrong, list) or len(wrong) != CHOICE_COUNT - 1
+            or not all(isinstance(c, str) and c.strip() for c in wrong)):
+        raise LLMError("選択肢が正しくありません")
+
+    choices = [correct.strip(), *(c.strip() for c in wrong)]
+
+    if len(set(choices)) != CHOICE_COUNT:
+        raise LLMError("選択肢が重複しています")
+
+    # 正解は先頭に置かれているので、並べ替えて位置を覚える
+    order = list(range(CHOICE_COUNT))
+    random.shuffle(order)
+
+    return Question(
+        text=text.strip(),
+        choices=[choices[i] for i in order],
+        answer=order.index(0),
+        explanation=explanation.strip() if isinstance(explanation, str) else "",
+    )
+
+
+class QuizState:
+    """クイズ画面の状態 (ワーカースレッドと UI スレッドで共有する)"""
+
+    def __init__(self, notify: Callable[[], None]) -> None:
+        self.lock = threading.Lock()
+        self.notify = notify
+
+        # 開始・やめるたびに増やす。古いワーカーが新しい回に書き込まないための目印
+        self.session = 0
+        self.cancel = CancelToken()
+        self.worker: threading.Thread | None = None
+        self.comment_worker: threading.Thread | None = None
+
+        self.phase = PHASE_SELECT
+        self.category: Category | None = None
+
+        # 出題する数 (作れなかった問題の分だけ減る)
+        self.total = 0
+
+        self.questions: list[Question] = []
+
+        # 答えた選択肢の番号 (questions の先頭から)
+        self.answers: list[int] = []
+        self.index = 0
+        self.answered = False
+
+        self.generating = False
+        self.error = ""
+
+        # 結果のメッセージ (最初は固定文、LLM のひと言ができたら置き換える)
+        self.comment = ""
+        self.comment_pending = False
+
+    # 呼ぶ側で lock を取っておく
+    def score(self) -> int:
+        return sum(1 for q, a in zip(self.questions, self.answers) if q.answer == a)
+
+    def misses(self) -> list[tuple[int, Question, int]]:
+        """間違えた問題 (問題の番号, 問題, 選んだ選択肢)"""
+
+        return [(i, q, a) for i, (q, a) in enumerate(zip(self.questions, self.answers))
+                if q.answer != a]
+
+    def is_last(self) -> bool:
+        """いまの問題が最後か (作れなかった分を除いた数で)"""
+
+        return self.index + 1 >= self.total
+
+
+def _new_session(state: QuizState) -> tuple[int, CancelToken]:
+    """進行中の回を止めて、新しい回の目印と中断用のトークンを返す (lock の中で呼ぶ)"""
+
+    state.cancel.cancel()
+    state.session += 1
+    state.cancel = CancelToken()
+    return state.session, state.cancel
+
+
+def start(state: QuizState, category: Category, rag_state: rag.RagState) -> None:
+    """分野を決めて出題を始める (問題は別スレッドで 1 問ずつ作る)"""
+
+    settings = load_settings()
+
+    with state.lock:
+        session, cancel = _new_session(state)
+        state.phase = PHASE_PLAYING
+        state.category = category
+        state.total = settings.question_count
+        state.questions = []
+        state.answers = []
+        state.index = 0
+        state.answered = False
+        state.generating = True
+        state.error = ""
+        state.comment = ""
+        state.comment_pending = False
+
+    state.worker = threading.Thread(
+        target=_generate_all,
+        args=(state, session, cancel, category, rag_state, settings), daemon=True)
+    state.worker.start()
+    state.notify()
+
+
+def _plan(
+    category: Category, rag_state: rag.RagState, count: int,
+) -> list[tuple[str, rag.RagChunk | None]]:
+    """出題ごとの (トピック, 資料のチャンク) の予定"""
+
+    if category.source == "rag":
+        chunks = rag.sample_chunks(rag_state, count)
+
+        if not chunks:
+            raise LLMError(
+                "資料 (rag/) のインデックスがありません。資料を置いて、読み込みが終わってから試してください")
+
+        return [("", chunk) for chunk in chunks]
+
+    topics = list(category.topics)
+    random.shuffle(topics)
+
+    if not topics:
+        return [("", None)] * count
+
+    # トピックが足りなければ循環させる
+    return [(topics[i % len(topics)], None) for i in range(count)]
+
+
+def _prompt(
+    category: Category, topic: str, chunk: rag.RagChunk | None, previous: list[str],
+) -> str:
+    if chunk is not None:
+        origin = chunk.source + (f" / {chunk.heading}" if chunk.heading else "")
+        lines = [f"分野: {category.name}", f"資料 ({origin}):", chunk.text]
+    else:
+        lines = [f"分野: {category.name}"]
+
+        if category.guide:
+            lines.append(f"出題範囲: {category.guide}")
+
+        if topic:
+            lines.append(f"トピック: {topic}")
+
+    if previous:
+        lines.append("")
+        lines.append("すでに出した問題 (これらと同じ内容は避けてください):")
+        lines.extend(f"- {text}" for text in previous[-PREVIOUS_QUESTIONS:])
+
+    return "\n".join(lines)
+
+
+def _make_question(
+    settings: QuizSettings, category: Category, topic: str,
+    chunk: rag.RagChunk | None, previous: list[str], cancel: CancelToken,
+) -> Question:
+    agent = Agent(
+        name="出題", system_prompt=settings.generate_prompt,
+        options=LLMOptions(
+            max_tokens=settings.max_tokens, temperature=0.8,
+            disable_thinking=True, schema=QUESTION_SCHEMA))
+    raw = run_agent_json(
+        agent, [{"role": "user", "content": _prompt(category, topic, chunk, previous)}], cancel)
+    question = validate_question(raw)
+    question.topic = topic
+
+    if chunk is not None:
+        question.origin = chunk.source + (f" / {chunk.heading}" if chunk.heading else "")
+
+    return question
+
+
+def _generate_all(
+    state: QuizState, session: int, cancel: CancelToken, category: Category,
+    rag_state: rag.RagState, settings: QuizSettings,
+) -> None:
+    """問題を 1 問ずつ作り続ける (ユーザーが解いている間に先へ進む)"""
+
+    error = ""
+
+    try:
+        plan = _plan(category, rag_state, settings.question_count)
+
+        with state.lock:
+            if state.session != session:
+                return
+
+            # 資料が少ないときは、あるだけにする
+            state.total = len(plan)
+
+        previous: list[str] = []
+
+        for topic, chunk in plan:
+            question = None
+
+            for _ in range(MAX_ATTEMPTS):
+                try:
+                    question = _make_question(
+                        settings, category, topic, chunk, previous, cancel)
+                    break
+                except Cancelled:
+                    return
+                except LLMError as e:
+                    error = str(e)
+
+            with state.lock:
+                if state.session != session:
+                    return
+
+                if question is None:
+                    # 作れなかった問題は飛ばして、数を減らす
+                    state.total -= 1
+                else:
+                    state.questions.append(question)
+                    previous.append(question.text)
+
+            state.notify()
+    except Cancelled:
+        return
+    except LLMError as e:
+        error = str(e)
+    except Exception as e:  # ワーカーが黙って終わらないように
+        error = f"想定外のエラー: {e}"
+
+    with state.lock:
+        if state.session != session:
+            return
+
+        state.generating = False
+
+        if not state.questions:
+            # 1 問も作れなかったら、分野の選択に戻す
+            state.phase = PHASE_SELECT
+            state.error = error or "問題を作れませんでした"
+
+    state.notify()
+
+
+def answer(state: QuizState, choice: int) -> None:
+    """いまの問題に答える"""
+
+    with state.lock:
+        if (state.phase != PHASE_PLAYING or state.answered
+                or state.index >= len(state.questions)
+                or not 0 <= choice < CHOICE_COUNT):
+            return
+
+        state.answers.append(choice)
+        state.answered = True
+
+    state.notify()
+
+
+def next_question(state: QuizState) -> None:
+    """次の問題に進む。最後なら結果を出す (次の問題がまだ作れていなければ何もしない)"""
+
+    settings = load_settings()
+
+    with state.lock:
+        if state.phase != PHASE_PLAYING or not state.answered:
+            return
+
+        if state.is_last():
+            _finish(state, settings)
+            return
+
+        if state.index + 1 < len(state.questions):
+            state.index += 1
+            state.answered = False
+
+    state.notify()
+
+
+def _finish(state: QuizState, settings: QuizSettings) -> None:
+    """結果にする (lock の中で呼ぶ)。固定のメッセージをすぐ出し、LLM のひと言を作る"""
+
+    state.phase = PHASE_RESULT
+    total = len(state.answers)
+    score = state.score()
+    state.comment = tier_message(settings, score, total)
+
+    if not settings.comment_persona:
+        return
+
+    state.comment_pending = True
+    session = state.session
+    cancel = state.cancel
+    category = state.category
+    misses = [q.text for _, q, _ in state.misses()][:COMMENT_MISSES]
+
+    state.comment_worker = threading.Thread(
+        target=_make_comment,
+        args=(state, session, cancel, settings, category, score, total, misses), daemon=True)
+    state.comment_worker.start()
+    state.notify()
+
+
+def _make_comment(
+    state: QuizState, session: int, cancel: CancelToken, settings: QuizSettings,
+    category: Category | None, score: int, total: int, misses: list[str],
+) -> None:
+    """回答役の口調で、結果をねぎらうひと言を作って置き換える (失敗したら固定文のまま)"""
+
+    text = ""
+
+    try:
+        try:
+            persona = create_answerer(settings.comment_persona).system_prompt
+        except Exception:
+            persona = "あなたは親切なAIアシスタントです。日本語で答えてください。"
+
+        agent = Agent(
+            name="ねぎらい",
+            system_prompt=persona + (
+                "\n\nあなたはクイズの結果を伝える係です。次の結果を見て、受験者をねぎらうひと言を、"
+                "日本語で 1〜2 文 (80 文字以内) で書いてください。"
+                "点数を繰り返すだけにせず、前向きな言葉にしてください。"),
+            options=LLMOptions(max_tokens=200, temperature=0.7, disable_thinking=True))
+        lines = [f"分野: {category.name if category else ''}", f"点数: {score} / {total}"]
+
+        if misses:
+            lines.append("間違えた問題:")
+            lines.extend(f"- {m}" for m in misses)
+
+        text = run_agent(
+            agent, [{"role": "user", "content": "\n".join(lines)}], None, cancel).strip()
+    except Exception:
+        text = ""
+
+    with state.lock:
+        if state.session == session:
+            if text:
+                state.comment = text
+
+            state.comment_pending = False
+
+    state.notify()
+
+
+def quit_quiz(state: QuizState) -> None:
+    """やめて、分野の選択に戻る (結果の画面からも使う)"""
+
+    with state.lock:
+        _new_session(state)
+        state.phase = PHASE_SELECT
+        state.generating = False
+        state.comment_pending = False
+        state.error = ""
+
+    state.notify()
+
+
+def shutdown(state: QuizState) -> None:
+    """アプリを閉じるとき: 通信を止める"""
+
+    state.cancel.cancel()

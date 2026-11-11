@@ -18,6 +18,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 資料を参照するかを質問ごとに判断するルーターと、2 つの回答役 (資料を参照する質問用 / 資料の要らない質問用。既定はどちらもアシスタント) ([説明](doc/agent.md))
 - 物足りない回答は「ChatGPT に聞き直す」ボタンで ChatGPT (OpenAI API) に聞き直し、回答役の口調で言い直して表示 ([説明](doc/chatgpt.md))
 - 設定でオンにすると、聞き直した後に Web 検索でも聞き直して、検索の有無による回答の違いを比べられる ([説明](doc/chatgpt.md#web-でも調べて比べる))
+- 「クイズ」タブで、分野 (プログラミング・IT パスポート・一般常識・`rag/` の資料) を選んで 10 問の 4 択に挑戦し、点数とねぎらいのメッセージを見られる (Python 版のみ、[説明](doc/quiz.md))
 - 回答役の人格をテンプレート (侍・悟空風・バカボンのパパ風・大阪のおばちゃん・執事・猫など) から選び、設定画面で好みに直せる
 
 ## 必要なもの
@@ -195,6 +196,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | --- | --- |
 | `python/main.py` | 起動 (`main.cpp`) |
 | `python/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
+| `python/quiz_ui.py` / `python/quiz_mode.py` | クイズタブ ([説明](doc/quiz.md)) |
 | `python/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
 | `python/agent.py` | ルーター / アシスタント / 汎用の回答役 (`agent.cpp`) |
 | `python/config.py` | `config/` の設定ファイルの読み込み (`config.cpp`) |
@@ -221,7 +223,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
 | `src/server_manager.cpp` / `src/server_manager.h` | `llama-server` の起動・監視・停止 |
-| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [llama-server の自動起動](doc/managed-server.md)) |
+| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [llama-server の自動起動](doc/managed-server.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `llama-release.json` | 同梱する `llama-server` の公式リリース (タグとハッシュ) |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |

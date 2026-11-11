@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import random
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,9 @@ MIN_SCORE = 0.5
 # チャンクの分け方を変えたら上げる (保存済みのインデックスを作り直す)
 # (C++ 版と同じ形式で保存する)
 INDEX_VERSION = 2
+
+# クイズの出題に使うチャンクの最小の文字数 (短すぎると問題にならない)
+MIN_SAMPLE_CHARS = 30
 
 # ルーターに見せる、見出しの無い資料の書き出しの文字数
 PREVIEW_CHARS = 40
@@ -447,6 +451,17 @@ def search(state: RagState, query: str, cancel: CancelToken) -> list[RagHit]:
         log.info("RAG: %.3f %s / %s", hit.score, hit.source, hit.heading)
 
     return [hit for hit in hits if hit.score >= MIN_SCORE][:TOP_K]
+
+
+def sample_chunks(state: RagState, count: int) -> list[RagChunk]:
+    """インデックスのチャンクから、重複なしでランダムに選ぶ (クイズの出題用)
+    短すぎて問題にならないチャンクは除く。足りなければ、あるだけ返す"""
+
+    with state.lock:
+        candidates = [chunk for chunk in state.chunks
+                      if len(chunk.text.strip()) >= MIN_SAMPLE_CHARS]
+
+    return random.sample(candidates, min(count, len(candidates)))
 
 
 def describe_sources(state: RagState) -> list[str]:
