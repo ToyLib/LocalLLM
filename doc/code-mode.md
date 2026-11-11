@@ -1,17 +1,17 @@
-# コーディング練習タブ (Python 版のみ)
+# コーディング練習タブ
 
 依頼から Python のコードを作り、解説を読み、実行して、自分で手を入れて試すためのタブです。
 ローカルの LLM でバイブコーディングを体験することが目的で、クイズや課題のような教材は持ちません。
-設計の経緯は [code-mode-plan.md](code-mode-plan.md) にあります。C++ 版にはまだありません。
+設計の経緯は [code-mode-plan.md](code-mode-plan.md) にあります。C++ 版 (ImGui) と Python 版 (Tk) の両方にあります。
 
 ## 画面
 
-ウィンドウは `ttk.Notebook` で、「チャット」タブ (今までの画面) と「コーディング練習」タブを切り替えます。
+ウィンドウはタブ (C++ 版は `ImGui::BeginTabBar`、Python 版は `ttk.Notebook`) で、「チャット」タブ (今までの画面) と「コーディング練習」タブを切り替えます。
 どちらも裏で動き続けるので、切り替えても会話もコードも消えません。`llama-server` の状態の行だけは、タブの外 (上) にあり、どちらのタブでも見えます。
 
 | 部分 | 内容 |
 | --- | --- |
-| 作りたいもの | 依頼を書いて「作る」(Enter。改行は Shift+Enter) |
+| 作りたいもの | 依頼を書いて「作る」(Enter。改行は Shift+Enter。C++ 版は Ctrl+Enter) |
 | コード | 編集できる。左に行番号 |
 | 解説 | 全体の流れと、「N 行目: …」のポイント |
 | 実行結果 | 標準出力と標準エラー |
@@ -33,7 +33,7 @@ LLM が書いたコードを実行するので、次のようにしています�
 
 - 実行は必ず「実行」ボタンを押したときだけ。自動では実行しない。
 - 作業フォルダ (ユーザーごとのフォルダーの `workspace/`) で、`main.py` として実行する。
-- `python -I` で起動し、`PYTHON*` の環境変数やユーザーの site-packages を読まない。
+- `python -I` で起動し (C++ 版は、`python3` (Windows は `python`) を PATH から探す。`code.json` の `python_path` で変えられる)、`PYTHON*` の環境変数やユーザーの site-packages を読まない。
 - 環境変数は `PATH` など最低限だけ渡す。ChatGPT の API キーなどは渡さない。
 - 標準入力は空 (`input()` は待たずに失敗する)。
 - 制限時間 (既定 10 秒) を過ぎるか、出力が上限 (既定 20000 バイト) を超えたら、子プロセスごと止める。「停止」でも止められる。
@@ -47,6 +47,7 @@ LLM が書いたコードを実行するので、次のようにしています�
 | `max_output_bytes` | 実行結果の上限 (バイト) | 20000 |
 | `max_tokens` | コード生成の最大トークン数 | 2048 |
 | `explain_max_tokens` | 解説の最大トークン数 | 1536 |
+| `python_path` | (C++ 版のみ) 実行に使う Python (空なら `python3` / Windows は `python`) | `""` |
 | `explain_persona` | 解説の口調に使う `agents.json` のキー (空なら普通の口調) | `""` |
 | `generate_prompt` | コード生成の system プロンプト (文字列か、文字列の配列) | (ファイル参照) |
 | `explain_prompt` | 解説の system プロンプト | (ファイル参照) |
@@ -59,3 +60,17 @@ LLM が書いたコードを実行するので、次のようにしています�
 - `code_ui.py` の `CodeTab` は、自分で `after` を回して `_dirty` を見る。チャット画面の `_poll` / `_refresh` とは独立している。
 - コード欄は、LLM が書き換えたとき (`code_version` が増えたとき) だけ上書きする。ユーザーが編集中の内容は上書きしない。
 - 文字の大きさと色は、チャット画面の設定 (`ui.json`) に合わせる。コードと実行結果だけは等幅の字体を使う。
+
+## C++ 版との違い
+
+| 項目 | Python 版 | C++ 版 |
+| --- | --- | --- |
+| ファイル | `code_mode.py` / `code_ui.py` | `code_mode.cpp` / `code_ui.cpp` (`CodeState` が状態) |
+| 実行する Python | アプリ自身の `sys.executable` | PATH の `python3` (Windows は `python`)。無ければ画面にエラーを出す |
+| プロセスの起動 | `subprocess` | `SDL_CreateProcessWithProperties` (環境変数は `SDL_Environment` で最小限だけ渡す) |
+| 止めるとき | 子プロセスのグループごと止める | `SDL_KillProcess` でプロセスを止める (Python が起動した孫プロセスまでは止めない) |
+| 出力の読み取り | パイプを読む | `SDL_ReadIO`。まだ届いていないとき 0 が返る (`SDL_IO_STATUS_NOT_READY`) ので、待って読み直す |
+| 行番号 | 別の Text を横に並べる | 子ウィンドウをコード欄のスクロール位置に合わせる (`imgui_internal.h` の `ImGuiInputTextState::Scroll` を読む) |
+| 字体 | コードと実行結果は等幅 | 会話と同じフォント (等幅のフォントは同梱していない) |
+| 状態の更新 | `CodeTab` が自分で `after` を回す | ワーカーから `WakeUI()` で起こす |
+| 作業フォルダーの指定 | `cwd` | `SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING` (SDL 3.4 以降) |

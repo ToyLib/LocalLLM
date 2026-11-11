@@ -2,6 +2,7 @@
 
 #include "chat_ui.h"
 
+#include "code_ui.h"
 #include "ime.h"
 #include "server_manager.h"
 
@@ -358,6 +359,7 @@ void DrawServerBar(const UiColors& colors)
 void DrawUI(
     ChatState& state,
     RagState& rag,
+    CodeState& code,
     SettingsState& settings,
     std::string& input,
     bool& focusInput,
@@ -398,8 +400,23 @@ void DrawUI(
     // 背景はタイトルバーの下まで塗り、中身はその下から並べる
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topInset);
 
-    DrawRagBar(state, rag, settings);
+    // サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
     DrawServerBar(ActiveUiSettings(settings).colors);
+
+    // チャットとコーディング練習はタブで切り替える
+    // (閉じているタブの状態も、ワーカースレッドで動き続ける)
+    if (ImGui::BeginTabBar("tabs"))
+    {
+    // チャットのタブの中身 (インデントは、タブを足す前のまま)
+    // 最初のフレームだけ、チャットのタブを選ぶ
+    static bool firstFrame = true;
+    const ImGuiTabItemFlags chatFlags =
+        firstFrame ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+    firstFrame = false;
+
+    if (ImGui::BeginTabItem("チャット", nullptr, chatFlags))
+    {
+    DrawRagBar(state, rag, settings);
 
     // 会話表示 (高さは残りから入力欄などの分を引いたもの)
     ImGui::BeginChild(
@@ -498,6 +515,18 @@ void DrawUI(
         SendPrompt(state, rag, input);
         input.clear();
         focusInput = true;
+    }
+
+    ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("コーディング練習"))
+    {
+        DrawCodeTab(code, ActiveUiSettings(settings).colors);
+        ImGui::EndTabItem();
+    }
+
+    ImGui::EndTabBar();
     }
 
     DrawSettings(settings);

@@ -4,6 +4,7 @@
   "max_tokens": 2048,
   "explain_max_tokens": 1536,
   "explain_persona": "",
+  "python_path": "",
   "generate_prompt": [
     "あなたはプログラミングを教えるアシスタントです。",
     "ユーザーの依頼に合う Python 3 のプログラムを書いてください。",

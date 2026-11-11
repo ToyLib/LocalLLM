@@ -22,7 +22,7 @@
 
 | 部分 | C++ 版 | Python 版 | 説明 |
 | --- | --- | --- | --- |
-| 画面 | `main.cpp`、`chat_ui.cpp`、`settings_ui.cpp` | `chat_ui.py`、`settings_ui.py` | [gui-app.md](gui-app.md)、[python-app.md](python-app.md) |
+| 画面 | `main.cpp`、`chat_ui.cpp`、`code_ui.cpp`、`settings_ui.cpp` | `chat_ui.py`、`code_ui.py`、`settings_ui.py` | [gui-app.md](gui-app.md)、[python-app.md](python-app.md) |
 | 会話の状態と送受信 | `chat.cpp` | `chat.py` | [gui-app.md](gui-app.md#会話の状態とスレッド-chatcpp) |
 | エージェント | `agent.cpp` | `agent.py` | [agent.md](agent.md) |
 | RAG | `rag.cpp` | `rag.py` | [rag.md](rag.md) |
