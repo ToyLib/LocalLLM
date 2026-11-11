@@ -249,8 +249,11 @@ class CodeTab(ttk.Frame):
             self.code.insert("1.0", code)
             self.code.edit_reset()
 
+            # 生成中は最終行を追いかける (横にはスクロールしない)
+            self.code.xview_moveto(0)
+
             if generating:
-                self.code.see("end")
+                self.code.yview_moveto(1.0)
 
             self._update_gutter()
 
