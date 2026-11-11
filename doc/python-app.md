@@ -16,6 +16,7 @@ python3 python/main.py
 | --- | --- | --- |
 | `main.py` | `main.cpp` | ログの設定をして `chat_ui.main()` を呼ぶだけ |
 | `chat_ui.py` | `chat_ui.cpp` (+ `main.cpp` のメインループ) | チャット画面 (`ChatApp`) |
+| `code_ui.py` / `code_mode.py` | — (Python 版だけ) | コーディング練習タブ ([code-mode.md](code-mode.md)) |
 | `settings_ui.py` | `settings_ui.cpp` | 設定画面 (`SettingsDialog`) |
 | `chat.py` | `chat.cpp` | 会話の状態 (`ChatState` / `Message`) と、ワーカースレッドでの送受信 (`send_prompt` / `ask_cloud`) |
 | `agent.py` | `agent.cpp` | ルーター・回答役・ChatGPT・書き直し |

@@ -17,6 +17,7 @@ import server_manager
 from chat import (
     STAGE_LOCAL, STAGE_WEB, ChatState, RagMode, ask_cloud, can_ask_cloud,
     format_status, next_stage, refresh_cloud_status, send_prompt)
+from code_ui import CodeTab
 from llm_client import Citation
 from server_manager import ServerStatus, ServerView
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
@@ -173,6 +174,10 @@ class ChatApp:
             "text": _to_hex(self.text, self.text.cget("foreground")),
             **DEFAULT_COLORS,
         }
+
+        # コーディング練習は 2 枚目のタブ (チャットとは状態を共有しない)
+        self.code_tab = CodeTab(self.notebook, self.font, lambda: self.colors)
+        self.notebook.add(self.code_tab, text="コーディング練習")
         self._apply_colors(_colors(ui, self.default_colors))
 
         # server.json の managed がオンなら llama-server を起動する
@@ -313,6 +318,9 @@ class ChatApp:
         self.bold.configure(size=size)
         self.small.configure(size=max(size - 3, 1))
 
+        if hasattr(self, "code_tab"):
+            self.code_tab.apply_font_size(size)
+
     def _apply_colors(self, colors: dict[str, str]) -> None:
         """色を変える"""
 
@@ -334,6 +342,7 @@ class ChatApp:
 
         self.rag_status.configure(foreground=colors["sub_text"])
         self.error_label.configure(foreground=colors["error"])
+        self.code_tab.apply_colors()
 
     def _open_settings(self) -> None:
         SettingsDialog(
@@ -455,6 +464,7 @@ class ChatApp:
         # 通信中なら止める (ワーカーはデーモンスレッドなので待たない)
         self.state.cancel.cancel()
         self.rag.cancel.cancel()
+        self.code_tab.shutdown()
 
         # サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
         self.root.withdraw()
