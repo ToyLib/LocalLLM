@@ -353,6 +353,26 @@ def revert(state: CodeState) -> None:
     state.notify()
 
 
+def clear(state: CodeState) -> None:
+    """コード・解説・実行結果・エラーを消して、最初の状態に戻す (作っている間と実行中は何もしない)"""
+
+    with state.lock:
+        if state.busy or state.running:
+            return
+
+        state.request = ""
+        state.code = ""
+        state.original_code = ""
+        state.explanation = ""
+        state.explained_code = ""
+        state.output = ""
+        state.run_status = ""
+        state.error = ""
+        state.code_version += 1
+
+    state.notify()
+
+
 def start_run(state: CodeState, code: str) -> None:
     """コードを実行する (別スレッド)。画面のコード欄の内容をそのまま実行する"""
 

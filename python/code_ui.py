@@ -94,6 +94,8 @@ class CodeTab(ttk.Frame):
         self.explain_button = ttk.Button(
             buttons, text="解説を作り直す", command=self._explain)
         self.explain_button.pack(side="left", padx=(6, 0))
+        self.clear_button = ttk.Button(buttons, text="クリア", command=self._clear)
+        self.clear_button.pack(side="right")
 
         # コードと解説は左右に並べる
         panes = ttk.PanedWindow(self, orient="horizontal")
@@ -186,6 +188,16 @@ class CodeTab(ttk.Frame):
             code_mode.cancel_generate(self.state)
         else:
             code_mode.stop_run(self.state)
+
+    def _clear(self) -> None:
+        """入力・コード・解説・実行結果をまとめて消す"""
+
+        if self.state.busy or self.state.running:
+            return
+
+        self.prompt.delete("1.0", "end")
+        code_mode.clear(self.state)
+        self.prompt.focus_set()
 
     def _revert(self) -> None:
         code_mode.revert(self.state)
@@ -306,6 +318,7 @@ class CodeTab(ttk.Frame):
         self.generate_button.state(["!disabled"] if idle else ["disabled"])
         self.run_button.state(["!disabled"] if idle else ["disabled"])
         self.explain_button.state(["!disabled"] if idle else ["disabled"])
+        self.clear_button.state(["!disabled"] if idle else ["disabled"])
         self.stop_button.state(
             ["!disabled"] if busy or running else ["disabled"])
         self.revert_button.state(

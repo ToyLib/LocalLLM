@@ -239,6 +239,18 @@ void DrawCodeTab(CodeState& state, const UiColors& colors)
     }
     ImGui::EndDisabled();
 
+    // 入力・コード・解説・実行結果をまとめて消す (右端)
+    const float clearWidth = ImGui::CalcTextSize("クリア").x + style.FramePadding.x * 2.0f;
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - clearWidth);
+    ImGui::BeginDisabled(!idle);
+    if (ImGui::Button("クリア"))
+    {
+        state.prompt.clear();
+        state.focusPrompt = true;
+        ClearCode(state);
+    }
+    ImGui::EndDisabled();
+
     // 実行結果 (下まで届いていたら追従する)
     ImGui::TextDisabled("実行結果");
     ImGui::BeginChild("output", ImVec2(0.0f, outputHeight), ImGuiChildFlags_Borders);

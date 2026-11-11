@@ -76,5 +76,9 @@ void StopRun(CodeState& state);
 // コードを生成直後の状態に戻す
 void RevertCode(CodeState& state);
 
+// コード・解説・実行結果・エラーを消して、最初の状態に戻す (作っている間と実行中は何もしない)
+// 依頼の入力欄 (state.prompt) は UI スレッドが消す
+void ClearCode(CodeState& state);
+
 // アプリを閉じるとき: 通信と実行中のコードを止めて、スレッドの終了を待つ
 void ShutdownCode(CodeState& state);

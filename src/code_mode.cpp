@@ -724,6 +724,29 @@ void RevertCode(CodeState& state)
     WakeUI();
 }
 
+void ClearCode(CodeState& state)
+{
+    {
+        std::lock_guard lock(state.mutex);
+
+        if (state.Busy() || state.running)
+        {
+            return;
+        }
+
+        state.request.clear();
+        state.code.clear();
+        state.originalCode.clear();
+        state.explanation.clear();
+        state.output.clear();
+        state.runStatus.clear();
+        state.error.clear();
+        ++state.codeVersion;
+    }
+
+    WakeUI();
+}
+
 void ShutdownCode(CodeState& state)
 {
     state.cancel = true;
