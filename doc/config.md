@@ -73,7 +73,7 @@
 | `managed.gpu_layers` | `99` | GPU に載せる層の数 |
 | `cloud.name` | `ChatGPT` | 画面に出す名前 |
 | `cloud.chat_url` | `https://api.openai.com/v1/chat/completions` | 問い合わせ先 (https のときだけ API キーを送る) |
-| `cloud.model` | `gpt-5-mini` | モデル名 |
+| `cloud.model` | `gpt-5.6-terra` | モデル名 |
 | `cloud.api_key_name` | `OPENAI_API_KEY` | API キーを探す名前 |
 | `cloud.auth` | `bearer` | `bearer` か `api-key` (Azure OpenAI) |
 | `cloud.max_completion_tokens` | (送らない) | 回答の最大トークン数 |

@@ -135,7 +135,7 @@ API キーの有無は、起動したときと設定画面で保存したとき�
   "cloud": {
     "name": "ChatGPT",
     "chat_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-5-mini",
+    "model": "gpt-5.6-terra",
     "api_key_name": "OPENAI_API_KEY",
     "auth": "bearer"
   }
@@ -146,7 +146,7 @@ API キーの有無は、起動したときと設定画面で保存したとき�
 | --- | --- | --- |
 | `name` | `ChatGPT` | 画面に出す名前 (ボタンや回答者名) |
 | `chat_url` | `https://api.openai.com/v1/chat/completions` | 問い合わせ先。**https のときだけ** API キーを送ります |
-| `model` | `gpt-5-mini` | モデル名 |
+| `model` | `gpt-5.6-terra` | モデル名 |
 | `api_key_name` | `OPENAI_API_KEY` | API キーを探す名前 |
 | `auth` | `bearer` | `bearer` なら `Authorization: Bearer`、`api-key` なら `api-key:` ヘッダー (Azure OpenAI 用) |
 | `max_completion_tokens` | (送らない) | 回答の最大トークン数 |

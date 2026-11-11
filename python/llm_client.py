@@ -120,7 +120,7 @@ class CloudSettings:
     name: str = "ChatGPT"
 
     chat_url: str = "https://api.openai.com/v1/chat/completions"
-    model: str = "gpt-5-mini"
+    model: str = "gpt-5.6-terra"
 
     # API キーを探す名前 (環境変数 → 秘密ファイル。値は設定ファイルに書かない)
     api_key_name: str = "OPENAI_API_KEY"

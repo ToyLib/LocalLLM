@@ -55,7 +55,7 @@ struct CloudSettings
     std::string name = "ChatGPT";
 
     std::string chatUrl = "https://api.openai.com/v1/chat/completions";
-    std::string model = "gpt-5-mini";
+    std::string model = "gpt-5.6-terra";
 
     // API キーを探す名前 (環境変数 → 秘密ファイル。値は設定ファイルに書かない)
     std::string apiKeyName = "OPENAI_API_KEY";

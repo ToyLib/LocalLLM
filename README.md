@@ -123,7 +123,7 @@ cmake --build build --parallel
   "cloud": {
     "name": "ChatGPT",
     "chat_url": "https://api.openai.com/v1/chat/completions",
-    "model": "gpt-5-mini",
+    "model": "gpt-5.6-terra",
     "api_key_name": "OPENAI_API_KEY",
     "auth": "bearer"
   }
