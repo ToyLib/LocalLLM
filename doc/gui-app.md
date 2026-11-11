@@ -8,6 +8,7 @@
 | [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
 | [chat.h](../src/chat.h) / [chat.cpp](../src/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
 | [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`、聞き直しの確認ダイアログ) |
+| [quiz_ui.h](../src/quiz_ui.h) / [quiz_ui.cpp](../src/quiz_ui.cpp)、[quiz_mode.h](../src/quiz_mode.h) / [quiz_mode.cpp](../src/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
 | [settings_ui.h](../src/settings_ui.h) / [settings_ui.cpp](../src/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
 | [config.h](../src/config.h) / [config.cpp](../src/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
 | [ime.h](../src/ime.h) / [ime.cpp](../src/ime.cpp) | IME の変換中の文字列の表示 |
@@ -51,11 +52,15 @@ main()                         … main.cpp
  │   ├ イベント処理 (ImGui に渡す・IME の変換中の文字列・終了)
  │   ├ ImGui の新しいフレームを開始
  │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
- │   │   ├ DrawRagBar()      … 資料 (RAG) の選択・再読込・インデックスの状態・設定ボタン
- │   │   ├ DrawMessages()    … 会話の一覧と「ChatGPT に聞き直す」ボタン
- │   │   ├ 聞き直しの確認ダイアログ (資料を使った回答のときだけ)
- │   │   ├ 入力欄・送信/中断・クリアのボタン
- │   │   ├ DrawComposition() … IME の変換中の文字列 (ime.cpp)
+ │   │   ├ DrawServerBar()   … サーバーの状態 (タブの外)
+ │   │   ├ タブ「チャット」
+ │   │   │   ├ DrawRagBar()      … 資料 (RAG) の選択・再読込・インデックスの状態・設定ボタン
+ │   │   │   ├ DrawMessages()    … 会話の一覧と「ChatGPT に聞き直す」ボタン
+ │   │   │   ├ 聞き直しの確認ダイアログ (資料を使った回答のときだけ)
+ │   │   │   ├ 入力欄・送信/中断・クリアのボタン
+ │   │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
+ │   │   ├ タブ「クイズ」
+ │   │   │   └ DrawQuizTab()     … 分野の選択・出題・結果 (quiz_ui.cpp、[quiz.md](quiz.md))
  │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)
  │   └ 描画して画面に表示
  └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了

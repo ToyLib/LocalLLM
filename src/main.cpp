@@ -2,6 +2,7 @@
 
 #include "chat.h"
 #include "chat_ui.h"
+#include "quiz_mode.h"
 #include "config.h"
 #include "font.h"
 #include "ime.h"
@@ -102,6 +103,7 @@ int main(int, char**)
     ChatState state;
     RefreshCloudStatus(state);
     RagState rag;
+    QuizState quiz;
     std::string input;
     bool focusInput = true;
 
@@ -160,7 +162,7 @@ int main(int, char**)
         const float topInset = 0.0f;
 #endif
 
-        DrawUI(state, rag, settings, input, focusInput, topInset);
+        DrawUI(state, rag, quiz, settings, input, focusInput, topInset);
 
         ImGui::Render();
         SDL_SetRenderScale(
@@ -186,6 +188,8 @@ int main(int, char**)
 
     rag.cancel = true;
     JoinRagWorker(rag);
+
+    ShutdownQuiz(quiz);
 
     // サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
     SDL_HideWindow(window);

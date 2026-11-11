@@ -50,6 +50,10 @@ std::vector<RagHit> SearchRag(
     const std::string& query,
     const std::atomic<bool>& cancel);
 
+// インデックスのチャンクから、重複なしでランダムに選ぶ (クイズの出題用。ベクトルは空にして返す)
+// 短すぎて問題にならないチャンクは除く。足りなければ、あるだけ返す
+std::vector<RagChunk> SampleRagChunks(RagState& state, size_t count);
+
 // インデックスにある資料ごとに「名前: 見出し / 見出し …」の 1 行を返す
 // (見出しが無い資料は書き出し。ルーターに資料の中身の見当をつけさせる)
 std::vector<std::string> DescribeRagSources(RagState& state);

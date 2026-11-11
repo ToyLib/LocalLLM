@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chat.h"
+#include "quiz_mode.h"
 #include "rag.h"
 #include "settings_ui.h"
 
@@ -11,6 +12,7 @@
 void DrawUI(
     ChatState& state,
     RagState& rag,
+    QuizState& quiz,
     SettingsState& settings,
     std::string& input,
     bool& focusInput,

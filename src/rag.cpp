@@ -18,6 +18,7 @@
 #include <map>
 #include <numeric>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 
@@ -38,6 +39,9 @@ constexpr float MIN_SCORE = 0.5f;
 
 // チャンクの分け方を変えたら上げる (保存済みのインデックスを作り直す)
 constexpr int INDEX_VERSION = 2;
+
+// クイズの出題に使うチャンクの最小の文字数 (短すぎると問題にならない)
+constexpr size_t MIN_SAMPLE_CHARS = 30;
 
 // ルーターに見せる、見出しの無い資料の書き出しの文字数
 constexpr size_t PREVIEW_CHARS = 40;
@@ -790,6 +794,46 @@ std::vector<RagHit> SearchRag(
     }
 
     return hits;
+}
+
+std::vector<RagChunk> SampleRagChunks(RagState& state, size_t count)
+{
+    std::vector<RagChunk> candidates;
+
+    {
+        std::lock_guard lock(state.mutex);
+
+        for (const auto& chunk : state.chunks)
+        {
+            // 文字数は UTF-8 のコードポイントで数える (2 バイト目以降は数えない)
+            size_t length = 0;
+
+            for (const unsigned char c : chunk.text)
+            {
+                if ((c & 0xC0) != 0x80 && !std::isspace(c))
+                {
+                    ++length;
+                }
+            }
+
+            if (length >= MIN_SAMPLE_CHARS)
+            {
+                RagChunk copy = chunk;
+                copy.vector.clear();
+                candidates.push_back(std::move(copy));
+            }
+        }
+    }
+
+    std::mt19937 random{std::random_device{}()};
+    std::shuffle(candidates.begin(), candidates.end(), random);
+
+    if (candidates.size() > count)
+    {
+        candidates.resize(count);
+    }
+
+    return candidates;
 }
 
 std::vector<std::string> DescribeRagSources(RagState& state)

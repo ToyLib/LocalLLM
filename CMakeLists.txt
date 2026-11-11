@@ -74,6 +74,8 @@ add_executable(LocalLLM
     src/agent.cpp
     src/chat.cpp
     src/chat_ui.cpp
+    src/quiz_mode.cpp
+    src/quiz_ui.cpp
     src/config.cpp
     src/font.cpp
     src/ime.cpp
