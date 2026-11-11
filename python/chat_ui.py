@@ -153,10 +153,18 @@ class ChatApp:
         self.small = tkfont.Font(family=base)
         self._apply_font_size(_font_size(ui))
 
+        # サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
+        self._build_server_bar()
+
+        # チャット画面は Notebook の 1 枚目のタブ。部品の親は chat_frame
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(side="top", fill="both", expand=True)
+        self.chat_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.chat_frame, text="チャット")
+
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
-        self._build_server_bar()
         self._build_input()
         self._build_messages()
 
@@ -179,7 +187,7 @@ class ChatApp:
     def _build_rag_bar(self) -> None:
         """RAG のオン/オフとインデックスの状態"""
 
-        bar = ttk.Frame(self.root, padding=(8, 6))
+        bar = ttk.Frame(self.chat_frame, padding=(8, 6))
         bar.pack(side="top", fill="x")
 
         # 資料を添えるか (自動ならルーターが質問ごとに判断する)
@@ -219,7 +227,7 @@ class ChatApp:
     def _build_messages(self) -> None:
         """会話表示"""
 
-        frame = ttk.Frame(self.root, padding=(8, 0))
+        frame = ttk.Frame(self.chat_frame, padding=(8, 0))
         frame.pack(side="top", fill="both", expand=True)
 
         self.text = tk.Text(
@@ -267,9 +275,9 @@ class ChatApp:
 
     def _build_input(self) -> None:
         self.error_label = ttk.Label(
-            self.root, padding=(8, 4, 8, 0), wraplength=860)
+            self.chat_frame, padding=(8, 4, 8, 0), wraplength=860)
 
-        frame = ttk.Frame(self.root, padding=8)
+        frame = ttk.Frame(self.chat_frame, padding=8)
         frame.pack(side="bottom", fill="x")
 
         # エラーは入力欄のすぐ上
