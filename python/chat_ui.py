@@ -17,7 +17,6 @@ import server_manager
 from chat import (
     STAGE_LOCAL, STAGE_WEB, ChatState, RagMode, ask_cloud, can_ask_cloud,
     format_status, next_stage, refresh_cloud_status, send_prompt)
-from code_ui import CodeTab
 from llm_client import Citation
 from server_manager import ServerStatus, ServerView
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
@@ -154,18 +153,10 @@ class ChatApp:
         self.small = tkfont.Font(family=base)
         self._apply_font_size(_font_size(ui))
 
-        # サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
-        self._build_server_bar()
-
-        # チャット画面は Notebook の 1 枚目のタブ。部品の親は chat_frame
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(side="top", fill="both", expand=True)
-        self.chat_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.chat_frame, text="チャット")
-
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
+        self._build_server_bar()
         self._build_input()
         self._build_messages()
 
@@ -174,10 +165,6 @@ class ChatApp:
             "text": _to_hex(self.text, self.text.cget("foreground")),
             **DEFAULT_COLORS,
         }
-
-        # コーディング練習は 2 枚目のタブ (チャットとは状態を共有しない)
-        self.code_tab = CodeTab(self.notebook, self.font, lambda: self.colors)
-        self.notebook.add(self.code_tab, text="コーディング練習")
         self._apply_colors(_colors(ui, self.default_colors))
 
         # server.json の managed がオンなら llama-server を起動する
@@ -192,7 +179,7 @@ class ChatApp:
     def _build_rag_bar(self) -> None:
         """RAG のオン/オフとインデックスの状態"""
 
-        bar = ttk.Frame(self.chat_frame, padding=(8, 6))
+        bar = ttk.Frame(self.root, padding=(8, 6))
         bar.pack(side="top", fill="x")
 
         # 資料を添えるか (自動ならルーターが質問ごとに判断する)
@@ -232,7 +219,7 @@ class ChatApp:
     def _build_messages(self) -> None:
         """会話表示"""
 
-        frame = ttk.Frame(self.chat_frame, padding=(8, 0))
+        frame = ttk.Frame(self.root, padding=(8, 0))
         frame.pack(side="top", fill="both", expand=True)
 
         self.text = tk.Text(
@@ -280,9 +267,9 @@ class ChatApp:
 
     def _build_input(self) -> None:
         self.error_label = ttk.Label(
-            self.chat_frame, padding=(8, 4, 8, 0), wraplength=860)
+            self.root, padding=(8, 4, 8, 0), wraplength=860)
 
-        frame = ttk.Frame(self.chat_frame, padding=8)
+        frame = ttk.Frame(self.root, padding=8)
         frame.pack(side="bottom", fill="x")
 
         # エラーは入力欄のすぐ上
@@ -318,9 +305,6 @@ class ChatApp:
         self.bold.configure(size=size)
         self.small.configure(size=max(size - 3, 1))
 
-        if hasattr(self, "code_tab"):
-            self.code_tab.apply_font_size(size)
-
     def _apply_colors(self, colors: dict[str, str]) -> None:
         """色を変える"""
 
@@ -342,7 +326,6 @@ class ChatApp:
 
         self.rag_status.configure(foreground=colors["sub_text"])
         self.error_label.configure(foreground=colors["error"])
-        self.code_tab.apply_colors()
 
     def _open_settings(self) -> None:
         SettingsDialog(
@@ -464,7 +447,6 @@ class ChatApp:
         # 通信中なら止める (ワーカーはデーモンスレッドなので待たない)
         self.state.cancel.cancel()
         self.rag.cancel.cancel()
-        self.code_tab.shutdown()
 
         # サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
         self.root.withdraw()
