@@ -366,6 +366,26 @@ def _parse_line(
     return text
 
 
+def _strict_schema(schema: Any) -> Any:
+    """クラウド (strict モード) が受け付ける形の JSON スキーマにする
+    すべてのオブジェクトに additionalProperties: false が必要で、件数の制限 (minItems / maxItems) は
+    使えないことがある。件数は受け取ったあとのアプリの検証で確かめる (ローカルには元のまま送る)"""
+
+    if isinstance(schema, list):
+        return [_strict_schema(v) for v in schema]
+
+    if not isinstance(schema, dict):
+        return schema
+
+    result = {k: _strict_schema(v) for k, v in schema.items()
+              if k not in ("minItems", "maxItems")}
+
+    if result.get("type") == "object":
+        result.setdefault("additionalProperties", False)
+
+    return result
+
+
 def ask_llm(
     messages: list[dict[str, str]],
     on_delta: DeltaCallback | None,
@@ -414,7 +434,8 @@ def ask_llm(
             request["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "result", "strict": True, "schema": options.schema},
+                    "name": "result", "strict": True,
+                    "schema": _strict_schema(options.schema)},
             }
     else:
         url = config.get_string(SERVER_CONFIG, "chat_url")

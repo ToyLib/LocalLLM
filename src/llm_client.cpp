@@ -302,6 +302,46 @@ bool StartsWith(const std::string& text, const char* prefix)
     return text.rfind(prefix, 0) == 0;
 }
 
+// クラウド (strict モード) が受け付ける形の JSON スキーマにする
+// すべてのオブジェクトに additionalProperties: false が必要で、件数の制限 (minItems / maxItems) は
+// 使えないことがある。件数は受け取ったあとのアプリの検証で確かめる (ローカルには元のまま送る)
+static json StrictSchema(const json& schema)
+{
+    if (schema.is_array())
+    {
+        json result = json::array();
+
+        for (const auto& item : schema)
+        {
+            result.push_back(StrictSchema(item));
+        }
+
+        return result;
+    }
+
+    if (!schema.is_object())
+    {
+        return schema;
+    }
+
+    json result = json::object();
+
+    for (const auto& [key, value] : schema.items())
+    {
+        if (key != "minItems" && key != "maxItems")
+        {
+            result[key] = StrictSchema(value);
+        }
+    }
+
+    if (result.value("type", "") == "object" && !result.contains("additionalProperties"))
+    {
+        result["additionalProperties"] = false;
+    }
+
+    return result;
+}
+
 } // namespace
 
 CloudSettings LoadCloudSettings()
@@ -493,7 +533,7 @@ std::string AskLLM(
                 {"json_schema", {
                     {"name", "result"},
                     {"strict", true},
-                    {"schema", options.schema}
+                    {"schema", StrictSchema(options.schema)}
                 }}
             };
         }
