@@ -102,9 +102,19 @@ class Category:
     # 自作の分野で、資料 (rag/) から出題するか
     use_rag: bool = False
 
+    # 自作の分野で、ローカルの LLM ではなくクラウド (ChatGPT など) で出題するか
+    # 資料 (rag/) の内容を外に送らないため、資料を使う分野では無視する
+    use_cloud: bool = False
+
     @property
     def custom(self) -> bool:
         return self.source == "custom"
+
+    @property
+    def cloud(self) -> bool:
+        """出題をクラウドに頼むか"""
+
+        return self.custom and self.use_cloud and not self.from_rag
 
     @property
     def from_rag(self) -> bool:
@@ -255,6 +265,7 @@ def load_custom_categories() -> list[Category]:
             source="custom",
             guide=prompt.strip()[:MAX_PROMPT_LENGTH] if isinstance(prompt, str) else "",
             use_rag=entry.get("use_rag") is True,
+            use_cloud=entry.get("use_cloud") is True,
         ))
 
     return categories
@@ -264,7 +275,8 @@ def save_custom_categories(categories: list[Category]) -> None:
     """自作の分野を保存する (ConfigError)"""
 
     config.save(CUSTOM_CONFIG, {"categories": [
-        {"name": c.name, "prompt": c.guide, "use_rag": c.use_rag} for c in categories]})
+        {"name": c.name, "prompt": c.guide, "use_rag": c.use_rag, "use_cloud": c.use_cloud}
+        for c in categories]})
 
 
 def tier_message(settings: QuizSettings, score: int, total: int) -> str:
@@ -407,7 +419,7 @@ def _expand_topics(
         name="トピック", system_prompt=settings.topics_prompt,
         options=LLMOptions(
             max_tokens=settings.max_tokens, temperature=0.8,
-            disable_thinking=True, schema=TOPICS_SCHEMA))
+            disable_thinking=True, schema=TOPICS_SCHEMA, cloud=category.cloud))
 
     try:
         raw = run_agent_json(
@@ -497,7 +509,7 @@ def _make_question(
         name="出題", system_prompt=settings.generate_prompt,
         options=LLMOptions(
             max_tokens=settings.max_tokens, temperature=0.8,
-            disable_thinking=True, schema=QUESTION_SCHEMA))
+            disable_thinking=True, schema=QUESTION_SCHEMA, cloud=category.cloud))
     raw = run_agent_json(
         agent, [{"role": "user", "content": _prompt(category, topic, chunk, previous)}], cancel)
     question = validate_question(raw)

@@ -3,6 +3,7 @@
 #include "quiz_ui.h"
 
 #include "ime.h"
+#include "llm_client.h"
 #include "server_manager.h"
 
 #include <imgui.h>
@@ -245,7 +246,21 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
         ImGui::TextUnformatted("お題・出題の方針:");
         ImGui::InputTextMultiline(
             "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
-        ImGui::Checkbox("資料 (rag/) を使う", &item.useRag);
+
+        // 資料を外に送らないため、資料を使うこととクラウドで出題することは同時にできない
+        ImGui::BeginDisabled(item.useCloud);
+        if (ImGui::Checkbox("資料 (rag/) を使う", &item.useRag) && item.useRag)
+        {
+            item.useCloud = false;
+        }
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(item.useRag);
+        ImGui::Checkbox(
+            (LoadCloudSettings().name + " で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
+                .c_str(),
+            &item.useCloud);
+        ImGui::EndDisabled();
 
         bool running;
         std::string result;
@@ -405,6 +420,12 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
     {
         note = (note.empty() ? "" : note + "\n") +
                std::string(note.empty() ? RAG_DESCRIPTION : RAG_CUSTOM_DESCRIPTION);
+    }
+
+    if (selected.Cloud())
+    {
+        note += (note.empty() ? "" : "\n") + LoadCloudSettings().name +
+                " で出題します (お題と問題を外部のサービスに送ります)。";
     }
 
     WrappedDisabled(note);

@@ -9,6 +9,7 @@ from tkinter import ttk
 from typing import Callable
 
 import config
+import llm_client
 import quiz_mode
 import rag
 import server_manager
@@ -164,10 +165,16 @@ class QuizTab(ttk.Frame):
             borderwidth=1, relief="solid", undo=True)
         self.edit_prompt.pack(side="top", fill="both", expand=True)
 
+        # 資料を外に送らないため、資料を使うこととクラウドで出題することは同時にできない
         self.edit_rag = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            right, text="資料 (rag/) を使う", variable=self.edit_rag).pack(
-            side="top", anchor="w", pady=(6, 0))
+        self.edit_cloud = tk.BooleanVar(value=False)
+        self.rag_check = ttk.Checkbutton(
+            right, text="資料 (rag/) を使う", variable=self.edit_rag,
+            command=self._on_exclusive)
+        self.rag_check.pack(side="top", anchor="w", pady=(6, 0))
+        self.cloud_check = ttk.Checkbutton(
+            right, variable=self.edit_cloud, command=self._on_exclusive)
+        self.cloud_check.pack(side="top", anchor="w")
 
         row = ttk.Frame(right)
         row.pack(side="top", anchor="w", pady=(6, 0))
@@ -353,6 +360,15 @@ class QuizTab(ttk.Frame):
         else:
             self._load_edit_fields(-1)
 
+    def _on_exclusive(self) -> None:
+        """資料とクラウドの、どちらか一方だけを選べるようにする"""
+
+        cloud_name = llm_client.load_cloud_settings().name
+        self.cloud_check.configure(
+            text=f"{cloud_name} で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
+        self.rag_check.state(["disabled"] if self.edit_cloud.get() else ["!disabled"])
+        self.cloud_check.state(["disabled"] if self.edit_rag.get() else ["!disabled"])
+
     def _load_edit_fields(self, index: int) -> None:
         """index の分野を右の入力欄に出す (-1 なら空にして使えなくする)"""
 
@@ -363,6 +379,7 @@ class QuizTab(ttk.Frame):
         self.edit_name.delete(0, "end")
         self.edit_prompt.delete("1.0", "end")
         self.edit_rag.set(False)
+        self.edit_cloud.set(False)
         self._test_result = ""
         self._test_session += 1
         self._test_cancel.cancel()
@@ -373,7 +390,9 @@ class QuizTab(ttk.Frame):
             self.edit_name.insert(0, item.name)
             self.edit_prompt.insert("1.0", item.guide)
             self.edit_rag.set(item.use_rag)
+            self.edit_cloud.set(item.use_cloud and not item.use_rag)
 
+        self._on_exclusive()
         self._dirty.set()
 
     def _read_edit_fields(self) -> Category | None:
@@ -387,7 +406,8 @@ class QuizTab(ttk.Frame):
             name=self.edit_name.get().strip()[:quiz_mode.MAX_NAME_LENGTH],
             source="custom",
             guide=self.edit_prompt.get("1.0", "end").strip()[:quiz_mode.MAX_PROMPT_LENGTH],
-            use_rag=self.edit_rag.get())
+            use_rag=self.edit_rag.get(),
+            use_cloud=self.edit_cloud.get() and not self.edit_rag.get())
 
     def _store_edit_fields(self) -> None:
         """入力欄の内容を、一覧のデータに書き戻す"""
@@ -621,6 +641,10 @@ class QuizTab(ttk.Frame):
             if category.use_rag:
                 note = (note + "\n" if note else "") + (
                     RAG_CUSTOM_DESCRIPTION if note else RAG_DESCRIPTION)
+            if category.cloud:
+                note = (note + "\n" if note else "") + (
+                    f"{llm_client.load_cloud_settings().name} で出題します"
+                    "(お題と問題を外部のサービスに送ります)。")
         elif category.source == "rag":
             note = RAG_DESCRIPTION
         else:

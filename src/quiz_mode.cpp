@@ -307,6 +307,7 @@ std::vector<std::string> ExpandTopics(
     agent.options.temperature = 0.8f;
     agent.options.disableThinking = true;
     agent.options.schema = TopicsSchema();
+    agent.options.cloud = category.Cloud();
 
     json raw;
 
@@ -467,6 +468,7 @@ QuizQuestion MakeQuestion(
     agent.options.temperature = 0.8f;
     agent.options.disableThinking = true;
     agent.options.schema = QuestionSchema();
+    agent.options.cloud = category.Cloud();
 
     const json raw = RunAgentJson(
         agent,
@@ -894,6 +896,8 @@ std::vector<QuizCategory> LoadCustomQuizCategories()
 
         category.useRag =
             entry.contains("use_rag") && entry["use_rag"].is_boolean() && entry["use_rag"].get<bool>();
+        category.useCloud = entry.contains("use_cloud") && entry["use_cloud"].is_boolean() &&
+                            entry["use_cloud"].get<bool>();
         categories.push_back(std::move(category));
     }
 
@@ -906,7 +910,10 @@ void SaveCustomQuizCategories(const std::vector<QuizCategory>& categories)
 
     for (const auto& category : categories)
     {
-        entries.push_back({{"name", category.name}, {"prompt", category.guide}, {"use_rag", category.useRag}});
+        entries.push_back({{"name", category.name},
+                           {"prompt", category.guide},
+                           {"use_rag", category.useRag},
+                           {"use_cloud", category.useCloud}});
     }
 
     SaveConfig(CUSTOM_CONFIG, {{"categories", entries}});

@@ -31,10 +31,17 @@ struct QuizCategory
     // 自作の分野で、資料 (rag/) から出題するか
     bool useRag = false;
 
+    // 自作の分野で、ローカルの LLM ではなくクラウド (ChatGPT など) で出題するか
+    // 資料 (rag/) の内容を外に送らないため、資料を使う分野では無視する (Cloud() で判定する)
+    bool useCloud = false;
+
     bool IsCustom() const { return source == "custom"; }
 
     // 資料から出題するか (guide があれば、それに近い資料を選ぶ)
     bool FromRag() const { return source == "rag" || (IsCustom() && useRag); }
+
+    // 出題をクラウドに頼むか
+    bool Cloud() const { return IsCustom() && useCloud && !FromRag(); }
 };
 
 // 自作の分野の名前・お題の最大の長さ (バイト)
