@@ -45,10 +45,7 @@ class Message:
     # 回答役のキー (assistant / general。ChatGPT に聞き直したときの書き直しに使う)
     agent_key: str = ""
 
-    # user: 資料を添えて送った質問 (資料を使わなかったら空)
-    rag_prompt: str = ""
-
-    # assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除く目印)
+    # assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除き、聞き直しも止める目印)
     used_rag: bool = False
 
     # assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
@@ -257,9 +254,8 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                         rag_prompt = rag.build_prompt(hits, prompt)
                         history[-1]["content"] = rag_prompt
 
-                        # 聞き直しで同じ資料を送り、資料を使ったやりとりを ChatGPT 宛ての履歴から除くために残す
+                        # 資料を使ったやりとりを ChatGPT 宛ての履歴から除き、聞き直しを止めるための目印
                         with state.lock:
-                            state.messages[-2].rag_prompt = rag_prompt
                             state.messages[-1].used_rag = True
 
                     note += _format_sources(hits)
@@ -418,8 +414,7 @@ def next_stage(state: ChatState, message: Message) -> str:
 def ask_cloud(state: ChatState, web_search: bool = False) -> None:
     """最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
     web_search なら、Web 検索用のモデルで聞き直し、検索なしの ChatGPT の回答と比べる
-    資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
-    (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
+    資料を使った回答は聞き直せない (資料を外に送らないため)。資料を使ったやりとりは履歴からも除く
     流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
           → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → ローカルの回答との違いをまとめる
     クラウドに聞けなかったら、聞き直す前の回答に戻す"""
@@ -431,6 +426,9 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
             return
 
         previous = state.messages[-1]
+
+        if previous.used_rag:
+            return
 
         if next_stage(state, previous) != (STAGE_WEB if web_search else STAGE_CLOUD):
             return
@@ -446,12 +444,7 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
         # 口調を書き直した回答は、書き直す前の文章と比べる
         local_answer = previous.cloud_original or previous.content
 
-        # 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
-        send_rag = previous.used_rag and bool(user.rag_prompt)
-        history.append({
-            "role": "user",
-            "content": user.rag_prompt if send_rag else user.content,
-        })
+        history.append({"role": "user", "content": user.content})
 
         previous.superseded = True
         answer = Message(
@@ -461,8 +454,7 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
             used_rag=previous.used_rag,
             stage=STAGE_WEB if web_search else STAGE_CLOUD,
             note=(f"{state.cloud_name} に Web で調べて聞き直しました" if web_search else
-                  f"{state.cloud_name} に聞き直しました" +
-                  (" (資料も送りました)" if send_rag else "")),
+                  f"{state.cloud_name} に聞き直しました"),
         )
         _set_status(
             answer,

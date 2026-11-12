@@ -41,10 +41,7 @@ struct Message
     // 回答役のキー (assistant / general。ChatGPT に聞き直したときの書き直しに使う)
     std::string agentKey;
 
-    // user: 資料を添えて送った質問 (資料を使わなかったら空)
-    std::string ragPrompt;
-
-    // assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除く目印)
+    // assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除き、聞き直しも止める目印)
     bool usedRag = false;
 
     // assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
@@ -122,10 +119,6 @@ void RefreshCloudStatus(ChatState& state);
 // 呼ぶ側で state.mutex をロックしておく
 bool CanAskCloud(const ChatState& state);
 
-// 最新の回答が資料 (rag/) を使っているか (聞き直す前の確認に使う)
-// 呼ぶ側で state.mutex をロックしておく
-bool LastAnswerUsedRag(const ChatState& state);
-
 // この回答の次に聞き直せる段階 (Cloud / Web。もう聞き直せなければ Local)
 // 資料を使った回答は、資料の内容が検索語として外に出ないように Web 検索しない
 // 呼ぶ側で state.mutex をロックしておく
@@ -133,6 +126,5 @@ AnswerStage NextStage(const ChatState& state, const Message& message);
 
 // 最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
 // webSearch なら、Web 検索用のモデルで聞き直し、検索なしの ChatGPT の回答と比べる
-// 資料を使ったほかのやりとりは送らない。最新の質問が資料を使っていたら、その資料は送る
-// (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
+// 資料を使った回答は聞き直せない (資料を外に送らないため)。資料を使ったやりとりは履歴からも除く
 void AskCloud(ChatState& state, bool webSearch = false);
