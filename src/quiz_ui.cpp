@@ -24,6 +24,9 @@ constexpr const char* NOTICE =
 constexpr const char* RAG_DESCRIPTION =
     "rag/ フォルダーの資料の内容から出題します (資料の読み込みが終わってから)。";
 
+constexpr const char* CLOUD_RAG_WARNING =
+    "資料 (rag/) の内容の一部が外部のサービスに送られます。個人的な内容が含まれていないか確認してください。";
+
 constexpr const char* RAG_CUSTOM_DESCRIPTION =
     "rag/ フォルダーの資料のうち、お題に近い内容から出題します (資料の読み込みが終わってから)。";
 
@@ -246,21 +249,19 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
         ImGui::TextUnformatted("お題・出題の方針:");
         ImGui::InputTextMultiline(
             "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
-
-        // 資料を外に送らないため、資料を使うこととクラウドで出題することは同時にできない
-        ImGui::BeginDisabled(item.useCloud);
-        if (ImGui::Checkbox("資料 (rag/) を使う", &item.useRag) && item.useRag)
-        {
-            item.useCloud = false;
-        }
-        ImGui::EndDisabled();
-
-        ImGui::BeginDisabled(item.useRag);
+        ImGui::Checkbox("資料 (rag/) を使う", &item.useRag);
         ImGui::Checkbox(
             (LoadCloudSettings().name + " で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
                 .c_str(),
             &item.useCloud);
-        ImGui::EndDisabled();
+
+        // 資料の内容の一部が外に出るので、両方オンのときは警告する
+        if (item.useRag && item.useCloud)
+        {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextColored(colors.error, "%s", CLOUD_RAG_WARNING);
+            ImGui::PopTextWrapPos();
+        }
 
         bool running;
         std::string result;
@@ -430,7 +431,12 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
 
     WrappedDisabled(note);
 
-    const std::string& shown = error.empty() ? state.customError : error;
+    std::string shown = error.empty() ? state.customError : error;
+
+    if (shown.empty() && selected.Cloud() && selected.FromRag())
+    {
+        shown = CLOUD_RAG_WARNING;
+    }
 
     if (!shown.empty())
     {

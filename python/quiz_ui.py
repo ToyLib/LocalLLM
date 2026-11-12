@@ -23,6 +23,8 @@ NOTICE = ("AI が作った問題です。特に「資料から」以外の分野
           "気になったら調べ直してください。")
 
 RAG_DESCRIPTION = "rag/ フォルダーの資料の内容から出題します (資料の読み込みが終わってから)。"
+CLOUD_RAG_WARNING = "資料 (rag/) の内容の一部が外部のサービスに送られます。個人的な内容が含まれていないか確認してください。"
+
 RAG_CUSTOM_DESCRIPTION = "rag/ フォルダーの資料のうち、お題に近い内容から出題します (資料の読み込みが終わってから)。"
 
 # 新しい分野の仮の名前 (変えないと保存できない)
@@ -165,7 +167,6 @@ class QuizTab(ttk.Frame):
             borderwidth=1, relief="solid", undo=True)
         self.edit_prompt.pack(side="top", fill="both", expand=True)
 
-        # 資料を外に送らないため、資料を使うこととクラウドで出題することは同時にできない
         self.edit_rag = tk.BooleanVar(value=False)
         self.edit_cloud = tk.BooleanVar(value=False)
         self.rag_check = ttk.Checkbutton(
@@ -175,6 +176,7 @@ class QuizTab(ttk.Frame):
         self.cloud_check = ttk.Checkbutton(
             right, variable=self.edit_cloud, command=self._on_exclusive)
         self.cloud_check.pack(side="top", anchor="w")
+        self.cloud_warning = self._label(right, text=CLOUD_RAG_WARNING)
 
         row = ttk.Frame(right)
         row.pack(side="top", anchor="w", pady=(6, 0))
@@ -361,13 +363,18 @@ class QuizTab(ttk.Frame):
             self._load_edit_fields(-1)
 
     def _on_exclusive(self) -> None:
-        """資料とクラウドの、どちらか一方だけを選べるようにする"""
+        """クラウドの名前を出し、資料とクラウドの両方がオンのときは警告を出す"""
 
         cloud_name = llm_client.load_cloud_settings().name
         self.cloud_check.configure(
             text=f"{cloud_name} で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
-        self.rag_check.state(["disabled"] if self.edit_cloud.get() else ["!disabled"])
-        self.cloud_check.state(["disabled"] if self.edit_rag.get() else ["!disabled"])
+
+        if self.edit_rag.get() and self.edit_cloud.get():
+            self.cloud_warning.pack(side="top", anchor="w", pady=(2, 0), after=self.cloud_check)
+        else:
+            self.cloud_warning.pack_forget()
+
+        self._dirty.set()
 
     def _load_edit_fields(self, index: int) -> None:
         """index の分野を右の入力欄に出す (-1 なら空にして使えなくする)"""
@@ -390,7 +397,7 @@ class QuizTab(ttk.Frame):
             self.edit_name.insert(0, item.name)
             self.edit_prompt.insert("1.0", item.guide)
             self.edit_rag.set(item.use_rag)
-            self.edit_cloud.set(item.use_cloud and not item.use_rag)
+            self.edit_cloud.set(item.use_cloud)
 
         self._on_exclusive()
         self._dirty.set()
@@ -407,7 +414,7 @@ class QuizTab(ttk.Frame):
             source="custom",
             guide=self.edit_prompt.get("1.0", "end").strip()[:quiz_mode.MAX_PROMPT_LENGTH],
             use_rag=self.edit_rag.get(),
-            use_cloud=self.edit_cloud.get() and not self.edit_rag.get())
+            use_cloud=self.edit_cloud.get())
 
     def _store_edit_fields(self) -> None:
         """入力欄の内容を、一覧のデータに書き戻す"""
@@ -587,6 +594,7 @@ class QuizTab(ttk.Frame):
             note = ""
 
         self.edit_message.configure(text=note, foreground=colors["sub_text"])
+        self.cloud_warning.configure(foreground=colors["error"])
         self.test_output.configure(state="normal")
         self.test_output.delete("1.0", "end")
         self.test_output.insert("end", self._test_result)
@@ -650,9 +658,10 @@ class QuizTab(ttk.Frame):
         else:
             note = category.guide
 
+        warning = CLOUD_RAG_WARNING if category is not None and category.cloud and category.from_rag else ""
         self.category_note.configure(text=note, foreground=colors["sub_text"])
         self.select_error.configure(
-            text=error or self._custom_error, foreground=colors["error"])
+            text=error or self._custom_error or warning, foreground=colors["error"])
 
         # ローカルの LLM に頼む分野は、サーバーの準備ができるまで始められない
         usable = category is not None and server_manager.is_chat_available()
