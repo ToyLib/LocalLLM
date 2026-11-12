@@ -103,7 +103,7 @@ class Category:
     use_rag: bool = False
 
     # 自作の分野で、ローカルの LLM ではなくクラウド (ChatGPT など) で出題するか
-    # 資料を使う分野でオンにすると、資料の内容の一部も外に送られる (画面で警告する)
+    # 資料 (rag/) の内容を外に送らないため、資料を使う分野では無視する
     use_cloud: bool = False
 
     @property
@@ -114,7 +114,7 @@ class Category:
     def cloud(self) -> bool:
         """出題をクラウドに頼むか"""
 
-        return self.custom and self.use_cloud
+        return self.custom and self.use_cloud and not self.from_rag
 
     @property
     def from_rag(self) -> bool:
