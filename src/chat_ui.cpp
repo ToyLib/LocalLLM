@@ -15,11 +15,14 @@
 namespace
 {
 
+constexpr const char* CONFIRM_POPUP = "資料を送る確認";
+
 // 会話の欄で押されたボタン (ロックを外してから処理する)
 enum class MessageAction
 {
     None,
     AskCloud,
+    ConfirmAskCloud,
     AskWeb
 };
 
@@ -36,7 +39,9 @@ MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
     const bool web = next == AnswerStage::Web;
     const std::string label =
         web ? std::string("Web でも調べて比べる") : state.cloudName + " に聞き直す";
-    const bool enabled = state.hasCloudKey && CanAskCloud(state) && !message.usedRag;
+    // 資料を外に送らない設定 (既定) のときは、資料を使った回答は聞き直せない
+    const bool enabled = state.hasCloudKey && CanAskCloud(state) &&
+                         (!message.usedRag || state.allowRag);
 
     ImGui::BeginDisabled(!enabled);
     const bool pressed = ImGui::SmallButton(label.c_str());
@@ -45,6 +50,10 @@ MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
     if (!state.hasCloudKey)
     {
         ImGui::SetItemTooltip("設定画面で API キーを登録すると使えます");
+    }
+    else if (message.usedRag && state.allowRag)
+    {
+        ImGui::SetItemTooltip("資料 (rag/) の内容も送ります (送る前に確認します)");
     }
     else if (message.usedRag)
     {
@@ -63,7 +72,7 @@ MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
         return MessageAction::AskWeb;
     }
 
-    return MessageAction::AskCloud;
+    return message.usedRag ? MessageAction::ConfirmAskCloud : MessageAction::AskCloud;
 }
 
 MessageAction DrawMessages(ChatState& state, const UiColors& colors)
@@ -216,6 +225,39 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
     }
 
     return action;
+}
+
+// 資料を使った回答を聞き直す前の確認
+void DrawConfirmPopup(ChatState& state)
+{
+    if (!ImGui::BeginPopupModal(
+            CONFIRM_POPUP, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    ImGui::Text("資料 (rag/) の内容が %s に送られます。送りますか？",
+        state.cloudName.c_str());
+    ImGui::TextDisabled("ほかの、資料を使ったやりとりは送りません。");
+    ImGui::Spacing();
+
+    const float buttonWidth = ImGui::CalcTextSize("キャンセル").x * 1.6f;
+
+    if (ImGui::Button("送る", ImVec2(buttonWidth, 0.0f)))
+    {
+        ImGui::CloseCurrentPopup();
+        AskCloud(state);
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("キャンセル", ImVec2(buttonWidth, 0.0f)) ||
+        ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }
 
 // RAG のオン/オフとインデックスの状態
@@ -401,6 +443,12 @@ void DrawUI(
     {
         AskCloud(state, true);
     }
+    else if (action == MessageAction::ConfirmAskCloud)
+    {
+        ImGui::OpenPopup(CONFIRM_POPUP);
+    }
+
+    DrawConfirmPopup(state);
 
     if (!error.empty())
     {

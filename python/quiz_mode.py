@@ -10,7 +10,7 @@ from typing import Callable
 import config
 import rag
 from agent import Agent, create_answerer, run_agent, run_agent_json
-from llm_client import CancelToken, Cancelled, LLMError, LLMOptions
+from llm_client import CancelToken, Cancelled, LLMError, LLMOptions, load_cloud_settings
 
 QUIZ_CONFIG = "quiz.json"
 
@@ -104,6 +104,7 @@ class Category:
 
     # 自作の分野で、ローカルの LLM ではなくクラウド (ChatGPT など) で出題するか
     # 資料を使う分野でオンにすると、資料の内容の一部も外に送られる (画面で警告する)
+    # ただし、設定の「資料 (rag/) の内容を送ってよい」がオフなら、資料を使う分野ではクラウドを使わない
     use_cloud: bool = False
 
     @property
@@ -114,7 +115,10 @@ class Category:
     def cloud(self) -> bool:
         """出題をクラウドに頼むか"""
 
-        return self.custom and self.use_cloud
+        if not (self.custom and self.use_cloud):
+            return False
+
+        return not self.from_rag or load_cloud_settings().allow_rag
 
     @property
     def from_rag(self) -> bool:

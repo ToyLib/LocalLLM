@@ -399,6 +399,9 @@ void LoadSettings(SettingsState& settings)
         ? cloud["web_search"].get<bool>()
         : defaults.webSearch;
     settings.cloudSearchModel = StringOr(cloud, "search_model", defaults.searchModel);
+    settings.cloudAllowRag = cloud.contains("allow_rag") && cloud["allow_rag"].is_boolean()
+        ? cloud["allow_rag"].get<bool>()
+        : defaults.allowRag;
 
     ClearApiKeyInput(settings);
     settings.deleteApiKey = false;
@@ -514,6 +517,7 @@ bool SaveSettings(SettingsState& settings)
     cloud["api_key_name"] = settings.cloudKeyName;
     cloud["web_search"] = settings.cloudWebSearch;
     cloud["search_model"] = settings.cloudSearchModel;
+    cloud["allow_rag"] = settings.cloudAllowRag;
 
     if (!cloud.contains("auth"))
     {
@@ -861,6 +865,12 @@ void DrawCloudTab(SettingsState& settings)
     ImGui::InputText("Web 検索のモデル", &settings.cloudSearchModel);
     ImGui::EndDisabled();
     ImGui::TextDisabled("押すたびに検索の料金がかかります。資料 (rag/) を使った回答では出しません。");
+
+    ImGui::SeparatorText("資料 (rag/)");
+    ImGui::Checkbox("資料 (rag/) の内容を送ってよい", &settings.cloudAllowRag);
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", "オンにすると、資料を使った回答も ChatGPT に聞き直せます (送る前に確認します)。クイズの自作の分野でも、「資料を使う」と「ChatGPT で出題する」を同時に選べます (警告を出します)。オフ (既定) なら、資料は外に出ません。");
+    ImGui::PopTextWrapPos();
 }
 
 } // namespace

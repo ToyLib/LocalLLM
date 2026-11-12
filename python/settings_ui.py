@@ -566,6 +566,18 @@ class SettingsDialog:
             text="押すたびに検索の料金がかかります。資料 (rag/) を使った回答では出しません。",
         ).grid(row=16, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
+        # 資料 (rag/) の内容を送ってよいか
+        allow_rag = cloud.get("allow_rag")
+        self.cloud_allow_rag = tk.BooleanVar(
+            value=allow_rag if isinstance(allow_rag, bool) else defaults.allow_rag)
+        ttk.Checkbutton(
+            tab, variable=self.cloud_allow_rag, text="資料 (rag/) の内容を送ってよい",
+        ).grid(row=17, column=0, columnspan=2, sticky="w", pady=(14, 2))
+        ttk.Label(
+            tab, foreground=NOTE_COLOR, wraplength=560, justify="left",
+            text="オンにすると、資料を使った回答も ChatGPT に聞き直せます (送る前に確認します)。クイズの自作の分野でも、「資料を使う」と「ChatGPT で出題する」を同時に選べます (警告を出します)。オフ (既定) なら、資料は外に出ません。",
+        ).grid(row=18, column=0, columnspan=2, sticky="w")
+
         self._update_key_status()
         self._update_key_hint()
 
@@ -793,6 +805,7 @@ class SettingsDialog:
             cloud[key] = variable.get()
 
         cloud["web_search"] = self.cloud_web_search.get()
+        cloud["allow_rag"] = self.cloud_allow_rag.get()
         cloud.setdefault("auth", "bearer")
 
         for key, (name, text) in self.agent_widgets.items():

@@ -41,7 +41,8 @@ struct QuizCategory
     bool FromRag() const { return source == "rag" || (IsCustom() && useRag); }
 
     // 出題をクラウドに頼むか
-    bool Cloud() const { return IsCustom() && useCloud; }
+    // 資料を使う分野は、設定の「資料 (rag/) の内容を送ってよい」がオンのときだけ (オフなら使わない)
+    bool Cloud() const;
 };
 
 // 自作の分野の名前・お題の最大の長さ (バイト)
@@ -119,6 +120,9 @@ struct QuizState
     std::vector<QuizCategory> editItems;
     int editIndex = -1;
     std::string editMessage;
+
+    // 設定で、資料 (rag/) の内容をクラウドに送ってよいか (分野を読み込むときに調べる)
+    bool allowRagCloud = false;
 
     // 追加した直後に、分野名の欄へ入力を移す
     bool editFocusName = false;

@@ -231,7 +231,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 - `cloudOriginal` があれば、「ChatGPT の元の回答」を `TreeNode` で折りたたんで表示します。
 - `compareVerdict` があれば、聞き直す前の回答との違いのまとめを出します。「食い違いあり」はエラーの色、要点は `Bullet` を付けて薄く表示します。
 - `note` (ルーターの判断や参照した資料) は本文の下に薄く表示します。
-- 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときは `SetItemTooltip` で理由を出します。資料を使った回答 (`usedRag`) のときも押せなくし、理由は「資料を使った回答は、資料を外に送らないため聞き直せません」とボタンの横に書きます (`AskCloud` も `usedRag` なら何もしません)。
+- 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときは `SetItemTooltip` で理由を出します。資料を使った回答 (`usedRag`) は、設定 `cloud.allow_rag` (`ChatState::allowRag`) がオフ (既定) のとき押せなくし、理由は「資料を使った回答は、資料を外に送らないため聞き直せません」とボタンの横に書きます (`AskCloud` も何もしません)。オンのときは、確認ダイアログで「送る」を選んだときだけ `AskCloud` を呼びます。
 - メッセージを右クリックすると「コピー」のメニューが出て、本文をクリップボードにコピーできます。
 - 各メッセージは `PushID` で番号を付けて区別しています。同じ名前 ("copy") のポップアップをメッセージごとに作るためです。
 

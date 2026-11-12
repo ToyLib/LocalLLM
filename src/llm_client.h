@@ -74,6 +74,9 @@ struct CloudSettings
 
     // Web 検索に使うモデル (Chat Completions で検索できる専用のモデル)
     std::string searchModel = "gpt-5-search-api";
+
+    // 資料 (rag/) の内容をクラウドに送ってよいか (既定はオフ。オフなら資料は外に出ない)
+    bool allowRag = false;
 };
 
 // server.json を読んで、クラウドの設定を返す (読めなければ既定値)

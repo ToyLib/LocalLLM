@@ -369,7 +369,18 @@ class QuizTab(ttk.Frame):
         self.cloud_check.configure(
             text=f"{cloud_name} で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
 
-        if self.edit_rag.get() and self.edit_cloud.get():
+        allow = llm_client.load_cloud_settings().allow_rag
+
+        if allow:
+            # 設定で許可されている: 両方オンにできるが、資料の一部が外に出るので警告する
+            self.rag_check.state(["!disabled"])
+            self.cloud_check.state(["!disabled"])
+        else:
+            # 資料を外に送らない設定 (既定): どちらか一方だけ
+            self.rag_check.state(["disabled"] if self.edit_cloud.get() else ["!disabled"])
+            self.cloud_check.state(["disabled"] if self.edit_rag.get() else ["!disabled"])
+
+        if allow and self.edit_rag.get() and self.edit_cloud.get():
             self.cloud_warning.pack(side="top", anchor="w", pady=(2, 0), after=self.cloud_check)
         else:
             self.cloud_warning.pack_forget()
@@ -397,7 +408,10 @@ class QuizTab(ttk.Frame):
             self.edit_name.insert(0, item.name)
             self.edit_prompt.insert("1.0", item.guide)
             self.edit_rag.set(item.use_rag)
-            self.edit_cloud.set(item.use_cloud)
+
+            # 資料を外に送らない設定のときは、資料と両方オンにしない (保存済みでも外す)
+            allow = llm_client.load_cloud_settings().allow_rag
+            self.edit_cloud.set(item.use_cloud and (allow or not item.use_rag))
 
         self._on_exclusive()
         self._dirty.set()
@@ -658,7 +672,10 @@ class QuizTab(ttk.Frame):
         else:
             note = category.guide
 
-        warning = CLOUD_RAG_WARNING if category is not None and category.cloud and category.from_rag else ""
+        warning = ""
+
+        if category is not None and category.custom and category.use_cloud and category.from_rag:
+            warning = CLOUD_RAG_WARNING if category.cloud else "資料を使う分野では、設定で「資料 (rag/) の内容を送ってよい」をオンにしないと、ChatGPT は使いません (ローカルで出題します)。"
         self.category_note.configure(text=note, foreground=colors["sub_text"])
         self.select_error.configure(
             text=error or self._custom_error or warning, foreground=colors["error"])

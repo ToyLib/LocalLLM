@@ -140,6 +140,9 @@ class CloudSettings:
     # Web 検索に使うモデル (Chat Completions で検索できる専用のモデル)
     search_model: str = "gpt-5-search-api"
 
+    # 資料 (rag/) の内容をクラウドに送ってよいか (既定はオフ。オフなら資料は外に出ない)
+    allow_rag: bool = False
+
 
 def load_cloud_settings() -> CloudSettings:
     """server.json を読んで、クラウドの設定を返す (読めなければ既定値)"""
@@ -167,6 +170,10 @@ def load_cloud_settings() -> CloudSettings:
     web_search = cloud.get("web_search")
     if isinstance(web_search, bool):
         settings.web_search = web_search
+
+    allow_rag = cloud.get("allow_rag")
+    if isinstance(allow_rag, bool):
+        settings.allow_rag = allow_rag
 
     return settings
 

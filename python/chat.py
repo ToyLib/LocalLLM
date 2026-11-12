@@ -45,7 +45,10 @@ class Message:
     # 回答役のキー (assistant / general。ChatGPT に聞き直したときの書き直しに使う)
     agent_key: str = ""
 
-    # assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除き、聞き直しも止める目印)
+    # user: 資料を添えて送った質問 (資料を使わなかったら空)
+    rag_prompt: str = ""
+
+    # assistant: 資料 (rag/) の内容を使って答えたか (ChatGPT 宛ての履歴から除く目印)
     used_rag: bool = False
 
     # assistant: ChatGPT に聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する)
@@ -138,6 +141,9 @@ class ChatState:
 
         # 聞き直した後に Web 検索でも聞き直せるか (server.json の cloud.web_search。UIスレッドだけが触る)
         self.web_search = False
+
+        # 資料 (rag/) の内容をクラウドに送ってよいか (server.json の cloud.allow_rag。既定はオフ)
+        self.allow_rag = False
 
         # UIスレッドに再描画を頼む (どのスレッドからでも呼べる)
         self.notify = notify
@@ -254,8 +260,9 @@ def send_prompt(state: ChatState, rag_state: rag.RagState, prompt: str) -> None:
                         rag_prompt = rag.build_prompt(hits, prompt)
                         history[-1]["content"] = rag_prompt
 
-                        # 資料を使ったやりとりを ChatGPT 宛ての履歴から除き、聞き直しを止めるための目印
+                        # 聞き直しで同じ資料を送り、資料を使ったやりとりを ChatGPT 宛ての履歴から除くために残す
                         with state.lock:
+                            state.messages[-2].rag_prompt = rag_prompt
                             state.messages[-1].used_rag = True
 
                     note += _format_sources(hits)
@@ -383,6 +390,7 @@ def refresh_cloud_status(state: ChatState) -> None:
     state.has_cloud_key = has_cloud_api_key(cloud)
     state.cloud_name = cloud.name
     state.web_search = cloud.web_search
+    state.allow_rag = cloud.allow_rag
 
 
 def can_ask_cloud(state: ChatState) -> bool:
@@ -414,7 +422,9 @@ def next_stage(state: ChatState, message: Message) -> str:
 def ask_cloud(state: ChatState, web_search: bool = False) -> None:
     """最新の質問を ChatGPT に聞き直し、最新の回答の回答役の口調で書き直して表示する
     web_search なら、Web 検索用のモデルで聞き直し、検索なしの ChatGPT の回答と比べる
-    資料を使った回答は聞き直せない (資料を外に送らないため)。資料を使ったやりとりは履歴からも除く
+    資料を使ったやりとりは履歴から除く。最新の回答が資料を使っているときは、
+    設定 (allow_rag) がオフなら聞き直せない。オンなら、その質問と資料を送る
+    (資料を送ることの確認は、呼ぶ前に UI で済ませておく)
     流れ: 今の回答を「置き換え済み」にして新しい回答を積む → (ワーカー) クラウドに問い合わせ
           → 回答役の口調でローカルの LLM が書き直す (rewrite のとき) → ローカルの回答との違いをまとめる
     クラウドに聞けなかったら、聞き直す前の回答に戻す"""
@@ -427,7 +437,8 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
 
         previous = state.messages[-1]
 
-        if previous.used_rag:
+        # 資料を外に送らない設定のときは、資料を使った回答を聞き直さない
+        if previous.used_rag and not state.allow_rag:
             return
 
         if next_stage(state, previous) != (STAGE_WEB if web_search else STAGE_CLOUD):
@@ -444,7 +455,12 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
         # 口調を書き直した回答は、書き直す前の文章と比べる
         local_answer = previous.cloud_original or previous.content
 
-        history.append({"role": "user", "content": user.content})
+        # 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
+        send_rag = previous.used_rag and bool(user.rag_prompt)
+        history.append({
+            "role": "user",
+            "content": user.rag_prompt if send_rag else user.content,
+        })
 
         previous.superseded = True
         answer = Message(
@@ -454,7 +470,8 @@ def ask_cloud(state: ChatState, web_search: bool = False) -> None:
             used_rag=previous.used_rag,
             stage=STAGE_WEB if web_search else STAGE_CLOUD,
             note=(f"{state.cloud_name} に Web で調べて聞き直しました" if web_search else
-                  f"{state.cloud_name} に聞き直しました"),
+                  f"{state.cloud_name} に聞き直しました" +
+                  (" (資料も送りました)" if send_rag else "")),
         )
         _set_status(
             answer,

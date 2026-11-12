@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 import webbrowser
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import NamedTuple
 
 import config
@@ -71,6 +71,7 @@ class _Rendered(NamedTuple):
     web_button: bool = False
     cloud_enabled: bool = False
     used_rag: bool = False
+    rag_allowed: bool = False
     cloud_name: str = ""
     has_cloud_key: bool = False
 
@@ -396,8 +397,19 @@ class ChatApp:
         with self.state.lock:
             if not can_ask_cloud(self.state):
                 return
-            if self.state.messages[-1].used_rag:
+            used_rag = self.state.messages[-1].used_rag
+
+            # 資料を外に送らない設定のときは、押せない (ボタンも無効にしている)
+            if used_rag and not self.state.allow_rag:
                 return
+
+        # 資料を使った回答は、送る前に確認する
+        if used_rag and not messagebox.askyesno(
+                "資料を送る確認",
+                f"資料 (rag/) の内容が {self.state.cloud_name} に送られます。送りますか？\n"
+                "(ほかの、資料を使ったやりとりは送りません)",
+                default="no", parent=self.root):
+            return
 
         ask_cloud(self.state, web_search)
         self._dirty.set()
@@ -503,8 +515,10 @@ class ChatApp:
                                   bool(m.agent_key) and not m.superseded and
                                   bool(stages[i])),
                     web_button=stages[i] == STAGE_WEB,
-                    cloud_enabled=i == last and cloud_enabled and not m.used_rag,
+                    cloud_enabled=(i == last and cloud_enabled and
+                                   (not m.used_rag or self.state.allow_rag)),
                     used_rag=m.used_rag,
+                    rag_allowed=self.state.allow_rag,
                     cloud_name=self.state.cloud_name,
                     has_cloud_key=self.state.has_cloud_key,
                 )
@@ -693,6 +707,8 @@ class ChatApp:
         # Tk にはツールチップが無いので、押せない理由などをボタンの横に書く
         if not message.has_cloud_key:
             hint = "  設定画面で API キーを登録すると使えます"
+        elif message.used_rag and message.rag_allowed:
+            hint = "  資料 (rag/) の内容も送ります (送る前に確認します)"
         elif message.used_rag:
             hint = "  資料を使った回答は、資料を外に送らないため聞き直せません"
         else:

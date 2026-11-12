@@ -793,6 +793,16 @@ void StopWorkers(QuizState& state)
 
 } // namespace
 
+bool QuizCategory::Cloud() const
+{
+    if (!IsCustom() || !useCloud)
+    {
+        return false;
+    }
+
+    return !FromRag() || LoadCloudSettings().allowRag;
+}
+
 int QuizState::Score() const
 {
     int score = 0;

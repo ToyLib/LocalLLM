@@ -109,6 +109,17 @@ void OpenEditor(QuizState& state)
     }
 
     state.customError.clear();
+    state.allowRagCloud = LoadCloudSettings().allowRag;
+
+    // 資料を外に送らない設定のときは、資料と両方オンにしない (保存済みでも外す)
+    for (auto& item : state.editItems)
+    {
+        if (!state.allowRagCloud && item.useRag)
+        {
+            item.useCloud = false;
+        }
+    }
+
     state.editing = true;
     state.editIndex = state.editItems.empty() ? -1 : 0;
     state.editMessage.clear();
@@ -249,14 +260,23 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
         ImGui::TextUnformatted("お題・出題の方針:");
         ImGui::InputTextMultiline(
             "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
+
+        // 設定で許可されていなければ (既定)、資料とクラウドはどちらか一方だけ
+        const bool allow = state.allowRagCloud;
+
+        ImGui::BeginDisabled(!allow && item.useCloud);
         ImGui::Checkbox("資料 (rag/) を使う", &item.useRag);
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(!allow && item.useRag);
         ImGui::Checkbox(
             (LoadCloudSettings().name + " で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
                 .c_str(),
             &item.useCloud);
+        ImGui::EndDisabled();
 
-        // 資料の内容の一部が外に出るので、両方オンのときは警告する
-        if (item.useRag && item.useCloud)
+        // 許可されているときは両方オンにできるが、資料の内容の一部が外に出るので警告する
+        if (allow && item.useRag && item.useCloud)
         {
             ImGui::PushTextWrapPos(0.0f);
             ImGui::TextColored(colors.error, "%s", CLOUD_RAG_WARNING);
@@ -340,6 +360,7 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
         state.categories = LoadQuizCategories();
         state.categoriesLoaded = true;
         state.customError.clear();
+        state.allowRagCloud = LoadCloudSettings().allowRag;
 
         try
         {
@@ -433,9 +454,11 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
 
     std::string shown = error.empty() ? state.customError : error;
 
-    if (shown.empty() && selected.Cloud() && selected.FromRag())
+    if (shown.empty() && selected.IsCustom() && selected.useCloud && selected.FromRag())
     {
-        shown = CLOUD_RAG_WARNING;
+        shown = selected.Cloud()
+                    ? CLOUD_RAG_WARNING
+                    : "資料を使う分野では、設定で「資料 (rag/) の内容を送ってよい」をオンにしないと、ChatGPT は使いません (ローカルで出題します)。";
     }
 
     if (!shown.empty())

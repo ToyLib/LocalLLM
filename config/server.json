@@ -17,6 +17,7 @@
     "api_key_name": "OPENAI_API_KEY",
     "auth": "bearer",
     "web_search": false,
-    "search_model": "gpt-5-search-api"
+    "search_model": "gpt-5-search-api",
+    "allow_rag": false
   }
 }

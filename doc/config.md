@@ -81,6 +81,7 @@
 | `cloud.reasoning_effort` | (送らない) | 推論の深さ (`minimal` / `low` / `medium` / `high`) |
 | `cloud.web_search` | `false` | 聞き直した後に「Web でも調べて比べる」を出すか |
 | `cloud.search_model` | `gpt-5-search-api` | Web 検索に使うモデル |
+| `cloud.allow_rag` | `false` | 資料 (`rag/`) の内容をクラウドに送ってよいか。オフなら、資料を使った回答は聞き直せず、クイズでも資料とクラウドを両方使えない ([privacy.md](privacy.md)) |
 
 `chat_url` / `embed_url` を別のマシンにすると、質問や資料がそのマシンに送られます ([privacy.md](privacy.md))。
 

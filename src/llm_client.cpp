@@ -379,6 +379,11 @@ CloudSettings LoadCloudSettings()
         settings.webSearch = cloud["web_search"].get<bool>();
     }
 
+    if (cloud.contains("allow_rag") && cloud["allow_rag"].is_boolean())
+    {
+        settings.allowRag = cloud["allow_rag"].get<bool>();
+    }
+
     return settings;
 }
 
