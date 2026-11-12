@@ -112,6 +112,9 @@ struct QuizState
     std::vector<QuizCategory> editItems;
     int editIndex = -1;
     std::string editMessage;
+
+    // 追加した直後に、分野名の欄へ入力を移す
+    bool editFocusName = false;
     int selectedCategory = 0;
     int choice = -1;
     int shownSession = -1;

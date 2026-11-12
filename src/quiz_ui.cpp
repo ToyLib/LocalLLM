@@ -2,6 +2,7 @@
 
 #include "quiz_ui.h"
 
+#include "ime.h"
 #include "server_manager.h"
 
 #include <imgui.h>
@@ -198,6 +199,7 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
         item.name = NEW_NAME;
         state.editItems.push_back(std::move(item));
         SelectEditIndex(state, static_cast<int>(state.editItems.size()) - 1);
+        state.editFocusName = true;
     }
 
     ImGui::SameLine();
@@ -222,7 +224,18 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
 
         ImGui::PushID(state.editIndex);
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("分野名", &item.name);
+
+        // 追加した直後は、分野名の欄に入力できるようにして、仮の名前を選んでおく
+        ImGuiInputTextFlags nameFlags = ImGuiInputTextFlags_None;
+
+        if (state.editFocusName)
+        {
+            ImGui::SetKeyboardFocusHere();
+            nameFlags = ImGuiInputTextFlags_AutoSelectAll;
+            state.editFocusName = false;
+        }
+
+        ImGui::InputText("分野名", &item.name, nameFlags);
         ImGui::TextUnformatted("お題・出題の方針:");
         ImGui::InputTextMultiline(
             "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
@@ -275,6 +288,9 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
 
     ImGui::EndGroup();
     ImGui::EndChild();
+
+    // 変換中 (未確定) の文字を、入力カーソルの位置に重ねて描く
+    DrawComposition();
 
     if (ImGui::Button("保存して戻る"))
     {
