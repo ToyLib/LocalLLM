@@ -170,7 +170,9 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
     const float footer = ImGui::GetFrameHeight() + style.ItemSpacing.y;
     ImGui::BeginChild("editor", ImVec2(0.0f, -footer));
 
-    const float listWidth = ImGui::GetFontSize() * 12.0f;
+    // 窓が狭くても右の欄が入るように、一覧の幅は窓の幅に合わせて抑える
+    const float listWidth =
+        std::min(ImGui::GetFontSize() * 12.0f, ImGui::GetContentRegionAvail().x * 0.3f);
 
     ImGui::BeginGroup();
     ImGui::BeginChild(
@@ -223,6 +225,10 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
         QuizCategory& item = state.editItems[state.editIndex];
 
         ImGui::PushID(state.editIndex);
+        // 分野名は、欄の左に出す (右に出すと、欄の分だけはみ出す)
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("分野名:");
+        ImGui::SameLine();
         ImGui::SetNextItemWidth(-FLT_MIN);
 
         // 追加した直後は、分野名の欄に入力できるようにして、仮の名前を選んでおく
@@ -235,7 +241,7 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
             state.editFocusName = false;
         }
 
-        ImGui::InputText("分野名", &item.name, nameFlags);
+        ImGui::InputText("##name", &item.name, nameFlags);
         ImGui::TextUnformatted("お題・出題の方針:");
         ImGui::InputTextMultiline(
             "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
