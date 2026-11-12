@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 import webbrowser
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from typing import NamedTuple
 
 import config
@@ -396,15 +396,8 @@ class ChatApp:
         with self.state.lock:
             if not can_ask_cloud(self.state):
                 return
-            used_rag = self.state.messages[-1].used_rag
-
-        # 資料を使った回答は、送る前に確認する
-        if used_rag and not messagebox.askyesno(
-                "資料を送る確認",
-                f"資料 (rag/) の内容が {self.state.cloud_name} に送られます。送りますか？\n"
-                "(ほかの、資料を使ったやりとりは送りません)",
-                default="no", parent=self.root):
-            return
+            if self.state.messages[-1].used_rag:
+                return
 
         ask_cloud(self.state, web_search)
         self._dirty.set()
@@ -510,7 +503,7 @@ class ChatApp:
                                   bool(m.agent_key) and not m.superseded and
                                   bool(stages[i])),
                     web_button=stages[i] == STAGE_WEB,
-                    cloud_enabled=i == last and cloud_enabled,
+                    cloud_enabled=i == last and cloud_enabled and not m.used_rag,
                     used_rag=m.used_rag,
                     cloud_name=self.state.cloud_name,
                     has_cloud_key=self.state.has_cloud_key,
@@ -701,7 +694,7 @@ class ChatApp:
         if not message.has_cloud_key:
             hint = "  設定画面で API キーを登録すると使えます"
         elif message.used_rag:
-            hint = "  資料 (rag/) の内容も送ります (送る前に確認します)"
+            hint = "  資料を使った回答は、資料を外に送らないため聞き直せません"
         else:
             hint = ""
 

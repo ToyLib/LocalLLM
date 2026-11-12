@@ -196,14 +196,11 @@ void SendPrompt(ChatState& state, RagState& rag, const std::string& prompt)
 
                     if (!hits.empty())
                     {
-                        std::string ragPrompt = BuildRagPrompt(hits, prompt);
-                        history.back()["content"] = ragPrompt;
+                        history.back()["content"] = BuildRagPrompt(hits, prompt);
 
-                        // 聞き直しで同じ資料を送り、資料を使ったやりとりを ChatGPT 宛ての履歴から除くために残す
+                        // 資料を使ったやりとりを ChatGPT 宛ての履歴から除き、聞き直しを止めるための目印
                         std::lock_guard lock(state.mutex);
-                        auto& messages = state.messages;
-                        messages[messages.size() - 2].ragPrompt = std::move(ragPrompt);
-                        messages.back().usedRag = true;
+                        state.messages.back().usedRag = true;
                     }
 
                     note += FormatSources(hits);
@@ -484,11 +481,6 @@ bool CanAskCloud(const ChatState& state)
         LastUserIndex(state.messages).has_value();
 }
 
-bool LastAnswerUsedRag(const ChatState& state)
-{
-    return !state.messages.empty() && state.messages.back().usedRag;
-}
-
 AnswerStage NextStage(const ChatState& state, const Message& message)
 {
     if (message.stage == AnswerStage::Web)
@@ -526,6 +518,11 @@ void AskCloud(ChatState& state, bool webSearch)
 
         Message& previous = state.messages.back();
 
+        if (previous.usedRag)
+        {
+            return;
+        }
+
         if (NextStage(state, previous) !=
             (webSearch ? AnswerStage::Web : AnswerStage::Cloud))
         {
@@ -542,12 +539,7 @@ void AskCloud(ChatState& state, bool webSearch)
         // 口調を書き直した回答は、書き直す前の文章と比べる
         localAnswer = previous.cloudOriginal.empty() ? previous.content : previous.cloudOriginal;
 
-        // 資料を使った回答なら、同じ資料を添えた質問を送る (UI で確認済み)
-        const bool sendRag = previous.usedRag && !user.ragPrompt.empty();
-        history.push_back({
-            {"role", "user"},
-            {"content", sendRag ? user.ragPrompt : user.content}
-        });
+        history.push_back({{"role", "user"}, {"content", user.content}});
 
         Message answer;
         answer.role = "assistant";
@@ -557,8 +549,7 @@ void AskCloud(ChatState& state, bool webSearch)
         answer.stage = webSearch ? AnswerStage::Web : AnswerStage::Cloud;
         answer.note = webSearch
             ? state.cloudName + " に Web で調べて聞き直しました"
-            : state.cloudName + " に聞き直しました" +
-                (sendRag ? std::string(" (資料も送りました)") : std::string());
+            : state.cloudName + " に聞き直しました";
         SetStatus(
             answer,
             state.cloudName + (webSearch ? " が Web で検索中…" : " に問い合わせ中…"));

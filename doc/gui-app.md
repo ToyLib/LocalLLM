@@ -7,7 +7,7 @@
 | --- | --- |
 | [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
 | [chat.h](../src/chat.h) / [chat.cpp](../src/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
-| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`、聞き直しの確認ダイアログ) |
+| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`) |
 | [quiz_ui.h](../src/quiz_ui.h) / [quiz_ui.cpp](../src/quiz_ui.cpp)、[quiz_mode.h](../src/quiz_mode.h) / [quiz_mode.cpp](../src/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
 | [settings_ui.h](../src/settings_ui.h) / [settings_ui.cpp](../src/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
 | [config.h](../src/config.h) / [config.cpp](../src/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
@@ -56,7 +56,6 @@ main()                         … main.cpp
  │   │   ├ タブ「チャット」
  │   │   │   ├ DrawRagBar()      … 資料 (RAG) の選択・再読込・インデックスの状態・設定ボタン
  │   │   │   ├ DrawMessages()    … 会話の一覧と「ChatGPT に聞き直す」ボタン
- │   │   │   ├ 聞き直しの確認ダイアログ (資料を使った回答のときだけ)
  │   │   │   ├ 入力欄・送信/中断・クリアのボタン
  │   │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
  │   │   ├ タブ「クイズ」
@@ -151,7 +150,6 @@ UI スレッドとワーカースレッドで共有するデータを 1 つの�
 | `role` / `content` | `user` か `assistant` と、本文 |
 | `note` | 回答の下に薄く出す補足 (ルーターの判断、参照した資料など) |
 | `agent` / `agentKey` | 答えたエージェントの表示名と、`agents.json` のキー (聞き直したときの書き直しに使う) |
-| `ragPrompt` | user: 資料を添えて送った質問 (聞き直しで資料も送るときに使う) |
 | `usedRag` | assistant: 資料を使って答えたか (ChatGPT 宛ての履歴から除く印) |
 | `superseded` | assistant: 聞き直して置き換えられた回答 (LLM に送る履歴から除き、薄く表示する) |
 | `cloudOriginal` | assistant: 書き直す前の ChatGPT の回答 (折りたたんで表示する) |
@@ -233,7 +231,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 - `cloudOriginal` があれば、「ChatGPT の元の回答」を `TreeNode` で折りたたんで表示します。
 - `compareVerdict` があれば、聞き直す前の回答との違いのまとめを出します。「食い違いあり」はエラーの色、要点は `Bullet` を付けて薄く表示します。
 - `note` (ルーターの判断や参照した資料) は本文の下に薄く表示します。
-- 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときと、資料も送ることになるときは `SetItemTooltip` で理由を出します。資料を使った回答なら、確認ダイアログで「送る」を選んだときだけ `AskCloud` を呼びます。
+- 最新の回答 (`superseded` でなく、`agentKey` があるもの) の下にだけ「ChatGPT に聞き直す」ボタン (`DrawAskCloudButton`) を出します。押せないとき (`CanAskCloud` が false、API キーが無い) は `BeginDisabled` にします。キーが無いときは `SetItemTooltip` で理由を出します。資料を使った回答 (`usedRag`) のときも押せなくし、理由は「資料を使った回答は、資料を外に送らないため聞き直せません」とボタンの横に書きます (`AskCloud` も `usedRag` なら何もしません)。
 - メッセージを右クリックすると「コピー」のメニューが出て、本文をクリップボードにコピーできます。
 - 各メッセージは `PushID` で番号を付けて区別しています。同じ名前 ("copy") のポップアップをメッセージごとに作るためです。
 

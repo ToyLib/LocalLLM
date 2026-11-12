@@ -100,7 +100,6 @@ UI スレッド (ChatApp._poll、30 ミリ秒ごとに root.after で呼ばれ�
 | 「ChatGPT の元の回答」の折りたたみ | `TreeNode` | `toggle` タグの付いた「▶ / ▼」の行をクリック (`_toggle_original`)。開いている番号を `_open_originals` に覚える |
 | 「ChatGPT に聞き直す」ボタン | 回答の下に `SmallButton` | `Text.window_create` で会話の中に `ttk.Button` を埋め込む。描き直すたびに作り直す |
 | 押せない理由 | ツールチップ (`SetItemTooltip`) | Tk にはツールチップが無いので、ボタンの横に文章で書く |
-| 資料を送る確認 | `BeginPopupModal` | `messagebox.askyesno` (既定のボタンは「いいえ」) |
 | 右クリックのコピー | `BeginPopupContextItem` | `tk.Menu`。macOS 用に `<Button-2>` と Control+クリックにも割り当てる |
 | Enter で送信 / Shift+Enter で改行 | `EnterReturnsTrue` / `CtrlEnterForNewLine` | `<Return>` / `<Shift-Return>` に割り当て、`"break"` を返して既定の改行を止める |
 | 日本語入力 (IME) | `ime.cpp` で変換中の文字列を自前で描く | Tk が OS の IME をそのまま使う |
