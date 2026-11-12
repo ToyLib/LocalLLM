@@ -13,10 +13,15 @@
 #include <set>
 #include <stdexcept>
 
+using nlohmann::ordered_json;
+
 namespace
 {
 
 constexpr const char* QUIZ_CONFIG = "quiz.json";
+
+// 自作の分野 (ユーザーごとの設定フォルダー。同梱の quiz.json とは分けて、更新で消えないようにする)
+constexpr const char* CUSTOM_CONFIG = "quiz_custom.json";
 
 // 1 問を作るのを試す回数
 constexpr int MAX_ATTEMPTS = 3;
@@ -37,6 +42,10 @@ constexpr const char* DEFAULT_GENERATE_PROMPT =
     "correct には正解の選択肢、wrong には誤りの選択肢を 3 つ、explanation には正解の理由を書いてください。"
     "explanation で選択肢の番号や記号 (1・A など) は使わず、内容を言葉で書いてください。";
 
+constexpr const char* DEFAULT_TOPICS_PROMPT =
+    "あなたはクイズの出題者です。指定されたお題について、4 択の問題の題材になる小さなトピックを、"
+    "重ならないように指定された個数だけ挙げてください。1 つは短い名詞句にします。";
+
 using Results = std::vector<std::pair<float, std::string>>;
 
 Results DefaultResults()
@@ -55,6 +64,9 @@ struct QuizSettings
     int maxTokens = DEFAULT_MAX_TOKENS;
     std::string commentPersona = DEFAULT_COMMENT_PERSONA;
     std::string generatePrompt = DEFAULT_GENERATE_PROMPT;
+
+    // 自作の分野で、お題から出題のトピックを作らせるプロンプト
+    std::string topicsPrompt = DEFAULT_TOPICS_PROMPT;
 
     // (正解率の下限 %, メッセージ)。下限の大きい順
     Results results = DefaultResults();
@@ -151,6 +163,7 @@ QuizSettings LoadQuizSettings()
     settings.maxTokens = PositiveInt(config, "max_tokens", DEFAULT_MAX_TOKENS);
     settings.commentPersona = ConfigStringOr(config, "comment_persona", DEFAULT_COMMENT_PERSONA);
     settings.generatePrompt = PromptText(config, "generate_prompt", DEFAULT_GENERATE_PROMPT);
+    settings.topicsPrompt = PromptText(config, "topics_prompt", DEFAULT_TOPICS_PROMPT);
     settings.results = ReadResults(config);
     return settings;
 }
@@ -189,6 +202,17 @@ json QuestionSchema()
             {"maxItems", QUIZ_CHOICE_COUNT - 1}}},
           {"explanation", {{"type", "string"}}}}},
         {"required", json::array({"question", "correct", "wrong", "explanation"})}};
+}
+
+// お題からトピックを作らせるときの JSON の形
+json TopicsSchema()
+{
+    return {
+        {"type", "object"},
+        {"properties",
+         {{"topics",
+           {{"type", "array"}, {"items", {{"type", "string"}}}, {"minItems", 1}, {"maxItems", 20}}}}},
+        {"required", json::array({"topics"})}};
 }
 
 // LLM が返した JSON を検証して、選択肢を並べ替えた問題にする
@@ -270,14 +294,85 @@ struct PlanItem
     std::optional<RagChunk> chunk;
 };
 
+// 自作の分野のお題から、出題のトピックを作らせる (偏りと重複を防ぐ)
+// 作れなかったときは空 (既出の問題を渡す方式だけで進める)。中断されたら例外をそのまま投げる
+std::vector<std::string> ExpandTopics(
+    const QuizSettings& settings, const QuizCategory& category, int count,
+    const std::atomic<bool>& cancel)
+{
+    Agent agent;
+    agent.name = "トピック";
+    agent.systemPrompt = settings.topicsPrompt;
+    agent.options.maxTokens = settings.maxTokens;
+    agent.options.temperature = 0.8f;
+    agent.options.disableThinking = true;
+    agent.options.schema = TopicsSchema();
+
+    json raw;
+
+    try
+    {
+        raw = RunAgentJson(
+            agent,
+            json::array({{{"role", "user"},
+                          {"content", "お題: " + category.guide + "\n個数: " + std::to_string(count)}}}),
+            cancel);
+    }
+    catch (const std::exception& e)
+    {
+        if (IsCancelled(e))
+        {
+            throw;
+        }
+
+        return {};
+    }
+
+    std::vector<std::string> topics;
+    const auto found = raw.find("topics");
+
+    if (found == raw.end() || !found->is_array())
+    {
+        return topics;
+    }
+
+    for (const auto& item : *found)
+    {
+        if (!item.is_string())
+        {
+            continue;
+        }
+
+        const std::string topic = Trim(item.get<std::string>());
+
+        if (!topic.empty() && std::find(topics.begin(), topics.end(), topic) == topics.end())
+        {
+            topics.push_back(topic);
+        }
+    }
+
+    if (topics.size() > static_cast<size_t>(count))
+    {
+        topics.resize(static_cast<size_t>(count));
+    }
+
+    return topics;
+}
+
 std::vector<PlanItem> MakePlan(
-    const QuizCategory& category, RagState& rag, int count, std::mt19937& random)
+    const QuizCategory& category, RagState& rag, int count, const QuizSettings& settings,
+    std::mt19937& random, const std::atomic<bool>& cancel)
 {
     std::vector<PlanItem> plan;
 
-    if (category.source == "rag")
+    if (category.FromRag())
     {
-        for (auto& chunk : SampleRagChunks(rag, static_cast<size_t>(count)))
+        std::vector<RagChunk> chunks =
+            category.guide.empty()
+                ? SampleRagChunks(rag, static_cast<size_t>(count))
+                : TopRagChunks(rag, category.guide, static_cast<size_t>(count), cancel);
+
+        for (auto& chunk : chunks)
         {
             plan.push_back({"", std::move(chunk)});
         }
@@ -291,8 +386,17 @@ std::vector<PlanItem> MakePlan(
         return plan;
     }
 
-    std::vector<std::string> topics = category.topics;
-    std::shuffle(topics.begin(), topics.end(), random);
+    std::vector<std::string> topics;
+
+    if (category.IsCustom())
+    {
+        topics = ExpandTopics(settings, category, count, cancel);
+    }
+    else
+    {
+        topics = category.topics;
+        std::shuffle(topics.begin(), topics.end(), random);
+    }
 
     for (int i = 0; i < count; ++i)
     {
@@ -315,6 +419,11 @@ std::string BuildPrompt(
 
     if (item.chunk)
     {
+        if (category.IsCustom() && !category.guide.empty())
+        {
+            prompt += "出題の方針: " + category.guide + "\n";
+        }
+
         prompt += "資料 (" + OriginOf(*item.chunk) + "):\n" + item.chunk->text;
     }
     else
@@ -385,7 +494,7 @@ void GenerateAll(
 
     try
     {
-        const std::vector<PlanItem> plan = MakePlan(category, rag, settings.questionCount, random);
+        const std::vector<PlanItem> plan = MakePlan(category, rag, settings.questionCount, settings, random, *cancel);
 
         {
             std::lock_guard lock(state.mutex);
@@ -470,6 +579,87 @@ void GenerateAll(
             // 1 問も作れなかったら、分野の選択に戻す
             state.phase = QuizPhase::Select;
             state.error = error.empty() ? "問題を作れませんでした" : error;
+        }
+    }
+
+    WakeUI();
+}
+
+// 分野の編集画面のテスト用に、1 問だけ作る (ワーカースレッドから呼ぶ)
+QuizQuestion MakeTestQuestion(
+    const QuizCategory& category, RagState& rag, const std::atomic<bool>& cancel)
+{
+    const QuizSettings settings = LoadQuizSettings();
+    std::mt19937 random{std::random_device{}()};
+    const PlanItem item = MakePlan(category, rag, 1, settings, random, cancel).front();
+    std::string error = "問題を作れませんでした";
+
+    for (int attempt = 0; attempt < MAX_ATTEMPTS; ++attempt)
+    {
+        try
+        {
+            return MakeQuestion(settings, category, item, {}, random, cancel);
+        }
+        catch (const std::exception& e)
+        {
+            if (IsCancelled(e))
+            {
+                throw;
+            }
+
+            error = e.what();
+        }
+    }
+
+    throw std::runtime_error(error);
+}
+
+void RunTest(
+    QuizState& state, int session, std::shared_ptr<std::atomic<bool>> cancel,
+    QuizCategory category, RagState& rag)
+{
+    std::string text;
+
+    try
+    {
+        const QuizQuestion question = MakeTestQuestion(category, rag, *cancel);
+        text = "Q. " + question.text;
+
+        for (int i = 0; i < QUIZ_CHOICE_COUNT; ++i)
+        {
+            text += std::string("\n") + (i == question.answer ? "○" : "　") + " " +
+                    std::to_string(i + 1) + ". " + question.choices[i];
+        }
+
+        text += "\n解説: " + question.explanation;
+
+        if (!question.topic.empty())
+        {
+            text += "\n(トピック: " + question.topic + ")";
+        }
+
+        if (!question.origin.empty())
+        {
+            text += "\n(出典: " + question.origin + ")";
+        }
+    }
+    catch (const std::exception& e)
+    {
+        if (IsCancelled(e))
+        {
+            return;
+        }
+
+        text = std::string("作れませんでした: ") + e.what();
+    }
+
+    {
+        std::lock_guard lock(state.mutex);
+
+        if (state.testSession == session)
+        {
+            state.testResult = text;
+            state.testRunning = false;
         }
     }
 
@@ -666,6 +856,96 @@ std::vector<QuizCategory> LoadQuizCategories()
     return categories;
 }
 
+std::vector<QuizCategory> LoadCustomQuizCategories()
+{
+    const ordered_json config = LoadConfigForEdit(CUSTOM_CONFIG);
+    std::vector<QuizCategory> categories;
+    const auto entries = config.find("categories");
+
+    if (entries == config.end() || !entries->is_array())
+    {
+        return categories;
+    }
+
+    for (const auto& entry : *entries)
+    {
+        if (!entry.is_object() || !entry.contains("name") || !entry["name"].is_string())
+        {
+            continue;
+        }
+
+        const std::string name = Trim(entry["name"].get<std::string>());
+
+        if (name.empty())
+        {
+            continue;
+        }
+
+        QuizCategory category;
+        category.key = "custom" + std::to_string(categories.size());
+        category.name = name.substr(0, std::min(name.size(), QUIZ_MAX_NAME_BYTES));
+        category.source = "custom";
+
+        if (entry.contains("prompt") && entry["prompt"].is_string())
+        {
+            const std::string prompt = Trim(entry["prompt"].get<std::string>());
+            category.guide = prompt.substr(0, std::min(prompt.size(), QUIZ_MAX_PROMPT_BYTES));
+        }
+
+        category.useRag =
+            entry.contains("use_rag") && entry["use_rag"].is_boolean() && entry["use_rag"].get<bool>();
+        categories.push_back(std::move(category));
+    }
+
+    return categories;
+}
+
+void SaveCustomQuizCategories(const std::vector<QuizCategory>& categories)
+{
+    ordered_json entries = ordered_json::array();
+
+    for (const auto& category : categories)
+    {
+        entries.push_back({{"name", category.name}, {"prompt", category.guide}, {"use_rag", category.useRag}});
+    }
+
+    SaveConfig(CUSTOM_CONFIG, {{"categories", entries}});
+}
+
+void StartQuizTest(QuizState& state, const QuizCategory& category, RagState& rag)
+{
+    StopQuizTest(state);
+
+    int session;
+    std::shared_ptr<std::atomic<bool>> cancel;
+    {
+        std::lock_guard lock(state.mutex);
+        session = ++state.testSession;
+        cancel = state.testCancel = std::make_shared<std::atomic<bool>>(false);
+        state.testRunning = true;
+        state.testResult.clear();
+    }
+
+    state.testWorker = std::thread(RunTest, std::ref(state), session, cancel, category, std::ref(rag));
+    WakeUI();
+}
+
+void StopQuizTest(QuizState& state)
+{
+    {
+        std::lock_guard lock(state.mutex);
+        *state.testCancel = true;
+        ++state.testSession;
+        state.testRunning = false;
+        state.testResult.clear();
+    }
+
+    if (state.testWorker.joinable())
+    {
+        state.testWorker.join();
+    }
+}
+
 std::string QuizTierMessage(const Results& results, int score, int total)
 {
     const float percent = total > 0 ? 100.0f * static_cast<float>(score) / static_cast<float>(total) : 0.0f;
@@ -775,4 +1055,5 @@ void QuitQuiz(QuizState& state)
 void ShutdownQuiz(QuizState& state)
 {
     StopWorkers(state);
+    StopQuizTest(state);
 }

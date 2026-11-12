@@ -796,6 +796,79 @@ std::vector<RagHit> SearchRag(
     return hits;
 }
 
+// 問題にするには短すぎるチャンクを除くための判定
+// 文字数は UTF-8 のコードポイントで数える (2 バイト目以降は数えない)
+static bool LongEnoughForQuiz(const RagChunk& chunk)
+{
+    size_t length = 0;
+
+    for (const unsigned char c : chunk.text)
+    {
+        if ((c & 0xC0) != 0x80 && !std::isspace(c))
+        {
+            ++length;
+        }
+    }
+
+    return length >= MIN_SAMPLE_CHARS;
+}
+
+std::vector<RagChunk> TopRagChunks(
+    RagState& state,
+    const std::string& query,
+    size_t count,
+    const std::atomic<bool>& cancel)
+{
+    {
+        std::lock_guard lock(state.mutex);
+
+        if (state.chunks.empty())
+        {
+            return {};
+        }
+    }
+
+    WaitForEmbedServer(cancel);
+
+    std::vector<float> queryVector = Embed({query}, cancel).front();
+    Normalize(queryVector);
+
+    std::vector<std::pair<float, RagChunk>> scored;
+
+    {
+        std::lock_guard lock(state.mutex);
+
+        for (const auto& chunk : state.chunks)
+        {
+            if (chunk.vector.size() != queryVector.size() || !LongEnoughForQuiz(chunk))
+            {
+                continue;
+            }
+
+            RagChunk copy = chunk;
+            copy.vector.clear();
+
+            // 正規化済みなので内積がコサイン類似度
+            const float score = std::inner_product(
+                chunk.vector.begin(), chunk.vector.end(), queryVector.begin(), 0.0f);
+            scored.emplace_back(score, std::move(copy));
+        }
+    }
+
+    std::stable_sort(scored.begin(), scored.end(), [](const auto& a, const auto& b) {
+        return a.first > b.first;
+    });
+
+    std::vector<RagChunk> result;
+
+    for (size_t i = 0; i < scored.size() && i < count; ++i)
+    {
+        result.push_back(std::move(scored[i].second));
+    }
+
+    return result;
+}
+
 std::vector<RagChunk> SampleRagChunks(RagState& state, size_t count)
 {
     std::vector<RagChunk> candidates;
@@ -805,18 +878,7 @@ std::vector<RagChunk> SampleRagChunks(RagState& state, size_t count)
 
         for (const auto& chunk : state.chunks)
         {
-            // 文字数は UTF-8 のコードポイントで数える (2 バイト目以降は数えない)
-            size_t length = 0;
-
-            for (const unsigned char c : chunk.text)
-            {
-                if ((c & 0xC0) != 0x80 && !std::isspace(c))
-                {
-                    ++length;
-                }
-            }
-
-            if (length >= MIN_SAMPLE_CHARS)
+            if (LongEnoughForQuiz(chunk))
             {
                 RagChunk copy = chunk;
                 copy.vector.clear();

@@ -23,11 +23,23 @@ struct QuizCategory
     std::string key;
     std::string name;
 
-    // "llm" (モデルの知識から出題) か "rag" (資料から出題)
+    // "llm" (モデルの知識から出題)、"rag" (資料から出題)、"custom" (自作。useRag で決まる)
     std::string source;
     std::string guide;
     std::vector<std::string> topics;
+
+    // 自作の分野で、資料 (rag/) から出題するか
+    bool useRag = false;
+
+    bool IsCustom() const { return source == "custom"; }
+
+    // 資料から出題するか (guide があれば、それに近い資料を選ぶ)
+    bool FromRag() const { return source == "rag" || (IsCustom() && useRag); }
 };
+
+// 自作の分野の名前・お題の最大の長さ (バイト)
+constexpr size_t QUIZ_MAX_NAME_BYTES = 120;
+constexpr size_t QUIZ_MAX_PROMPT_BYTES = 6000;
 
 struct QuizQuestion
 {
@@ -83,9 +95,23 @@ struct QuizState
     std::string comment;
     bool commentPending = false;
 
+    // 分野の編集画面のテスト出題 (ワーカーが結果を書くので、mutex で守る)
+    std::thread testWorker;
+    std::shared_ptr<std::atomic<bool>> testCancel = std::make_shared<std::atomic<bool>>(false);
+    int testSession = 0;
+    bool testRunning = false;
+    std::string testResult;
+
     // ここから下は UI スレッドだけが触る
     std::vector<QuizCategory> categories;
     bool categoriesLoaded = false;
+    std::string customError;
+
+    // 分野の編集画面
+    bool editing = false;
+    std::vector<QuizCategory> editItems;
+    int editIndex = -1;
+    std::string editMessage;
     int selectedCategory = 0;
     int choice = -1;
     int shownSession = -1;
@@ -98,6 +124,13 @@ struct QuizState
 
 // config/quiz.json の分野の一覧 (正しくない項目は読み飛ばす)
 std::vector<QuizCategory> LoadQuizCategories();
+
+// 自作の分野の一覧 (quiz_custom.json。無ければ空)
+// ファイルが壊れているときは std::runtime_error (編集画面で上書きして中身を消さないため)
+std::vector<QuizCategory> LoadCustomQuizCategories();
+
+// 自作の分野を保存する。失敗したら std::runtime_error
+void SaveCustomQuizCategories(const std::vector<QuizCategory>& categories);
 
 // 正解率 (%) の帯ごとの固定のメッセージ。results は下限の大きい順
 std::string QuizTierMessage(
@@ -114,6 +147,12 @@ void NextQuestion(QuizState& state);
 
 // やめて、分野の選択に戻る (結果の画面からも使う)
 void QuitQuiz(QuizState& state);
+
+// 分野の編集画面のテスト: 1 問だけ別スレッドで作り、結果を testResult に入れる
+void StartQuizTest(QuizState& state, const QuizCategory& category, RagState& rag);
+
+// テスト出題を止めて、スレッドの終了を待つ (編集画面を閉じる・別の分野に移るとき)
+void StopQuizTest(QuizState& state);
 
 // アプリを閉じるとき: 通信を止めて、スレッドの終了を待つ
 void ShutdownQuiz(QuizState& state);

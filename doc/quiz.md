@@ -31,7 +31,7 @@
 
 ## 自作の分野
 
-「分野を編集…」から、自分のお題で出題する分野を作れます (Python 版。C++ 版は同じ形式を読み書きします)。
+「分野を編集…」から、自分のお題で出題する分野を作れます (Python 版、C++ 版とも。保存先は共通なので、どちらで作った分野ももう一方で使えます)。
 設定ファイルを開かずに、画面の中で作る・直す・消すができます。
 
 | 項目 | 内容 |
@@ -89,7 +89,9 @@
 | ファイル | `quiz_mode.py` / `quiz_ui.py` | `quiz_mode.cpp` / `quiz_ui.cpp` (`QuizState` が状態) |
 | 中断用のトークン | 回ごとに `CancelToken` を作る | 回ごとに `std::shared_ptr<std::atomic<bool>>` を作り、ワーカーにも持たせる |
 | 回の切り替え | 古いワーカーは `session` の違いで書き込みを諦める | 同じ。さらに、開始・やめるときに古いワーカーの終了を待つ (`StopWorkers`) |
-| 資料のチャンク | `rag.sample_chunks` | `SampleRagChunks` (文字数は UTF-8 のコードポイントで数える) |
+| 資料のチャンク | `rag.sample_chunks` / `rag.top_chunks` | `SampleRagChunks` / `TopRagChunks` (文字数は UTF-8 のコードポイントで数える) |
+| 分野の編集画面 | 選択画面の代わりに出す `ttk.Frame` | 選択画面の代わりに描く (`DrawEditor`)。入力欄は `ImGui::InputText` で分野のデータを直接書き換える |
+| テスト出題 | ワーカースレッドが結果を `QuizTab` の変数に書く | `QuizState` の `testWorker` / `testResult` (mutex で守る)。開始・止めるたびに前のスレッドの終了を待つ |
 | 選択肢 | ラジオボタン (折り返し付き) | ラジオボタンの横に折り返した文を並べ、文のクリックでも選べる |
 | 状態の更新 | `QuizTab` が自分で `after` を回す | ワーカーから `WakeUI()` で起こす |
 

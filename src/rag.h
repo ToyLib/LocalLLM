@@ -50,6 +50,15 @@ std::vector<RagHit> SearchRag(
     const std::string& query,
     const std::atomic<bool>& cancel);
 
+// お題 (query) に近いチャンクを、近い順に count 件まで返す (クイズの出題用。ベクトルは空にして返す)
+// 類似度の下限は設けない。短すぎて問題にならないチャンクは除く。インデックスが空なら空
+// (埋め込みサーバーに問い合わせるのでワーカースレッドから呼ぶ)
+std::vector<RagChunk> TopRagChunks(
+    RagState& state,
+    const std::string& query,
+    size_t count,
+    const std::atomic<bool>& cancel);
+
 // インデックスのチャンクから、重複なしでランダムに選ぶ (クイズの出題用。ベクトルは空にして返す)
 // 短すぎて問題にならないチャンクは除く。足りなければ、あるだけ返す
 std::vector<RagChunk> SampleRagChunks(RagState& state, size_t count);
