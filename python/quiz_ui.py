@@ -123,6 +123,12 @@ class QuizTab(ttk.Frame):
         self._label(self.edit_frame, text=PROMPT_HELP).pack(
             side="top", anchor="w", pady=(4, 8))
 
+        row = ttk.Frame(self.edit_frame)
+        row.pack(side="bottom", anchor="w", pady=(12, 0))
+        ttk.Button(row, text="保存して戻る", command=self._edit_save).pack(side="left")
+        ttk.Button(row, text="破棄して戻る", command=self._close_editor).pack(
+            side="left", padx=(8, 0))
+
         body = ttk.Frame(self.edit_frame)
         body.pack(side="top", fill="both", expand=True)
 
@@ -148,6 +154,9 @@ class QuizTab(ttk.Frame):
         self.edit_name = ttk.Entry(row, font=self._font)
         self.edit_name.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
+        # 名前を打つのに合わせて、左の一覧の表示も変える
+        self.edit_name.bind("<KeyRelease>", lambda _e: self._store_edit_fields())
+
         ttk.Label(right, text="お題・出題の方針:", font=self._font).pack(
             side="top", anchor="w", pady=(8, 2))
         self.edit_prompt = tk.Text(
@@ -171,12 +180,6 @@ class QuizTab(ttk.Frame):
             right, wrap="word", font=self._font, height=6, padx=6, pady=6,
             borderwidth=1, relief="solid", state="disabled", cursor="arrow")
         self.test_output.pack(side="top", fill="x", pady=(6, 0))
-
-        row = ttk.Frame(self.edit_frame)
-        row.pack(side="bottom", anchor="w", pady=(12, 0))
-        ttk.Button(row, text="保存して戻る", command=self._edit_save).pack(side="left")
-        ttk.Button(row, text="破棄して戻る", command=self._close_editor).pack(
-            side="left", padx=(8, 0))
 
     def _build_play(self) -> None:
         self.play_frame = ttk.Frame(self, padding=16)
