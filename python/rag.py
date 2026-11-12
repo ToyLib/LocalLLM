@@ -453,6 +453,31 @@ def search(state: RagState, query: str, cancel: CancelToken) -> list[RagHit]:
     return [hit for hit in hits if hit.score >= MIN_SCORE][:TOP_K]
 
 
+def top_chunks(state: RagState, query: str, count: int, cancel: CancelToken) -> list[RagChunk]:
+    """お題 (query) に近いチャンクを、近い順に count 件まで返す (クイズの出題用)
+    チャットの検索と違って、類似度の下限は設けない (数が足りなくなるため)。
+    短すぎて問題にならないチャンクは除く。インデックスが空なら空のリスト
+    (埋め込みサーバーに問い合わせるのでワーカースレッドから呼ぶ)"""
+
+    with state.lock:
+        if not state.chunks:
+            return []
+
+    server_manager.wait_for_embed(cancel)
+    query_vector = _normalize(embed([query], cancel)[0])
+
+    with state.lock:
+        scored = [
+            (sum(a * b for a, b in zip(chunk.vector, query_vector)), chunk)
+            for chunk in state.chunks
+            if len(chunk.vector) == len(query_vector)
+            and len(chunk.text.strip()) >= MIN_SAMPLE_CHARS
+        ]
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [chunk for _, chunk in scored[:count]]
+
+
 def sample_chunks(state: RagState, count: int) -> list[RagChunk]:
     """インデックスのチャンクから、重複なしでランダムに選ぶ (クイズの出題用)
     短すぎて問題にならないチャンクは除く。足りなければ、あるだけ返す"""

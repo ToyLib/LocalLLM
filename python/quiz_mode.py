@@ -14,6 +14,13 @@ from llm_client import CancelToken, Cancelled, LLMError, LLMOptions
 
 QUIZ_CONFIG = "quiz.json"
 
+# 自作の分野 (ユーザーごとの設定フォルダー。同梱の quiz.json とは分けて、更新で消えないようにする)
+CUSTOM_CONFIG = "quiz_custom.json"
+
+# 自作の分野の名前・プロンプトの最大の長さ (文字)
+MAX_NAME_LENGTH = 40
+MAX_PROMPT_LENGTH = 2000
+
 # 選択肢の数 (この版では 4 択だけ)
 CHOICE_COUNT = 4
 
@@ -35,6 +42,10 @@ DEFAULT_GENERATE_PROMPT = (
     "あなたはクイズの出題者です。指定された分野とトピック (または資料) から、4 択の問題を 1 問だけ作ってください。"
     "correct には正解の選択肢、wrong には誤りの選択肢を 3 つ、explanation には正解の理由を書いてください。"
     "explanation で選択肢の番号や記号 (1・A など) は使わず、内容を言葉で書いてください。")
+
+DEFAULT_TOPICS_PROMPT = (
+    "あなたはクイズの出題者です。指定されたお題について、4 択の問題の題材になる小さなトピックを、"
+    "重ならないように指定された個数だけ挙げてください。1 つは短い名詞句にします。")
 
 DEFAULT_RESULTS = (
     (100, "全問正解です。お見事でした！"),
@@ -62,6 +73,15 @@ QUESTION_SCHEMA = {
     "required": ["question", "correct", "wrong", "explanation"],
 }
 
+# お題からトピックを作らせるときの JSON の形
+TOPICS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "topics": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 20},
+    },
+    "required": ["topics"],
+}
+
 PHASE_SELECT = "select"
 PHASE_PLAYING = "playing"
 PHASE_RESULT = "result"
@@ -74,10 +94,23 @@ class Category:
     key: str
     name: str
 
-    # "llm" (モデルの知識から出題) か "rag" (資料から出題)
+    # "llm" (モデルの知識から出題)、"rag" (資料から出題)、"custom" (自作。use_rag で決まる)
     source: str
     guide: str = ""
     topics: list[str] = field(default_factory=list)
+
+    # 自作の分野で、資料 (rag/) から出題するか
+    use_rag: bool = False
+
+    @property
+    def custom(self) -> bool:
+        return self.source == "custom"
+
+    @property
+    def from_rag(self) -> bool:
+        """資料から出題するか (guide があれば、それに近い資料を選ぶ)"""
+
+        return self.source == "rag" or (self.custom and self.use_rag)
 
 
 @dataclass
@@ -100,6 +133,9 @@ class QuizSettings:
     max_tokens: int = DEFAULT_MAX_TOKENS
     comment_persona: str = DEFAULT_COMMENT_PERSONA
     generate_prompt: str = DEFAULT_GENERATE_PROMPT
+
+    # 自作の分野で、お題から出題のトピックを作らせるプロンプト
+    topics_prompt: str = DEFAULT_TOPICS_PROMPT
 
     # (正解率の下限 %, メッセージ)。下限の大きい順
     results: tuple[tuple[int, str], ...] = DEFAULT_RESULTS
@@ -146,6 +182,15 @@ def load_settings() -> QuizSettings:
     if not isinstance(prompt, str) or not prompt:
         prompt = DEFAULT_GENERATE_PROMPT
 
+    topics_prompt = entry.get("topics_prompt")
+
+    if isinstance(topics_prompt, list) and topics_prompt and all(
+            isinstance(v, str) for v in topics_prompt):
+        topics_prompt = "\n".join(topics_prompt)
+
+    if not isinstance(topics_prompt, str) or not topics_prompt:
+        topics_prompt = DEFAULT_TOPICS_PROMPT
+
     persona = entry.get("comment_persona", DEFAULT_COMMENT_PERSONA)
 
     return QuizSettings(
@@ -153,6 +198,7 @@ def load_settings() -> QuizSettings:
         max_tokens=_positive_int(entry, "max_tokens", DEFAULT_MAX_TOKENS),
         comment_persona=persona if isinstance(persona, str) else DEFAULT_COMMENT_PERSONA,
         generate_prompt=prompt,
+        topics_prompt=topics_prompt,
         results=_read_results(entry),
     )
 
@@ -185,6 +231,40 @@ def load_categories() -> list[Category]:
         ))
 
     return categories
+
+
+def load_custom_categories() -> list[Category]:
+    """自作の分野の一覧 (quiz_custom.json。無ければ空)
+    ファイルが壊れているときは ConfigError (編集画面で上書きして中身を消さないため)"""
+
+    entries = config.load_for_edit(CUSTOM_CONFIG).get("categories", [])
+    categories: list[Category] = []
+
+    if not isinstance(entries, list):
+        return categories
+
+    for entry in entries:
+        if (not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+                or not entry["name"].strip()):
+            continue
+
+        prompt = entry.get("prompt", "")
+        categories.append(Category(
+            key=f"custom{len(categories)}",
+            name=entry["name"].strip()[:MAX_NAME_LENGTH],
+            source="custom",
+            guide=prompt.strip()[:MAX_PROMPT_LENGTH] if isinstance(prompt, str) else "",
+            use_rag=entry.get("use_rag") is True,
+        ))
+
+    return categories
+
+
+def save_custom_categories(categories: list[Category]) -> None:
+    """自作の分野を保存する (ConfigError)"""
+
+    config.save(CUSTOM_CONFIG, {"categories": [
+        {"name": c.name, "prompt": c.guide, "use_rag": c.use_rag} for c in categories]})
 
 
 def tier_message(settings: QuizSettings, score: int, total: int) -> str:
@@ -317,13 +397,50 @@ def start(state: QuizState, category: Category, rag_state: rag.RagState) -> None
     state.notify()
 
 
+def _expand_topics(
+    settings: QuizSettings, category: Category, count: int, cancel: CancelToken,
+) -> list[str]:
+    """自作の分野のお題から、出題のトピックを作らせる (偏りと重複を防ぐ)
+    作れなかったときは空のリスト (既出の問題を渡す方式だけで進める)"""
+
+    agent = Agent(
+        name="トピック", system_prompt=settings.topics_prompt,
+        options=LLMOptions(
+            max_tokens=settings.max_tokens, temperature=0.8,
+            disable_thinking=True, schema=TOPICS_SCHEMA))
+
+    try:
+        raw = run_agent_json(
+            agent, [{"role": "user", "content": f"お題: {category.guide}\n個数: {count}"}],
+            cancel)
+    except LLMError:
+        return []
+
+    topics = raw.get("topics")
+
+    if not isinstance(topics, list):
+        return []
+
+    result: list[str] = []
+
+    for topic in topics:
+        if isinstance(topic, str) and topic.strip() and topic.strip() not in result:
+            result.append(topic.strip())
+
+    return result[:count]
+
+
 def _plan(
     category: Category, rag_state: rag.RagState, count: int,
+    settings: QuizSettings, cancel: CancelToken,
 ) -> list[tuple[str, rag.RagChunk | None]]:
     """出題ごとの (トピック, 資料のチャンク) の予定"""
 
-    if category.source == "rag":
-        chunks = rag.sample_chunks(rag_state, count)
+    if category.from_rag:
+        if category.guide:
+            chunks = rag.top_chunks(rag_state, category.guide, count, cancel)
+        else:
+            chunks = rag.sample_chunks(rag_state, count)
 
         if not chunks:
             raise LLMError(
@@ -331,8 +448,11 @@ def _plan(
 
         return [("", chunk) for chunk in chunks]
 
-    topics = list(category.topics)
-    random.shuffle(topics)
+    if category.custom:
+        topics = _expand_topics(settings, category, count, cancel)
+    else:
+        topics = list(category.topics)
+        random.shuffle(topics)
 
     if not topics:
         return [("", None)] * count
@@ -346,7 +466,12 @@ def _prompt(
 ) -> str:
     if chunk is not None:
         origin = chunk.source + (f" / {chunk.heading}" if chunk.heading else "")
-        lines = [f"分野: {category.name}", f"資料 ({origin}):", chunk.text]
+        lines = [f"分野: {category.name}"]
+
+        if category.custom and category.guide:
+            lines.append(f"出題の方針: {category.guide}")
+
+        lines += [f"資料 ({origin}):", chunk.text]
     else:
         lines = [f"分野: {category.name}"]
 
@@ -384,6 +509,25 @@ def _make_question(
     return question
 
 
+def make_test_question(
+    category: Category, rag_state: rag.RagState, cancel: CancelToken,
+) -> Question:
+    """分野の編集画面のテスト用に、1 問だけ作る (ワーカースレッドから呼ぶ)
+    作れなければ LLMError、中断されたら Cancelled"""
+
+    settings = load_settings()
+    topic, chunk = _plan(category, rag_state, 1, settings, cancel)[0]
+    error = LLMError("問題を作れませんでした")
+
+    for _ in range(MAX_ATTEMPTS):
+        try:
+            return _make_question(settings, category, topic, chunk, [], cancel)
+        except LLMError as e:
+            error = e
+
+    raise error
+
+
 def _generate_all(
     state: QuizState, session: int, cancel: CancelToken, category: Category,
     rag_state: rag.RagState, settings: QuizSettings,
@@ -393,7 +537,7 @@ def _generate_all(
     error = ""
 
     try:
-        plan = _plan(category, rag_state, settings.question_count)
+        plan = _plan(category, rag_state, settings.question_count, settings, cancel)
 
         with state.lock:
             if state.session != session:
