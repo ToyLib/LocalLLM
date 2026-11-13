@@ -26,16 +26,17 @@ constexpr const char* TRANSLATOR_PROMPT =
     "「ぶつかるまで」「行けるところまで」「行けるだけ」「突き当たりまで」「ずっと」のように、"
     "止まる場所まで進む指示なら until_blocked を true にします (steps は 1 にしておきます)。それ以外は false です。"
     "「しばらく」「ちょっと」のようなあいまいな言い方は、あなたの判断でマス数を決めます。"
+    "ロボットから見た向きで言われたときは、dir に次の値を使います。向きの計算はしなくてよく、言葉をそのまま置き換えます。"
+    "まっすぐ・前へ・そのまま進む → forward、振り返って・後ろへ・来た方へ戻る・向いている方の反対へ → back、"
+    "時計回りに曲がって → turn_cw、反時計回りに曲がって → turn_ccw。"
+    "turn_cw と turn_ccw は、曲がってから、そのまま steps マス (until_blocked なら進めるところまで) 進む 1 つの命令です。"
+    "曲がった後の移動を forward に分けないでください。"
     "指示に書かれた順に、命令を並べます。"
     "移動と関係の無い指示なら、moves を空にします。"
     "指示に無い移動を足さないでください。";
 
-// ロボットの向きを教えるステージで足す説明 (小さいモデルでも言い換えが通じるように、よくある言い方の常識を添える)
-constexpr const char* FACING_PROMPT =
-    "指示の前に、ロボットがいま向いている向きを書きます。"
-    "「まっすぐ」「振り返って」「時計回りに曲がって」のように、ロボットの動きとして言われたときだけ、"
-    "ロボットがいま向いている向きをもとに、画面から見た向きに直します。"
-    "命令を 1 つ実行するたびに、ロボットはその命令の向きを向きます。"
+// 向きの言葉を禁止するステージで足す説明 (小さいモデルでも言い換えが通じるように、よくある言い方の常識を添える)
+constexpr const char* HINT_PROMPT =
     "時計の文字盤の向きは、12時が up、3時が right、6時が down、9時が left です。"
     "空・天井・頭の方は up、地面・床・足もとの方は down です。"
     "お箸を持つ手の方は right、お茶碗を持つ手の方は left です。";
@@ -50,7 +51,10 @@ json MovesSchema()
     const json move = {
         {"type", "object"},
         {"properties",
-         {{"dir", {{"type", "string"}, {"enum", json::array({"up", "down", "left", "right"})}}},
+         {{"dir",
+           {{"type", "string"},
+            {"enum", json::array({"up", "down", "left", "right",
+                                  "forward", "back", "turn_cw", "turn_ccw"})}}},
           {"steps", {{"type", "integer"}, {"minimum", 1}, {"maximum", MAZE_MAX_STEPS}}},
           {"until_blocked", {{"type", "boolean"}}}}},
         {"required", json::array({"dir", "steps", "until_blocked"})}};
@@ -100,6 +104,22 @@ std::vector<MazeMove> ValidateMoves(const json& raw)
         {
             move.dir = MazeDir::Right;
         }
+        else if (dir == "forward")
+        {
+            move.turn = MazeTurn::Forward;
+        }
+        else if (dir == "back")
+        {
+            move.turn = MazeTurn::Back;
+        }
+        else if (dir == "turn_cw")
+        {
+            move.turn = MazeTurn::Clockwise;
+        }
+        else if (dir == "turn_ccw")
+        {
+            move.turn = MazeTurn::Counterclockwise;
+        }
         else
         {
             throw std::runtime_error("知らない向きです: " + dir);
@@ -145,18 +165,36 @@ const char* DirName(MazeDir dir)
     return "up";
 }
 
+const char* TurnName(MazeTurn turn)
+{
+    switch (turn)
+    {
+    case MazeTurn::Forward:
+        return "forward";
+    case MazeTurn::Back:
+        return "back";
+    case MazeTurn::Clockwise:
+        return "turn_cw";
+    case MazeTurn::Counterclockwise:
+        return "turn_ccw";
+    case MazeTurn::None:
+        break;
+    }
+
+    return "";
+}
+
+// ロボットの向きは LLM に見せない (向きからの計算はアプリが行う)
 void Translate(
-    MazeState& state, int session, std::shared_ptr<std::atomic<bool>> cancel, std::string text,
-    bool tellFacing, MazeDir facing)
+    MazeState& state, int session, std::shared_ptr<std::atomic<bool>> cancel, std::string text, bool hints)
 {
     Agent agent;
     agent.name = "迷路";
     agent.systemPrompt = TRANSLATOR_PROMPT;
 
-    if (tellFacing)
+    if (hints)
     {
-        agent.systemPrompt += FACING_PROMPT;
-        text = std::string("ロボットはいま ") + DirName(facing) + " を向いています。\n指示: " + text;
+        agent.systemPrompt += HINT_PROMPT;
     }
 
     agent.options.maxTokens = TRANSLATOR_MAX_TOKENS;
@@ -243,13 +281,14 @@ void StartMazeCommand(MazeState& state, const std::string& text)
         state.plan.clear();
     }
 
-    const bool tellFacing = GetMazeStage(state.stage).tellFacing;
-    state.worker = std::thread(Translate, std::ref(state), session, cancel, text, tellFacing, state.facing);
+    const bool hints = GetMazeStage(state.stage).hints;
+    state.worker = std::thread(Translate, std::ref(state), session, cancel, text, hints);
 }
 
 std::string DescribeMove(const MazeMove& move)
 {
-    const std::string dir = std::string("{\"dir\": \"") + DirName(move.dir) + "\", ";
+    const char* name = move.turn == MazeTurn::None ? DirName(move.dir) : TurnName(move.turn);
+    const std::string dir = std::string("{\"dir\": \"") + name + "\", ";
 
     if (move.untilBlocked)
     {
@@ -257,6 +296,34 @@ std::string DescribeMove(const MazeMove& move)
     }
 
     return dir + "\"steps\": " + std::to_string(move.steps) + "}";
+}
+
+MazeDir MazeResolveTurn(MazeDir facing, MazeTurn turn)
+{
+    // 時計回りの順 (画面の y は下向きなので、上 → 右 → 下 → 左)
+    constexpr MazeDir ORDER[4] = {MazeDir::Up, MazeDir::Right, MazeDir::Down, MazeDir::Left};
+
+    int index = 0;
+
+    while (ORDER[index] != facing)
+    {
+        ++index;
+    }
+
+    switch (turn)
+    {
+    case MazeTurn::None:
+    case MazeTurn::Forward:
+        return facing;
+    case MazeTurn::Back:
+        return ORDER[(index + 2) % 4];
+    case MazeTurn::Clockwise:
+        return ORDER[(index + 1) % 4];
+    case MazeTurn::Counterclockwise:
+        return ORDER[(index + 3) % 4];
+    }
+
+    return facing;
 }
 
 int MazeStars(int talks)
@@ -277,7 +344,7 @@ const MazeStage& GetMazeStage(int index)
           "one", "two", "three", "four", "five"},
          true, false},
         {"ステージ3",
-         "向きの言葉禁止 (上下左右・東西南北・うえ・みぎ・ひだり・英語)。ロボットの向きや身近なものを使って伝えよう",
+         "向きの言葉禁止 (上下左右・東西南北・うえ・みぎ・ひだり・英語)。ロボットの向き (三角) や身近なものを使って伝えよう",
          {"上", "下", "左", "右", "東", "西", "南", "北",
           "うえ", "みぎ", "ひだり", "ウエ", "シタ", "ミギ", "ヒダリ",
           "up", "down", "left", "right", "north", "south", "east", "west"},

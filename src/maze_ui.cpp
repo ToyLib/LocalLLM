@@ -29,6 +29,24 @@ constexpr float STEP_SECONDS = 0.22f;
 // ぶつかったときに揺れる秒数
 constexpr float BUMP_SECONDS = 0.4f;
 
+// 履歴に書き足す、画面から見た向き
+const char* DirLabel(MazeDir dir)
+{
+    switch (dir)
+    {
+    case MazeDir::Up:
+        return "up";
+    case MazeDir::Down:
+        return "down";
+    case MazeDir::Left:
+        return "left";
+    case MazeDir::Right:
+        return "right";
+    }
+
+    return "up";
+}
+
 ImVec2 DirVector(MazeDir dir)
 {
     switch (dir)
@@ -103,22 +121,14 @@ void TakeResult(MazeState& state)
         return;
     }
 
+    // 命令は 1 件ずつ実行する (ロボットから見た向きは、その命令を始めるときの向きで決める)
     for (const MazeMove& move : plan)
     {
         entry.commands.push_back(DescribeMove(move));
-
-        // 進めるところまで進む命令は 1 件のまま、マス数の命令は 1 マスずつに分ける
-        if (move.untilBlocked)
-        {
-            state.pending.push_back(move);
-            continue;
-        }
-
-        for (int i = 0; i < move.steps; ++i)
-        {
-            state.pending.push_back({move.dir, 1, false});
-        }
+        state.pending.push_back(move);
     }
+
+    state.commandIndex = 0;
 
     if (plan.empty())
     {
@@ -170,24 +180,43 @@ void Animate(MazeState& state)
     // 進めるところまで進む命令は、先がふさがったら次の命令へ (同じフレームで続けて調べる)
     while (!state.moving && !state.pending.empty())
     {
-        const MazeMove move = state.pending.front();
+        MazeMove& move = state.pending.front();
+
+        // ロボットから見た向きを、いまの向きで画面から見た向きに直す (履歴にも書き足す)
+        if (move.turn != MazeTurn::None)
+        {
+            move.dir = MazeResolveTurn(state.facing, move.turn);
+            move.turn = MazeTurn::None;
+
+            if (!state.log.empty() && state.commandIndex < static_cast<int>(state.log.back().commands.size()))
+            {
+                state.log.back().commands[state.commandIndex] += std::string("  → ") + DirLabel(move.dir);
+            }
+        }
+
         state.facing = move.dir;
 
         const MazeCell next = MazeNeighbor(state.robot, move.dir);
         const bool open = MazeInside(next) && !state.board.Blocked(next);
-
-        if (!move.untilBlocked || !open)
-        {
-            state.pending.pop_front();
-        }
 
         if (open)
         {
             state.from = state.robot;
             state.robot = next;
             state.moving = true;
+
+            if (!move.untilBlocked && --move.steps <= 0)
+            {
+                state.pending.pop_front();
+                ++state.commandIndex;
+            }
         }
-        else if (!move.untilBlocked)
+        else if (move.untilBlocked)
+        {
+            state.pending.pop_front();
+            ++state.commandIndex;
+        }
+        else
         {
             state.pending.clear();
             state.bump = BUMP_SECONDS;

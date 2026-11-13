@@ -32,9 +32,26 @@ enum class MazeDir
     Right
 };
 
+// ロボットから見た向き (None なら dir をそのまま使う)
+// LLM には言葉を置き換えさせるだけにして、いまの向きからの計算はアプリが実行するときに行う
+// (小さいモデルは「右を向いているときの時計回り」のような計算を間違えやすいため)
+// JSON では turn_cw / turn_ccw (clockwise / counterclockwise という名前だと、Qwen3 4B が取り違えやすかった)
+enum class MazeTurn
+{
+    None,
+    Forward,
+    Back,
+    Clockwise,
+    Counterclockwise
+};
+
+// facing を向いたロボットにとっての turn の向き (画面から見た向き)
+MazeDir MazeResolveTurn(MazeDir facing, MazeTurn turn);
+
 struct MazeMove
 {
     MazeDir dir = MazeDir::Up;
+    MazeTurn turn = MazeTurn::None;
     int steps = 1;
 
     // true なら steps によらず、進めるところまで進む (障害物や盤の端の手前で止まる。ぶつかった扱いにはしない)
@@ -57,8 +74,8 @@ struct MazeStage
     // 盤を「進めるところまで進む」だけで解けるものに限る (数字を使えないステージ用)
     bool slideOnly = false;
 
-    // LLM にロボットの向きを教える (「まっすぐ」「振り返って」を使えるように)
-    bool tellFacing = false;
+    // LLM に、向きの言い換えの常識 (時計の文字盤・空は上など) を教える
+    bool hints = false;
 };
 
 const MazeStage& GetMazeStage(int index);
@@ -159,8 +176,11 @@ struct MazeState
     MazeDir facing = MazeDir::Right;
     std::vector<MazeCell> trail{MAZE_START};
 
-    // 実行待ちの移動 (1 マスずつか、進めるところまで) と、いま動いている 1 マスの進み具合 (0〜1)
+    // 実行待ちの命令 (先頭の steps は、残りのマス数) と、いま動いている 1 マスの進み具合 (0〜1)
     std::deque<MazeMove> pending;
+
+    // 実行中の命令が、最後の履歴の何番目の命令か (向きを書き足すのに使う)
+    int commandIndex = 0;
     bool moving = false;
     MazeCell from = MAZE_START;
     float progress = 0.0f;
