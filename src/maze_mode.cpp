@@ -16,15 +16,29 @@ namespace
 
 // 指示を命令に訳す係の system プロンプト
 // 盤面 (ロボットの位置) は見せず、言葉を命令に置き換えることだけをさせる
+// 向きの言葉は、断りが無ければ画面から見た向きにする (ロボットから見た右と取り違えないように)
 constexpr const char* TRANSLATOR_PROMPT =
     "あなたは、ロボットへの日本語の指示を移動命令に変換する係です。"
     "ロボットはマス目の上を動きます。"
     "dir は画面から見た向きで、上は up、下は down、左は left、右は right です。"
+    "向きを表す言葉 (右・上・北・3時の方向など) は、特に断りが無ければ、すべて画面から見た向きです。"
     "steps は進むマス数 (1〜5) です。数が書かれていなければ 1 にします。"
-    "「しばらく」「ちょっと」「ずっと」のようなあいまいな言い方は、あなたの判断でマス数を決めます。"
+    "「ぶつかるまで」「行けるところまで」「行けるだけ」「突き当たりまで」「ずっと」のように、"
+    "止まる場所まで進む指示なら until_blocked を true にします (steps は 1 にしておきます)。それ以外は false です。"
+    "「しばらく」「ちょっと」のようなあいまいな言い方は、あなたの判断でマス数を決めます。"
     "指示に書かれた順に、命令を並べます。"
     "移動と関係の無い指示なら、moves を空にします。"
     "指示に無い移動を足さないでください。";
+
+// ロボットの向きを教えるステージで足す説明 (小さいモデルでも言い換えが通じるように、よくある言い方の常識を添える)
+constexpr const char* FACING_PROMPT =
+    "指示の前に、ロボットがいま向いている向きを書きます。"
+    "「まっすぐ」「振り返って」「時計回りに曲がって」のように、ロボットの動きとして言われたときだけ、"
+    "ロボットがいま向いている向きをもとに、画面から見た向きに直します。"
+    "命令を 1 つ実行するたびに、ロボットはその命令の向きを向きます。"
+    "時計の文字盤の向きは、12時が up、3時が right、6時が down、9時が left です。"
+    "空・天井・頭の方は up、地面・床・足もとの方は down です。"
+    "お箸を持つ手の方は right、お茶碗を持つ手の方は left です。";
 
 constexpr int TRANSLATOR_MAX_TOKENS = 512;
 
@@ -37,8 +51,9 @@ json MovesSchema()
         {"type", "object"},
         {"properties",
          {{"dir", {{"type", "string"}, {"enum", json::array({"up", "down", "left", "right"})}}},
-          {"steps", {{"type", "integer"}, {"minimum", 1}, {"maximum", MAZE_MAX_STEPS}}}}},
-        {"required", json::array({"dir", "steps"})}};
+          {"steps", {{"type", "integer"}, {"minimum", 1}, {"maximum", MAZE_MAX_STEPS}}},
+          {"until_blocked", {{"type", "boolean"}}}}},
+        {"required", json::array({"dir", "steps", "until_blocked"})}};
 
     return {
         {"type", "object"},
@@ -98,6 +113,10 @@ std::vector<MazeMove> ValidateMoves(const json& raw)
         }
 
         move.steps = std::clamp(steps->get<int>(), 1, MAZE_MAX_STEPS);
+
+        const auto until = item.find("until_blocked");
+        move.untilBlocked = until != item.end() && until->is_boolean() && until->get<bool>();
+
         result.push_back(move);
 
         if (static_cast<int>(result.size()) >= MAX_MOVES)
@@ -109,12 +128,37 @@ std::vector<MazeMove> ValidateMoves(const json& raw)
     return result;
 }
 
+const char* DirName(MazeDir dir)
+{
+    switch (dir)
+    {
+    case MazeDir::Up:
+        return "up";
+    case MazeDir::Down:
+        return "down";
+    case MazeDir::Left:
+        return "left";
+    case MazeDir::Right:
+        return "right";
+    }
+
+    return "up";
+}
+
 void Translate(
-    MazeState& state, int session, std::shared_ptr<std::atomic<bool>> cancel, std::string text)
+    MazeState& state, int session, std::shared_ptr<std::atomic<bool>> cancel, std::string text,
+    bool tellFacing, MazeDir facing)
 {
     Agent agent;
     agent.name = "迷路";
     agent.systemPrompt = TRANSLATOR_PROMPT;
+
+    if (tellFacing)
+    {
+        agent.systemPrompt += FACING_PROMPT;
+        text = std::string("ロボットはいま ") + DirName(facing) + " を向いています。\n指示: " + text;
+    }
+
     agent.options.maxTokens = TRANSLATOR_MAX_TOKENS;
     agent.options.temperature = 0.2f;
     agent.options.disableThinking = true;
@@ -199,30 +243,72 @@ void StartMazeCommand(MazeState& state, const std::string& text)
         state.plan.clear();
     }
 
-    state.worker = std::thread(Translate, std::ref(state), session, cancel, text);
+    const bool tellFacing = GetMazeStage(state.stage).tellFacing;
+    state.worker = std::thread(Translate, std::ref(state), session, cancel, text, tellFacing, state.facing);
 }
 
 std::string DescribeMove(const MazeMove& move)
 {
-    const char* dir = "up";
+    const std::string dir = std::string("{\"dir\": \"") + DirName(move.dir) + "\", ";
 
-    switch (move.dir)
+    if (move.untilBlocked)
     {
-    case MazeDir::Up:
-        dir = "up";
-        break;
-    case MazeDir::Down:
-        dir = "down";
-        break;
-    case MazeDir::Left:
-        dir = "left";
-        break;
-    case MazeDir::Right:
-        dir = "right";
-        break;
+        return dir + "\"until_blocked\": true}";
     }
 
-    return std::string("{\"dir\": \"") + dir + "\", \"steps\": " + std::to_string(move.steps) + "}";
+    return dir + "\"steps\": " + std::to_string(move.steps) + "}";
+}
+
+int MazeStars(int talks)
+{
+    return talks <= 1 ? 3 : talks == 2 ? 2 : 1;
+}
+
+const MazeStage& GetMazeStage(int index)
+{
+    static const MazeStage STAGES[MAZE_STAGE_COUNT] = {
+        {"ステージ1", "自由に指示してよい", {}, false, false},
+        {"ステージ2",
+         "数字禁止 (0〜9・０〜９・一〜十・ひとつ〜いつつ・one〜five)。「ぶつかるまで」などで伝えよう",
+         {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+          "０", "１", "２", "３", "４", "５", "６", "７", "８", "９",
+          "一", "二", "三", "四", "五", "六", "七", "八", "九", "十",
+          "ひとつ", "ふたつ", "みっつ", "よっつ", "いつつ",
+          "one", "two", "three", "four", "five"},
+         true, false},
+        {"ステージ3",
+         "向きの言葉禁止 (上下左右・東西南北・うえ・みぎ・ひだり・英語)。ロボットの向きや身近なものを使って伝えよう",
+         {"上", "下", "左", "右", "東", "西", "南", "北",
+          "うえ", "みぎ", "ひだり", "ウエ", "シタ", "ミギ", "ヒダリ",
+          "up", "down", "left", "right", "north", "south", "east", "west"},
+         false, true},
+    };
+
+    return STAGES[std::clamp(index, 0, MAZE_STAGE_COUNT - 1)];
+}
+
+std::string FindBannedWord(const MazeStage& stage, const std::string& text)
+{
+    // 英字だけ小文字にそろえる (UTF-8 の多バイト文字は 0x80 以上なので変わらない)
+    std::string lower = text;
+
+    for (char& c : lower)
+    {
+        if (c >= 'A' && c <= 'Z')
+        {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+
+    for (const std::string& word : stage.banned)
+    {
+        if (lower.find(word) != std::string::npos)
+        {
+            return word;
+        }
+    }
+
+    return "";
 }
 
 void ResetMaze(MazeState& state, bool newBoard)
@@ -237,8 +323,10 @@ void ResetMaze(MazeState& state, bool newBoard)
 
     if (newBoard)
     {
-        state.board = GenerateMazeBoard();
+        state.board = GenerateMazeBoard(GetMazeStage(state.stage).slideOnly);
     }
+
+    state.warning.clear();
 
     state.talks = 0;
     state.cleared = false;
@@ -353,7 +441,46 @@ int MazeMinTurns(const MazeBoard& board)
     return best >= UNREACHED ? -1 : best;
 }
 
-MazeBoard GenerateMazeBoard()
+bool MazeSlideSolvable(const MazeBoard& board)
+{
+    constexpr MazeDir ALL[] = {MazeDir::Up, MazeDir::Down, MazeDir::Left, MazeDir::Right};
+
+    bool visited[MAZE_SIZE][MAZE_SIZE] = {};
+    std::deque<MazeCell> queue{MAZE_START};
+    visited[MAZE_START.y][MAZE_START.x] = true;
+
+    while (!queue.empty())
+    {
+        const MazeCell cell = queue.front();
+        queue.pop_front();
+
+        for (MazeDir dir : ALL)
+        {
+            MazeCell stop = cell;
+
+            for (MazeCell next = MazeNeighbor(stop, dir); MazeInside(next) && !board.Blocked(next);
+                 next = MazeNeighbor(stop, dir))
+            {
+                stop = next;
+
+                if (stop == MAZE_GOAL)
+                {
+                    return true;
+                }
+            }
+
+            if (!visited[stop.y][stop.x])
+            {
+                visited[stop.y][stop.x] = true;
+                queue.push_back(stop);
+            }
+        }
+    }
+
+    return false;
+}
+
+MazeBoard GenerateMazeBoard(bool slideOnly)
 {
     static std::mt19937 random{std::random_device{}()};
 
@@ -391,18 +518,26 @@ MazeBoard GenerateMazeBoard()
 
         board.minTurns = MazeMinTurns(board);
 
-        if (board.minTurns >= MAZE_MIN_TURNS)
+        const bool solvable = !slideOnly || MazeSlideSolvable(board);
+
+        if (solvable && board.minTurns >= MAZE_MIN_TURNS)
         {
             return board;
         }
 
-        if (board.minTurns > best.minTurns)
+        if (solvable && board.minTurns > best.minTurns)
         {
             best = board;
         }
     }
 
     return best;
+}
+
+void SelectMazeStage(MazeState& state, int stage)
+{
+    state.stage = std::clamp(stage, 0, MAZE_STAGE_COUNT - 1);
+    ResetMaze(state, true);
 }
 
 void ShutdownMaze(MazeState& state)

@@ -36,7 +36,35 @@ struct MazeMove
 {
     MazeDir dir = MazeDir::Up;
     int steps = 1;
+
+    // true なら steps によらず、進めるところまで進む (障害物や盤の端の手前で止まる。ぶつかった扱いにはしない)
+    bool untilBlocked = false;
 };
+
+// ステージ (禁止ワードで、指示の言い方を縛る)
+constexpr int MAZE_STAGE_COUNT = 3;
+
+struct MazeStage
+{
+    const char* title;
+
+    // 画面に出すルールの説明
+    const char* rule;
+
+    // 指示に入れてはいけない言葉 (英字は大文字・小文字を区別しない)
+    std::vector<std::string> banned;
+
+    // 盤を「進めるところまで進む」だけで解けるものに限る (数字を使えないステージ用)
+    bool slideOnly = false;
+
+    // LLM にロボットの向きを教える (「まっすぐ」「振り返って」を使えるように)
+    bool tellFacing = false;
+};
+
+const MazeStage& GetMazeStage(int index);
+
+// 指示に入っている禁止ワード (無ければ空)
+std::string FindBannedWord(const MazeStage& stage, const std::string& text);
 
 // 指示の履歴の 1 件
 struct MazeLogEntry
@@ -83,7 +111,11 @@ MazeCell MazeNeighbor(MazeCell cell, MazeDir dir);
 bool MazeInside(MazeCell cell);
 
 // ランダムな盤を作る (スタートからゴールまで通れて、曲がる回数が MAZE_MIN_TURNS 以上)
-MazeBoard GenerateMazeBoard();
+// slideOnly なら、さらに「進めるところまで進む」だけでゴールできる盤に限る
+MazeBoard GenerateMazeBoard(bool slideOnly = false);
+
+// 「進めるところまで進む」だけでゴールに着けるか (途中でゴールを通るのも着いたことにする)
+bool MazeSlideSolvable(const MazeBoard& board);
 
 // ゴールまでに曲がる回数の最小 (通れなければ -1)
 int MazeMinTurns(const MazeBoard& board);
@@ -109,6 +141,13 @@ struct MazeState
     bool focusInput = true;
     std::vector<MazeLogEntry> log;
 
+    // いまのステージ (0 から) と、ステージごとの一番良かった★の数 (0 は未クリア)
+    int stage = 0;
+    int bestStars[MAZE_STAGE_COUNT] = {};
+
+    // 禁止ワードで送れなかったときの注意 (次に送れたら消す)
+    std::string warning;
+
     MazeBoard board = GenerateMazeBoard();
 
     // 話しかけた回数 (命令に訳せた指示の数) と、ゴールしたか
@@ -120,8 +159,8 @@ struct MazeState
     MazeDir facing = MazeDir::Right;
     std::vector<MazeCell> trail{MAZE_START};
 
-    // 実行待ちの 1 マスずつの移動と、いま動いている 1 マスの進み具合 (0〜1)
-    std::deque<MazeDir> pending;
+    // 実行待ちの移動 (1 マスずつか、進めるところまで) と、いま動いている 1 マスの進み具合 (0〜1)
+    std::deque<MazeMove> pending;
     bool moving = false;
     MazeCell from = MAZE_START;
     float progress = 0.0f;
@@ -135,7 +174,11 @@ struct MazeState
 };
 
 // 指示を別スレッドで LLM に訳させる (結果は plan に入る)
+// ステージとロボットの向きは、呼んだときの state のものを使う
 void StartMazeCommand(MazeState& state, const std::string& text);
+
+// ★の数 (1 回なら 3、2 回なら 2、それより多ければ 1)
+int MazeStars(int talks);
 
 // 訳した命令 (UI に出す文字列)
 std::string DescribeMove(const MazeMove& move);
@@ -143,6 +186,9 @@ std::string DescribeMove(const MazeMove& move);
 // 位置・通った跡・履歴・回数を最初に戻す (訳している途中なら中断する)
 // newBoard なら新しい盤にする (false なら同じ盤でやり直す)
 void ResetMaze(MazeState& state, bool newBoard);
+
+// ステージを変えて、新しい盤で始める
+void SelectMazeStage(MazeState& state, int stage);
 
 // アプリを閉じるとき: 通信を止めて、スレッドの終了を待つ
 void ShutdownMaze(MazeState& state);

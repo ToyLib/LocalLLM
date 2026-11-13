@@ -16,6 +16,13 @@
 namespace
 {
 
+// ステージごとの入力欄のヒント
+constexpr const char* HINTS[MAZE_STAGE_COUNT] = {
+    "ロボットへの指示 (例: 右に3つ、上に2つ)",
+    "ロボットへの指示 (例: ぶつかるまで右、行けるところまで上)",
+    "ロボットへの指示 (例: まっすぐ進めるところまで、振り返ってふたつ)",
+};
+
 // 1 マス進むのにかける秒数
 constexpr float STEP_SECONDS = 0.22f;
 
@@ -44,10 +51,9 @@ ImU32 WithAlpha(const ImVec4& color, float alpha)
     return ImGui::GetColorU32(ImVec4(color.x, color.y, color.z, alpha));
 }
 
-// 話しかけた回数の評価 (1 回なら ★3、2 回なら ★2、それより多ければ ★1)
-std::string StarsFor(int talks)
+// ★の数を ★★☆ のように並べる
+std::string StarText(int stars)
 {
-    const int stars = talks <= 1 ? 3 : talks == 2 ? 2 : 1;
     std::string text;
 
     for (int i = 0; i < 3; ++i)
@@ -101,9 +107,16 @@ void TakeResult(MazeState& state)
     {
         entry.commands.push_back(DescribeMove(move));
 
+        // 進めるところまで進む命令は 1 件のまま、マス数の命令は 1 マスずつに分ける
+        if (move.untilBlocked)
+        {
+            state.pending.push_back(move);
+            continue;
+        }
+
         for (int i = 0; i < move.steps; ++i)
         {
-            state.pending.push_back(move.dir);
+            state.pending.push_back({move.dir, 1, false});
         }
     }
 
@@ -143,6 +156,9 @@ void Animate(MazeState& state)
                 state.executing = false;
                 state.cleared = true;
 
+                int& best = state.bestStars[state.stage];
+                best = std::max(best, MazeStars(state.talks));
+
                 if (!state.log.empty())
                 {
                     state.log.back().result = "ゴール！ (" + std::to_string(state.talks) + " 回目の指示で到着)";
@@ -151,21 +167,27 @@ void Animate(MazeState& state)
         }
     }
 
-    if (!state.moving && !state.pending.empty())
+    // 進めるところまで進む命令は、先がふさがったら次の命令へ (同じフレームで続けて調べる)
+    while (!state.moving && !state.pending.empty())
     {
-        const MazeDir dir = state.pending.front();
-        state.pending.pop_front();
-        state.facing = dir;
+        const MazeMove move = state.pending.front();
+        state.facing = move.dir;
 
-        const MazeCell next = MazeNeighbor(state.robot, dir);
+        const MazeCell next = MazeNeighbor(state.robot, move.dir);
+        const bool open = MazeInside(next) && !state.board.Blocked(next);
 
-        if (MazeInside(next) && !state.board.Blocked(next))
+        if (!move.untilBlocked || !open)
+        {
+            state.pending.pop_front();
+        }
+
+        if (open)
         {
             state.from = state.robot;
             state.robot = next;
             state.moving = true;
         }
-        else
+        else if (!move.untilBlocked)
         {
             state.pending.clear();
             state.bump = BUMP_SECONDS;
@@ -298,7 +320,7 @@ void DrawBoard(const MazeState& state, float size, const UiColors& colors)
     if (state.cleared)
     {
         const std::string title = "ゴール！";
-        const std::string stars = StarsFor(state.talks);
+        const std::string stars = StarText(MazeStars(state.talks));
         const std::string detail = std::to_string(state.talks) + " 回の指示で到着";
 
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
@@ -326,7 +348,6 @@ void DrawLog(const MazeState& state, bool busy, const UiColors& colors)
     {
         ImGui::PushStyleColor(ImGuiCol_Text, colors.subText);
         ImGui::TextWrapped("指示を入力すると、LLM が命令 (JSON) に訳し、ロボットが動きます。");
-        ImGui::TextWrapped("例: 「右に3つ進んで、上に2つ」「上にしばらく行ってから右へ」");
         ImGui::PopStyleColor();
         return;
     }
@@ -399,11 +420,72 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
 
     const ImGuiStyle& style = ImGui::GetStyle();
 
-    // 遊び方と、いまの回数
-    ImGui::TextColored(colors.subText, "S から G まで、障害物を避けて運ぼう。少ない指示でゴールするほど高評価");
+    const MazeStage& stage = GetMazeStage(state.stage);
+
+    // ステージの選択 (どのステージからでも遊べる。クリアした★を並べる)
+    for (int i = 0; i < MAZE_STAGE_COUNT; ++i)
+    {
+        const int best = state.bestStars[i];
+        std::string label = GetMazeStage(i).title;
+
+        if (best > 0)
+        {
+            label += " " + StarText(best);
+        }
+
+        label += "##stage" + std::to_string(i);
+
+        if (i > 0)
+        {
+            ImGui::SameLine();
+        }
+
+        const bool selected = i == state.stage;
+
+        if (selected)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+
+        if (ImGui::Button(label.c_str()) && !selected)
+        {
+            SelectMazeStage(state, i);
+        }
+
+        if (selected)
+        {
+            ImGui::PopStyleColor();
+        }
+    }
+
+    // ゴールしたら、次のステージへ進める
+    if (state.cleared && state.stage + 1 < MAZE_STAGE_COUNT)
+    {
+        ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.ai);
+        const bool next = ImGui::Button("次のステージへ");
+        ImGui::PopStyleColor();
+
+        if (next)
+        {
+            SelectMazeStage(state, state.stage + 1);
+        }
+    }
+
+    // ルールと、いまの回数
+    ImGui::PushStyleColor(ImGuiCol_Text, state.stage == 0 ? colors.subText : colors.user);
+    ImGui::TextWrapped("S から G まで、障害物を避けて運ぼう。%s", stage.rule);
+    ImGui::PopStyleColor();
+
     ImGui::Text("指示: %d 回", state.talks);
     ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
     ImGui::TextColored(colors.subText, "(最短の道順で曲がる回数: %d)", state.board.minTurns);
+
+    if (!state.warning.empty())
+    {
+        ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
+        ImGui::TextColored(colors.error, "%s", state.warning.c_str());
+    }
 
     const float bottomHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y;
     const ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -445,7 +527,7 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
 
     ImGui::SetNextItemWidth(-(sendWidth + resetWidth + style.ItemSpacing.x * 2.0f));
     const bool entered = ImGui::InputTextWithHint(
-        "##maze_input", "ロボットへの指示 (例: 右に3つ、上に2つ)", &state.input,
+        "##maze_input", HINTS[std::clamp(state.stage, 0, MAZE_STAGE_COUNT - 1)], &state.input,
         ImGuiInputTextFlags_EnterReturnsTrue);
 
     ImGui::SameLine();
@@ -476,6 +558,18 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
 
     if ((clicked || entered) && !running && available && hasText)
     {
+        // 禁止ワードが入っていたら送らない (回数にも数えない。入力はそのまま残す)
+        const std::string banned = FindBannedWord(stage, state.input);
+
+        if (!banned.empty())
+        {
+            state.warning = "「" + banned + "」は使えません";
+            state.focusInput = true;
+            return;
+        }
+
+        state.warning.clear();
+
         MazeLogEntry entry;
         entry.text = state.input;
         state.log.push_back(std::move(entry));
