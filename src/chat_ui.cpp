@@ -3,6 +3,7 @@
 #include "chat_ui.h"
 
 #include "quiz_ui.h"
+#include "maze_ui.h"
 #include "ime.h"
 #include "server_manager.h"
 
@@ -368,6 +369,7 @@ void DrawUI(
     ChatState& state,
     RagState& rag,
     QuizState& quiz,
+    MazeState& maze,
     SettingsState& settings,
     std::string& input,
     bool& focusInput,
@@ -411,7 +413,7 @@ void DrawUI(
     // サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
     DrawServerBar(ActiveUiSettings(settings).colors);
 
-    // チャットとクイズはタブで切り替える
+    // チャット・クイズ・迷路はタブで切り替える
     // (閉じているタブの状態も、ワーカースレッドで動き続ける)
     if (ImGui::BeginTabBar("tabs"))
     {
@@ -531,6 +533,12 @@ void DrawUI(
     if (ImGui::BeginTabItem("クイズ"))
     {
         DrawQuizTab(quiz, rag, ActiveUiSettings(settings).colors);
+        ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("迷路"))
+    {
+        DrawMazeTab(maze, ActiveUiSettings(settings).colors);
         ImGui::EndTabItem();
     }
 
