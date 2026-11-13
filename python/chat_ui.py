@@ -18,6 +18,7 @@ from chat import (
     STAGE_LOCAL, STAGE_WEB, ChatState, RagMode, ask_cloud, can_ask_cloud,
     format_status, next_stage, refresh_cloud_status, send_prompt)
 from llm_client import Citation
+from maze_ui import MazeTab
 from quiz_ui import QuizTab
 from server_manager import ServerStatus, ServerView
 from settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
@@ -180,6 +181,10 @@ class ChatApp:
         self.quiz_tab = QuizTab(
             self.notebook, self.font, self.bold, lambda: self.colors, self.rag)
         self.notebook.add(self.quiz_tab, text="クイズ")
+
+        # 迷路は 3 枚目のタブ (LLM で日本語の指示を移動命令に訳す)
+        self.maze_tab = MazeTab(self.notebook, self.font, self.bold, lambda: self.colors)
+        self.notebook.add(self.maze_tab, text="迷路")
         self._apply_colors(_colors(ui, self.default_colors))
 
         # server.json の managed がオンなら llama-server を起動する
@@ -342,6 +347,7 @@ class ChatApp:
         self.rag_status.configure(foreground=colors["sub_text"])
         self.error_label.configure(foreground=colors["error"])
         self.quiz_tab.apply_colors()
+        self.maze_tab.apply_colors()
 
     def _open_settings(self) -> None:
         SettingsDialog(
@@ -468,6 +474,7 @@ class ChatApp:
         self.state.cancel.cancel()
         self.rag.cancel.cancel()
         self.quiz_tab.shutdown()
+        self.maze_tab.shutdown()
 
         # サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
         self.root.withdraw()
