@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <deque>
+#include <random>
 #include <stdexcept>
 
 namespace
@@ -223,7 +225,7 @@ std::string DescribeMove(const MazeMove& move)
     return std::string("{\"dir\": \"") + dir + "\", \"steps\": " + std::to_string(move.steps) + "}";
 }
 
-void ResetMaze(MazeState& state)
+void ResetMaze(MazeState& state, bool newBoard)
 {
     StopWorker(state);
 
@@ -233,11 +235,17 @@ void ResetMaze(MazeState& state)
         state.plan.clear();
     }
 
-    const MazeCell start{0, MAZE_SIZE - 1};
-    state.robot = start;
-    state.from = start;
+    if (newBoard)
+    {
+        state.board = GenerateMazeBoard();
+    }
+
+    state.talks = 0;
+    state.cleared = false;
+    state.robot = MAZE_START;
+    state.from = MAZE_START;
     state.facing = MazeDir::Right;
-    state.trail = {start};
+    state.trail = {MAZE_START};
     state.pending.clear();
     state.moving = false;
     state.executing = false;
@@ -246,6 +254,155 @@ void ResetMaze(MazeState& state)
     state.bump = 0.0f;
     state.log.clear();
     state.focusInput = true;
+}
+
+MazeCell MazeNeighbor(MazeCell cell, MazeDir dir)
+{
+    switch (dir)
+    {
+    case MazeDir::Up:
+        --cell.y;
+        break;
+    case MazeDir::Down:
+        ++cell.y;
+        break;
+    case MazeDir::Left:
+        --cell.x;
+        break;
+    case MazeDir::Right:
+        ++cell.x;
+        break;
+    }
+
+    return cell;
+}
+
+bool MazeInside(MazeCell cell)
+{
+    return cell.x >= 0 && cell.x < MAZE_SIZE && cell.y >= 0 && cell.y < MAZE_SIZE;
+}
+
+// (マス, 向き) を頂点にして、まっすぐ進むのは 0、曲がるのは 1 の 0-1 BFS
+// スタートではどの向きを向いてもよい (最初の 1 歩は曲がりに数えない)
+int MazeMinTurns(const MazeBoard& board)
+{
+    constexpr int DIRS = 4;
+    constexpr int UNREACHED = 1 << 20;
+    constexpr MazeDir ALL[DIRS] = {MazeDir::Up, MazeDir::Down, MazeDir::Left, MazeDir::Right};
+
+    int cost[MAZE_SIZE][MAZE_SIZE][DIRS];
+
+    for (auto& row : cost)
+    {
+        for (auto& cell : row)
+        {
+            std::fill(std::begin(cell), std::end(cell), UNREACHED);
+        }
+    }
+
+    struct Node
+    {
+        MazeCell cell;
+        int dir;
+    };
+
+    std::deque<Node> queue;
+
+    for (int d = 0; d < DIRS; ++d)
+    {
+        cost[MAZE_START.y][MAZE_START.x][d] = 0;
+        queue.push_back({MAZE_START, d});
+    }
+
+    while (!queue.empty())
+    {
+        const Node node = queue.front();
+        queue.pop_front();
+        const int current = cost[node.cell.y][node.cell.x][node.dir];
+
+        for (int d = 0; d < DIRS; ++d)
+        {
+            const MazeCell next = MazeNeighbor(node.cell, ALL[d]);
+
+            if (!MazeInside(next) || board.Blocked(next))
+            {
+                continue;
+            }
+
+            const int weight = d == node.dir ? 0 : 1;
+
+            if (current + weight < cost[next.y][next.x][d])
+            {
+                cost[next.y][next.x][d] = current + weight;
+
+                if (weight == 0)
+                {
+                    queue.push_front({next, d});
+                }
+                else
+                {
+                    queue.push_back({next, d});
+                }
+            }
+        }
+    }
+
+    const int* goal = cost[MAZE_GOAL.y][MAZE_GOAL.x];
+    const int best = *std::min_element(goal, goal + DIRS);
+
+    return best >= UNREACHED ? -1 : best;
+}
+
+MazeBoard GenerateMazeBoard()
+{
+    static std::mt19937 random{std::random_device{}()};
+
+    std::vector<MazeCell> cells;
+
+    for (int y = 0; y < MAZE_SIZE; ++y)
+    {
+        for (int x = 0; x < MAZE_SIZE; ++x)
+        {
+            const MazeCell cell{x, y};
+
+            if (!(cell == MAZE_START) && !(cell == MAZE_GOAL))
+            {
+                cells.push_back(cell);
+            }
+        }
+    }
+
+    // 条件に合う盤が出なかったときは、曲がる回数が一番多かった盤 (障害物なしの盤より悪くはしない)
+    MazeBoard best;
+    best.minTurns = MazeMinTurns(best);
+
+    // 条件に合う盤が出るまで作り直す (6×6 なら、たいてい数回で出る)
+    for (int attempt = 0; attempt < 2000; ++attempt)
+    {
+        std::shuffle(cells.begin(), cells.end(), random);
+        const int count = std::uniform_int_distribution<int>(MAZE_MIN_BLOCKS, MAZE_MAX_BLOCKS)(random);
+
+        MazeBoard board;
+
+        for (int i = 0; i < count; ++i)
+        {
+            board.blocked[cells[i].y][cells[i].x] = true;
+        }
+
+        board.minTurns = MazeMinTurns(board);
+
+        if (board.minTurns >= MAZE_MIN_TURNS)
+        {
+            return board;
+        }
+
+        if (board.minTurns > best.minTurns)
+        {
+            best = board;
+        }
+    }
+
+    return best;
 }
 
 void ShutdownMaze(MazeState& state)

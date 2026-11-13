@@ -8,8 +8,8 @@
 #include <thread>
 #include <vector>
 
-// 迷路 (最初の版): 6×6 のマス目のロボットを、日本語の指示で上下左右に動かす
-// LLM は指示を移動命令の JSON に訳すだけ (盤面は見せない)。動かすのはアプリ
+// 迷路: 6×6 のマス目のロボットを、日本語の指示で上下左右に動かして、障害物を避けてゴールまで運ぶ
+// LLM は指示を移動命令の JSON に訳すだけ (盤面は見せない)。動かすのと判定はアプリ
 // 動きは doc/maze.md を参照
 // worker が書く項目は mutex で守り、アニメーションの項目は UI スレッドだけが触る
 
@@ -17,6 +17,11 @@ constexpr int MAZE_SIZE = 6;
 
 // 1 つの命令で進める最大のマス数
 constexpr int MAZE_MAX_STEPS = 5;
+
+// 障害物の数と、最短の道順で曲がる回数の下限 (簡単すぎる盤を避ける)
+constexpr int MAZE_MIN_BLOCKS = 9;
+constexpr int MAZE_MAX_BLOCKS = 12;
+constexpr int MAZE_MIN_TURNS = 3;
 
 // 画面から見た向き (y は下に向かって増える)
 enum class MazeDir
@@ -53,7 +58,35 @@ struct MazeCell
 {
     int x = 0;
     int y = 0;
+
+    bool operator==(const MazeCell&) const = default;
 };
+
+// スタートは左下、ゴールは右上
+constexpr MazeCell MAZE_START{0, MAZE_SIZE - 1};
+constexpr MazeCell MAZE_GOAL{MAZE_SIZE - 1, 0};
+
+// 盤面 (障害物の位置)
+struct MazeBoard
+{
+    bool blocked[MAZE_SIZE][MAZE_SIZE] = {};
+
+    // 最短の道順で曲がる回数 (目安として画面に出す)
+    int minTurns = 0;
+
+    bool Blocked(MazeCell cell) const { return blocked[cell.y][cell.x]; }
+};
+
+// 隣のマス (盤の外かもしれない)
+MazeCell MazeNeighbor(MazeCell cell, MazeDir dir);
+
+bool MazeInside(MazeCell cell);
+
+// ランダムな盤を作る (スタートからゴールまで通れて、曲がる回数が MAZE_MIN_TURNS 以上)
+MazeBoard GenerateMazeBoard();
+
+// ゴールまでに曲がる回数の最小 (通れなければ -1)
+int MazeMinTurns(const MazeBoard& board);
 
 struct MazeState
 {
@@ -76,15 +109,21 @@ struct MazeState
     bool focusInput = true;
     std::vector<MazeLogEntry> log;
 
+    MazeBoard board = GenerateMazeBoard();
+
+    // 話しかけた回数 (命令に訳せた指示の数) と、ゴールしたか
+    int talks = 0;
+    bool cleared = false;
+
     // ロボットのいるマスと、通ったマス
-    MazeCell robot{0, MAZE_SIZE - 1};
+    MazeCell robot = MAZE_START;
     MazeDir facing = MazeDir::Right;
-    std::vector<MazeCell> trail{{0, MAZE_SIZE - 1}};
+    std::vector<MazeCell> trail{MAZE_START};
 
     // 実行待ちの 1 マスずつの移動と、いま動いている 1 マスの進み具合 (0〜1)
     std::deque<MazeDir> pending;
     bool moving = false;
-    MazeCell from{0, MAZE_SIZE - 1};
+    MazeCell from = MAZE_START;
     float progress = 0.0f;
 
     // 訳した命令を実行中か (最後の 1 マスが終わるまで true)
@@ -101,8 +140,9 @@ void StartMazeCommand(MazeState& state, const std::string& text);
 // 訳した命令 (UI に出す文字列)
 std::string DescribeMove(const MazeMove& move);
 
-// 位置・通った跡・履歴を最初に戻す (訳している途中なら中断する)
-void ResetMaze(MazeState& state);
+// 位置・通った跡・履歴・回数を最初に戻す (訳している途中なら中断する)
+// newBoard なら新しい盤にする (false なら同じ盤でやり直す)
+void ResetMaze(MazeState& state, bool newBoard);
 
 // アプリを閉じるとき: 通信を止めて、スレッドの終了を待つ
 void ShutdownMaze(MazeState& state);
