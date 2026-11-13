@@ -97,9 +97,9 @@ LOCALLLM_RAG_DIR=~/Documents/notes ./build/LocalLLM
 | 項目 | 場所 |
 | --- | --- |
 | 埋め込みサーバーの URL | `config/server.json` の `embed_url` |
-| チャンクの最大文字数 | `src/rag.cpp` の `MAX_CHUNK_CHARS` (変えたら `INDEX_VERSION` を上げる) |
-| 添える資料の数 | `src/rag.cpp` の `TOP_K` |
-| 類似度の下限 | `src/rag.cpp` の `MIN_SCORE` |
-| 資料の添え方 (指示文) | `src/rag.cpp` の `BuildRagPrompt` |
+| チャンクの最大文字数 | `src/common/rag.cpp` の `MAX_CHUNK_CHARS` (変えたら `INDEX_VERSION` を上げる) |
+| 添える資料の数 | `src/common/rag.cpp` の `TOP_K` |
+| 類似度の下限 | `src/common/rag.cpp` の `MIN_SCORE` |
+| 資料の添え方 (指示文) | `src/common/rag.cpp` の `BuildRagPrompt` |
 
 埋め込みモデルを別のものに変えたときは、`build/rag-index.json` を消してインデックスを作り直してください。

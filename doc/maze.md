@@ -2,7 +2,7 @@
 
 日本語でロボットに指示すると、ローカルの LLM が移動命令 (JSON) に訳し、アプリがその命令どおりにロボットを動かすタブです。
 障害物を避けて、スタート (左下の S) からゴール (右上の G) まで運びます。少ない指示でゴールするほど高評価です。
-ステージが進むと使えない言葉 (禁止ワード) が増え、言い換えの工夫が要ります。C++ 版 (ImGui) と Python 版 (Tk) の両方にあります (同じ動き。Python 版は `python/maze_mode.py` / `python/maze_ui.py`)。
+ステージが進むと使えない言葉 (禁止ワード) が増え、言い換えの工夫が要ります。C++ 版 (ImGui) と Python 版 (Tk) の両方にあります (同じ動き。Python 版は `python/maze/maze_mode.py` / `python/maze/maze_ui.py`)。
 
 ## ステージ
 
@@ -68,7 +68,7 @@ LLM には次の形だけを出させます (llama-server の JSON スキーマ�
 - 1 回の指示で命令は 10 個まで。移動と関係の無い指示は `moves` が空になり、「読み取れませんでした」と出します。
 
 LLM には盤面 (ロボットの位置) を見せません。道順を考えるのはプレイヤーで、LLM は言葉を命令に訳すだけです。
-訳す係の system プロンプトは `src/maze_mode.cpp` の `TRANSLATOR_PROMPT` です。
+訳す係の system プロンプトは `src/maze/maze_mode.cpp` の `TRANSLATOR_PROMPT` です。
 ステージ 3 では `HINT_PROMPT` を足し、時計の文字盤の向き・「空は上」などの常識を教えます。
 
 ## モデルごとの通じやすさ (目安)

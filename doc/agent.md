@@ -138,7 +138,7 @@ llama-server はスキーマから文法を作って出力を縛るので、4B �
 
 スキーマでは `reason` を `use_rag` より先に置いています。先に理由を書かせてから結論を出させるほうが、判断が安定します。
 
-## API (src/agent.h)
+## API (src/common/agent.h)
 
 ```cpp
 struct Agent

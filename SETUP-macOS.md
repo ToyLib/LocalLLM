@@ -146,6 +146,6 @@ llama-server \
 
 ## 7. 注意事項
 
-- 本文をタイトルバーの下まで広げ、タイトルバーも本文と同じ半透明にする (`src/macos_window.mm`)。
+- 本文をタイトルバーの下まで広げ、タイトルバーも本文と同じ半透明にする (`src/common/macos_window.mm`)。
 - Retina ディスプレイでは SDL3 の高解像度対応 (`SDL_WINDOW_HIGH_PIXEL_DENSITY`) により、文字がくっきり表示される。
 - この手順は macOS 27 の実機で、環境構築から LocalLLM のビルド・実行まで確認済み。

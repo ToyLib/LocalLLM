@@ -37,7 +37,7 @@ if (-not $env:APPDATA -or -not $env:USERPROFILE) {
     exit 1
 }
 
-# Same place as UserDataDirectory (src/config.cpp) and user_data_directory (python/config.py)
+# Same place as UserDataDirectory (src/common/config.cpp) and user_data_directory (python/common/config.py)
 $DataDir = Join-Path $env:APPDATA 'LocalLLM'
 
 # Whole: never  = only the GGUF model folders inside (shared with other tools)

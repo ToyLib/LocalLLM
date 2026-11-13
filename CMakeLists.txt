@@ -71,27 +71,30 @@ target_link_libraries(imgui PUBLIC SDL3::SDL3)
 
 add_executable(LocalLLM
     src/main.cpp
-    src/agent.cpp
-    src/chat.cpp
-    src/chat_ui.cpp
-    src/quiz_mode.cpp
-    src/quiz_ui.cpp
-    src/maze_mode.cpp
-    src/maze_ui.cpp
-    src/config.cpp
-    src/font.cpp
-    src/ime.cpp
-    src/llm_client.cpp
-    src/rag.cpp
-    src/server_manager.cpp
-    src/settings_ui.cpp
+    src/common/agent.cpp
+    src/chat/chat.cpp
+    src/chat/chat_ui.cpp
+    src/quiz/quiz_mode.cpp
+    src/quiz/quiz_ui.cpp
+    src/maze/maze_mode.cpp
+    src/maze/maze_ui.cpp
+    src/common/config.cpp
+    src/common/font.cpp
+    src/common/ime.cpp
+    src/common/llm_client.cpp
+    src/common/rag.cpp
+    src/common/server_manager.cpp
+    src/common/settings_ui.cpp
 )
+
+# #include "common/config.h" のように src/ からの相対パスで書く
+target_include_directories(LocalLLM PRIVATE src)
 
 # macOS ではタイトルバーの設定に AppKit を使う (Objective-C++)
 if(APPLE)
     enable_language(OBJCXX)
-    target_sources(LocalLLM PRIVATE src/macos_window.mm)
-    set_source_files_properties(src/macos_window.mm
+    target_sources(LocalLLM PRIVATE src/common/macos_window.mm)
+    set_source_files_properties(src/common/macos_window.mm
         PROPERTIES COMPILE_OPTIONS -fobjc-arc)
     target_link_libraries(LocalLLM PRIVATE "-framework AppKit")
 endif()

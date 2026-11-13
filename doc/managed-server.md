@@ -1,7 +1,7 @@
 # llama-server の自動起動 (server_manager)
 
 アプリが `llama-server` (チャット用と埋め込み用) を子プロセスとして起動・監視・停止する部分の説明です。
-対象のファイルは [src/server_manager.h](../src/server_manager.h)、[src/server_manager.cpp](../src/server_manager.cpp)、[python/server_manager.py](../python/server_manager.py) です。
+対象のファイルは [src/common/server_manager.h](../src/common/server_manager.h)、[src/common/server_manager.cpp](../src/common/server_manager.cpp)、[python/common/server_manager.py](../python/common/server_manager.py) です。
 設計の経緯は [managed-server-plan.md](managed-server-plan.md) にあります。
 
 通信はこれまでどおり HTTP なので、`llm_client` は変わりません。

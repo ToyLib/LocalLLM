@@ -1,19 +1,19 @@
 # GUI アプリとしての構成
 
 このドキュメントでは、チャット画面を表示する GUI アプリの部分を解説します。
-対象のファイルは `src/` 以下の次のファイルです。
+対象のファイルは `src/` 以下の次のファイルです。機能ごとに `common/` (共通)、`chat/`、`quiz/`、`maze/` のフォルダーに分けています (`main.cpp` だけ `src/` 直下)。Python 版 (`python/`) も同じ分け方です。
 
 | ファイル | 内容 |
 | --- | --- |
 | [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
-| [chat.h](../src/chat.h) / [chat.cpp](../src/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
-| [chat_ui.h](../src/chat_ui.h) / [chat_ui.cpp](../src/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`) |
-| [quiz_ui.h](../src/quiz_ui.h) / [quiz_ui.cpp](../src/quiz_ui.cpp)、[quiz_mode.h](../src/quiz_mode.h) / [quiz_mode.cpp](../src/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
-| [settings_ui.h](../src/settings_ui.h) / [settings_ui.cpp](../src/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
-| [config.h](../src/config.h) / [config.cpp](../src/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
-| [ime.h](../src/ime.h) / [ime.cpp](../src/ime.cpp) | IME の変換中の文字列の表示 |
-| [font.h](../src/font.h) / [font.cpp](../src/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
-| [macos_window.h](../src/macos_window.h) / [macos_window.mm](../src/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
+| [chat.h](../src/chat/chat.h) / [chat.cpp](../src/chat/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
+| [chat_ui.h](../src/chat/chat_ui.h) / [chat_ui.cpp](../src/chat/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`) |
+| [quiz_ui.h](../src/quiz/quiz_ui.h) / [quiz_ui.cpp](../src/quiz/quiz_ui.cpp)、[quiz_mode.h](../src/quiz/quiz_mode.h) / [quiz_mode.cpp](../src/quiz/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
+| [settings_ui.h](../src/common/settings_ui.h) / [settings_ui.cpp](../src/common/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
+| [config.h](../src/common/config.h) / [config.cpp](../src/common/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
+| [ime.h](../src/common/ime.h) / [ime.cpp](../src/common/ime.cpp) | IME の変換中の文字列の表示 |
+| [font.h](../src/common/font.h) / [font.cpp](../src/common/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
+| [macos_window.h](../src/common/macos_window.h) / [macos_window.mm](../src/common/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
 全体の流れは [architecture.md](architecture.md)、設定ファイルは [config.md](config.md) にまとめています。
 LLM サーバーとの通信 (`AskLLM`) については [llm-client.md](llm-client.md)、回答役の選び方は [agent.md](agent.md)、資料の検索は [rag.md](rag.md)、ChatGPT への聞き直しは [chatgpt.md](chatgpt.md) を参照してください。

@@ -140,7 +140,7 @@ cmake --build build --parallel
 | ChatGPT の接続先・モデル | `config/server.json` の `cloud` ([説明](doc/chatgpt.md)) |
 | ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)。何が送られるかは [doc/privacy.md](doc/privacy.md)) |
 | 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |
-| 最大トークン数 | `src/llm_client.cpp` の `max_tokens` |
+| 最大トークン数 | `src/common/llm_client.cpp` の `max_tokens` |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
 | 背景の不透明度 | `config/ui.json` の `window_opacity` (0〜1、既定 0.85) |
 | フォントファイル | `config/ui.json` の `font_file` (相対パスは実行ファイルのフォルダーから。既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`)。環境変数 `LOCALLLM_FONT` があればそちらを優先 |
@@ -196,14 +196,14 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | ファイル | 内容 (対応する C++ のファイル) |
 | --- | --- |
 | `python/main.py` | 起動 (`main.cpp`) |
-| `python/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
-| `python/quiz_ui.py` / `python/quiz_mode.py` | クイズタブ (`quiz_ui.cpp` / `quiz_mode.cpp`) |
-| `python/maze_ui.py` / `python/maze_mode.py` | 迷路タブ (`maze_ui.cpp` / `maze_mode.cpp`) |
-| `python/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
-| `python/agent.py` | ルーター / アシスタント / 汎用の回答役 (`agent.cpp`) |
-| `python/config.py` | `config/` の設定ファイルの読み込み (`config.cpp`) |
-| `python/llm_client.py` | ストリーミング送信と SSE の解析、埋め込みの取得 (`llm_client.cpp`) |
-| `python/rag.py` | RAG のインデックス作成と検索 (`rag.cpp`) |
+| `python/chat/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
+| `python/quiz/quiz_ui.py` / `python/quiz/quiz_mode.py` | クイズタブ (`quiz_ui.cpp` / `quiz_mode.cpp`) |
+| `python/maze/maze_ui.py` / `python/maze/maze_mode.py` | 迷路タブ (`maze_ui.cpp` / `maze_mode.cpp`) |
+| `python/chat/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
+| `python/common/agent.py` | ルーター / アシスタント / 汎用の回答役 (`agent.cpp`) |
+| `python/common/config.py` | `config/` の設定ファイルの読み込み (`config.cpp`) |
+| `python/common/llm_client.py` | ストリーミング送信と SSE の解析、埋め込みの取得 (`llm_client.cpp`) |
+| `python/common/rag.py` | RAG のインデックス作成と検索 (`rag.cpp`) |
 
 ## VS Code
 
@@ -217,16 +217,16 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | ファイル | 内容 |
 | --- | --- |
 | `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
-| `src/chat.cpp` / `src/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
-| `src/agent.cpp` / `src/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
-| `src/chat_ui.cpp` / `src/chat_ui.h` | チャット画面の組み立て |
-| `src/quiz_ui.cpp` / `src/quiz_mode.cpp` | クイズタブ ([説明](doc/quiz.md)) |
-| `src/maze_ui.cpp` / `src/maze_mode.cpp` | 迷路タブ ([説明](doc/maze.md)) |
-| `src/ime.cpp` / `src/ime.h` | IME の変換中の文字列の表示 |
-| `src/font.cpp` / `src/font.h` | 日本語フォントの読み込み |
-| `src/llm_client.cpp` / `src/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
-| `src/rag.cpp` / `src/rag.h` | RAG のインデックス作成と検索 |
-| `src/server_manager.cpp` / `src/server_manager.h` | `llama-server` の起動・監視・停止 |
+| `src/chat/chat.cpp` / `src/chat/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
+| `src/common/agent.cpp` / `src/common/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
+| `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャット画面の組み立て |
+| `src/quiz/quiz_ui.cpp` / `src/quiz/quiz_mode.cpp` | クイズタブ ([説明](doc/quiz.md)) |
+| `src/maze/maze_ui.cpp` / `src/maze/maze_mode.cpp` | 迷路タブ ([説明](doc/maze.md)) |
+| `src/common/ime.cpp` / `src/common/ime.h` | IME の変換中の文字列の表示 |
+| `src/common/font.cpp` / `src/common/font.h` | 日本語フォントの読み込み |
+| `src/common/llm_client.cpp` / `src/common/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
+| `src/common/rag.cpp` / `src/common/rag.h` | RAG のインデックス作成と検索 |
+| `src/common/server_manager.cpp` / `src/common/server_manager.h` | `llama-server` の起動・監視・停止 |
 | `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [迷路](doc/maze.md) / [llama-server の自動起動](doc/managed-server.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `llama-release.json` | 同梱する `llama-server` の公式リリース (タグとハッシュ) |

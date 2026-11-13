@@ -52,7 +52,7 @@ if [[ -z "${HOME:-}" ]]; then
     exit 1
 fi
 
-# Same place as UserDataDirectory (src/config.cpp) and user_data_directory (python/config.py)
+# Same place as UserDataDirectory (src/common/config.cpp) and user_data_directory (python/common/config.py)
 if [[ "$(uname -s)" == "Darwin" ]]; then
     DATA_DIR="$HOME/Library/Application Support/LocalLLM"
 else

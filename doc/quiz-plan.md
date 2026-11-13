@@ -78,10 +78,10 @@ JSON を検証し (正解と誤りの 3 つがそろい、空でなく重複し�
 
 | ファイル | 内容 |
 | --- | --- |
-| `python/quiz_mode.py` | 分野の読み込み、出題 (JSON)、採点、先読み、結果のメッセージ (画面を知らない) |
-| `python/quiz_ui.py` | クイズタブ (`QuizTab`) |
-| `python/rag.py` | チャンクを重複なしで選ぶ関数を追加 |
-| `python/chat_ui.py` | チャット画面を `Notebook` の 1 タブにする |
+| `python/quiz/quiz_mode.py` | 分野の読み込み、出題 (JSON)、採点、先読み、結果のメッセージ (画面を知らない) |
+| `python/quiz/quiz_ui.py` | クイズタブ (`QuizTab`) |
+| `python/common/rag.py` | チャンクを重複なしで選ぶ関数を追加 |
+| `python/chat/chat_ui.py` | チャット画面を `Notebook` の 1 タブにする |
 | `config/quiz.json` | 分野、出題数、プロンプト、メッセージ |
 | `doc/quiz.md` | 実装後の説明 |
 

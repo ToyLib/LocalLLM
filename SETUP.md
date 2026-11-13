@@ -114,17 +114,17 @@ LocalLLM/
 | ファイル | 役割 |
 |---|---|
 | src/main.cpp | SDL3 + ImGui の初期化、イベント処理、メインループ |
-| src/chat.h/.cpp | 会話の状態、ワーカースレッド管理、ChatGPT への聞き直し |
-| src/chat_ui.h/.cpp | チャット画面 |
-| src/settings_ui.h/.cpp | 設定画面 |
-| src/agent.h/.cpp | ルーター・回答役・ChatGPT・書き直しのエージェント |
-| src/rag.h/.cpp | RAG のインデックス作成と検索 |
-| src/config.h/.cpp | 設定ファイルの読み書き、API キー |
-| src/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理、埋め込み |
-| src/server_manager.h/.cpp | llama-server の起動・監視・停止 ([doc/managed-server.md](doc/managed-server.md)) |
-| src/ime.h/.cpp | IME の変換中の文字列の表示 |
-| src/font.h/.cpp | 日本語フォントの読み込み |
-| src/macos_window.h/.mm | macOS のタイトルバーの設定 |
+| src/chat/chat.h/.cpp | 会話の状態、ワーカースレッド管理、ChatGPT への聞き直し |
+| src/chat/chat_ui.h/.cpp | チャット画面 |
+| src/common/settings_ui.h/.cpp | 設定画面 |
+| src/common/agent.h/.cpp | ルーター・回答役・ChatGPT・書き直しのエージェント |
+| src/common/rag.h/.cpp | RAG のインデックス作成と検索 |
+| src/common/config.h/.cpp | 設定ファイルの読み書き、API キー |
+| src/common/llm_client.h/.cpp | HTTP 通信、SSE ストリーミングの解析、中断処理、埋め込み |
+| src/common/server_manager.h/.cpp | llama-server の起動・監視・停止 ([doc/managed-server.md](doc/managed-server.md)) |
+| src/common/ime.h/.cpp | IME の変換中の文字列の表示 |
+| src/common/font.h/.cpp | 日本語フォントの読み込み |
+| src/common/macos_window.h/.mm | macOS のタイトルバーの設定 |
 | config/ | 設定の既定値 (ビルド時に実行ファイルの隣へコピー。[doc/config.md](doc/config.md)) |
 | rag/ | RAG の資料 (ビルド時に実行ファイルの隣へコピー。[doc/rag.md](doc/rag.md)) |
 | python/ | Python + Tk 版のクライアント ([doc/python-app.md](doc/python-app.md)) |
@@ -219,7 +219,7 @@ C/C++ と CMake Tools の拡張機能を入れて開く。Ctrl+Shift+B (macOS �
 
 M PLUS Rounded 1c に含まれない文字 (JIS 第3・第4水準の漢字など) は、OS の日本語フォントで補う (ImGui のフォント合成)。OS の日本語フォントが見つからない場合は、M PLUS Rounded 1c に無い文字は表示されない。
 
-| OS | 補完に使う OS のフォント (`src/font.cpp` の `SYSTEM_FONT_PATHS`) |
+| OS | 補完に使う OS のフォント (`src/common/font.cpp` の `SYSTEM_FONT_PATHS`) |
 |---|---|
 | Linux | `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` (Ubuntu)、`/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc` (Arch 系) |
 | macOS | `/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc`、`/System/Library/Fonts/Hiragino Sans GB.ttc` |

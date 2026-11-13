@@ -1,7 +1,7 @@
 # LLM への問い合わせ (llm_client)
 
 このドキュメントでは、ローカルの LLM サーバーに質問を送り、回答をストリーミングで受け取る部分を解説します。
-対象のファイルは [src/llm_client.h](../src/llm_client.h) と [src/llm_client.cpp](../src/llm_client.cpp) です。
+対象のファイルは [src/common/llm_client.h](../src/common/llm_client.h) と [src/common/llm_client.cpp](../src/common/llm_client.cpp) です。
 
 GUI 側のコード (画面の描画やスレッドの扱い) については [gui-app.md](gui-app.md) を参照してください。
 
@@ -120,7 +120,7 @@ API はステートレスなので、毎回それまでの会話をすべて送�
 ]
 ```
 
-system メッセージは、回答役のエージェント (`src/agent.cpp` の `RunAgent`) が先頭に入れます ([エージェント](agent.md))。user と assistant のメッセージは GUI 側 (`src/chat.cpp` の `SendPrompt`) が画面に表示しているメッセージから組み立てます。
+system メッセージは、回答役のエージェント (`src/common/agent.cpp` の `RunAgent`) が先頭に入れます ([エージェント](agent.md))。user と assistant のメッセージは GUI 側 (`src/chat/chat.cpp` の `SendPrompt`) が画面に表示しているメッセージから組み立てます。
 
 ## AskLLM の処理の流れ
 

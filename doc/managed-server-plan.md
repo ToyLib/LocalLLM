@@ -148,12 +148,12 @@ Windows の第一候補は、今の手順と同じ Vulkan 版です。macOS で�
 
 | ファイル | 変更 |
 | --- | --- |
-| `src/server_manager.cpp/.h` (新規) | 探索、起動、`/health` の待機、監視、停止。専用のスレッドで動かし、状態が変わったら UI を起こす |
-| `python/server_manager.py` (新規) | 同じ内容を `subprocess` で。初回のダウンロードもここ |
+| `src/common/server_manager.cpp/.h` (新規) | 探索、起動、`/health` の待機、監視、停止。専用のスレッドで動かし、状態が変わったら UI を起こす |
+| `python/common/server_manager.py` (新規) | 同じ内容を `subprocess` で。初回のダウンロードもここ |
 | `src/main.cpp` | `StartRagIndexing` より前に起動し、`JoinRagWorker` のあと、`SDL_Quit` の前に止める |
 | `src/chat*` | Ready になるまで送信を無効にし、状態を表示する |
-| `src/rag.cpp` | 埋め込みサーバーが Ready になるまでインデックス作成を待つ |
-| `src/settings_ui.cpp`、`python/settings_ui.py` | 自動起動のオン・オフ、モデルの選択、`llama-server` の場所、状態の表示 |
+| `src/common/rag.cpp` | 埋め込みサーバーが Ready になるまでインデックス作成を待つ |
+| `src/common/settings_ui.cpp`、`python/common/settings_ui.py` | 自動起動のオン・オフ、モデルの選択、`llama-server` の場所、状態の表示 |
 | `CMakeLists.txt` | リリースの取得と `llama/` へのコピー |
 
 C++ 版は SDL3 の `SDL_CreateProcessWithProperties` を使い、OS ごとの分岐を減らします。

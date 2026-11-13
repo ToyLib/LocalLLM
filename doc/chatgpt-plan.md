@@ -187,8 +187,8 @@ OpenAI のエラー本文は `{"error": {"message": ...}}` の形なので、`me
 
 | 内容 | C++ 版 | Python 版 |
 | --- | --- | --- |
-| プロファイル・認証ヘッダー・リクエストの違い | `src/llm_client.cpp` | `python/llm_client.py` |
-| 秘密ファイルとキーの検索 | `src/config.cpp` | `python/config.py` |
-| 書き直し役・聞き直しの流れ | `src/agent.cpp`, `src/chat.cpp` | `python/agent.py`, `python/chat.py` |
-| ボタン・確認ダイアログ・表示 | `src/chat_ui.cpp` | `python/chat_ui.py` |
-| API キーの登録画面 | `src/settings_ui.cpp` | `python/settings_ui.py` |
+| プロファイル・認証ヘッダー・リクエストの違い | `src/common/llm_client.cpp` | `python/common/llm_client.py` |
+| 秘密ファイルとキーの検索 | `src/common/config.cpp` | `python/common/config.py` |
+| 書き直し役・聞き直しの流れ | `src/common/agent.cpp`, `src/chat/chat.cpp` | `python/common/agent.py`, `python/chat/chat.py` |
+| ボタン・確認ダイアログ・表示 | `src/chat/chat_ui.cpp` | `python/chat/chat_ui.py` |
+| API キーの登録画面 | `src/common/settings_ui.cpp` | `python/common/settings_ui.py` |

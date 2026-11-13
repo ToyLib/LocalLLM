@@ -1,15 +1,15 @@
 // アプリの入口: ウィンドウと ImGui の初期化、メインループ、終了処理
 
-#include "chat.h"
-#include "chat_ui.h"
-#include "quiz_mode.h"
-#include "maze_mode.h"
-#include "config.h"
-#include "font.h"
-#include "ime.h"
-#include "rag.h"
-#include "server_manager.h"
-#include "settings_ui.h"
+#include "chat/chat.h"
+#include "chat/chat_ui.h"
+#include "quiz/quiz_mode.h"
+#include "maze/maze_mode.h"
+#include "common/config.h"
+#include "common/font.h"
+#include "common/ime.h"
+#include "common/rag.h"
+#include "common/server_manager.h"
+#include "common/settings_ui.h"
 
 #include <SDL3/SDL.h>
 #include <curl/curl.h>
@@ -18,7 +18,7 @@
 #include <imgui_impl_sdlrenderer3.h>
 
 #if defined(__APPLE__)
-#include "macos_window.h"
+#include "common/macos_window.h"
 #endif
 
 #include <string>
