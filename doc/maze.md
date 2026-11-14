@@ -68,8 +68,10 @@ LLM には次の形だけを出させます (llama-server の JSON スキーマ�
 - 1 回の指示で命令は 10 個まで。移動と関係の無い指示は `moves` が空になり、「読み取れませんでした」と出します。
 
 LLM には盤面 (ロボットの位置) を見せません。道順を考えるのはプレイヤーで、LLM は言葉を命令に訳すだけです。
-訳す係の system プロンプトは `src/maze/maze_mode.cpp` の `TRANSLATOR_PROMPT` です。
-ステージ 3 では `HINT_PROMPT` を足し、時計の文字盤の向き・「空は上」などの常識を教えます。
+訳す係の system プロンプトは、`agents.json` の `maze` です。
+ステージ 3 では `maze_hint` を足し、時計の文字盤の向き・「空は上」などの常識を教えます。
+どちらも設定画面の「システムプロンプト」タブ (迷路・迷路のヒント) で直せます。
+`agents.json` に無いときは、アプリに入っている既定値 (`src/common/agent.cpp` の `DEFAULT_MAZE_PROMPT` / `DEFAULT_MAZE_HINT_PROMPT`、Python 版は `agent.py` の `DEFAULT_AGENTS`) を使います。
 
 ## モデルごとの通じやすさ (目安)
 

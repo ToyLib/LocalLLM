@@ -78,9 +78,12 @@ Comparison CompareAnswers(
     const std::atomic<bool>& cancel,
     bool webSearch = false);
 
-// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter / comparer / web_comparer のみ。ほかは空)
+// agents.json に key が無いときに使う名前と system プロンプト (cloud / rewriter / comparer / web_comparer / maze / maze_hint のみ。ほかは空)
 std::string DefaultAgentName(const std::string& key);
 std::string DefaultAgentPrompt(const std::string& key);
+
+// key の system プロンプト (agents.json にあればそれ、無ければ既定値)
+std::string LoadPrompt(const std::string& key);
 
 // ルーターの判断
 struct RouteDecision

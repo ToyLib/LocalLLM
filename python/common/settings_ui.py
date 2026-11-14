@@ -56,6 +56,8 @@ AGENT_ENTRIES = (
     ("rewriter", "口調の書き直し"),
     ("comparer", "違いのまとめ"),
     ("web_comparer", "Web 検索の違いのまとめ"),
+    ("maze", "迷路"),
+    ("maze_hint", "迷路のヒント"),
 )
 
 # 回答役 (人格のテンプレートと、ChatGPT の回答の書き直しを選べる)
@@ -386,6 +388,16 @@ class SettingsDialog:
                 ttk.Label(
                     page, foreground=NOTE_COLOR,
                     text="Web でも調べた後、検索なしの回答との違いをローカルの LLM でまとめるときの指示です。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            elif key == "maze":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="迷路で、日本語の指示を移動命令 (JSON) に訳す係の system プロンプトです。",
+                ).pack(side="top", fill="x", pady=(0, 6))
+            elif key == "maze_hint":
+                ttk.Label(
+                    page, foreground=NOTE_COLOR,
+                    text="迷路のステージ 3 (向きの言葉禁止) で、上の迷路のプロンプトの後ろに足す説明です。",
                 ).pack(side="top", fill="x", pady=(0, 6))
             else:
                 row = ttk.Frame(page)

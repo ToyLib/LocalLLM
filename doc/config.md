@@ -95,6 +95,7 @@
 | `rewriter` | `name`、`system_prompt` | 既定のプロンプト |
 | `comparer` | `name`、`system_prompt` | 既定のプロンプト |
 | `web_comparer` | `name`、`system_prompt` | 既定のプロンプト |
+| `maze` / `maze_hint` | `name`、`system_prompt` | 既定のプロンプト ([maze.md](maze.md)) |
 
 `system_prompt` は文字列か、文字列の配列 (区切りなしでつなげる) です。ルーターの `maxTokens` / `temperature` / JSON スキーマなど、コードと結びついた設定は `agent.cpp` / `agent.py` にあります。
 

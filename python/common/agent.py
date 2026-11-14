@@ -10,7 +10,7 @@ from common import config
 from common.llm_client import (
     CancelToken, DeltaCallback, LLMError, LLMOptions, ask_llm, load_cloud_settings)
 
-# agents.json に cloud / rewriter / comparer が無いとき (前の版の設定ファイル) に使う名前と system プロンプト
+# agents.json に cloud / rewriter / comparer / maze などが無いとき (前の版の設定ファイル) に使う名前と system プロンプト
 DEFAULT_AGENTS = {
     "cloud": (
         "ChatGPT",
@@ -48,6 +48,34 @@ DEFAULT_AGENTS = {
         "verdict は、食い違う点が1つでもあれば「食い違いあり」、"
         "食い違いは無く、検索ありの回答のほうが情報が多ければ「情報が増えた」、"
         "内容がほぼ同じなら「ほぼ同じ」にします。",
+    ),
+    # 迷路 (指示を移動命令に訳す係と、向きの言葉を禁止するステージで足す説明)
+    # 向きの言葉は、断りが無ければ画面から見た向きにする (ロボットから見た右と取り違えないように)
+    "maze": (
+        "迷路",
+        "あなたは、ロボットへの日本語の指示を移動命令に変換する係です。"
+        "ロボットはマス目の上を動きます。"
+        "dir は画面から見た向きで、上は up、下は down、左は left、右は right です。"
+        "向きを表す言葉 (右・上・北・3時の方向など) は、特に断りが無ければ、すべて画面から見た向きです。"
+        "steps は進むマス数 (1〜5) です。"
+        "数が書かれていなければ 1 にします。"
+        "「ぶつかるまで」「行けるところまで」「行けるだけ」「突き当たりまで」「ずっと」のように、止まる場所まで進む指示なら until_blocked を true にします (steps は 1 にしておきます)。"
+        "それ以外は false です。"
+        "「しばらく」「ちょっと」のようなあいまいな言い方は、あなたの判断でマス数を決めます。"
+        "ロボットから見た向きで言われたときは、dir に次の値を使います。"
+        "向きの計算はしなくてよく、言葉をそのまま置き換えます。"
+        "まっすぐ・前へ・そのまま進む → forward、振り返って・後ろへ・来た方へ戻る・向いている方の反対へ → back、時計回りに曲がって → turn_cw、反時計回りに曲がって → turn_ccw。"
+        "turn_cw と turn_ccw は、曲がってから、そのまま steps マス (until_blocked なら進めるところまで) 進む 1 つの命令です。"
+        "曲がった後の移動を forward に分けないでください。"
+        "指示に書かれた順に、命令を並べます。"
+        "移動と関係の無い指示なら、moves を空にします。"
+        "指示に無い移動を足さないでください。",
+    ),
+    "maze_hint": (
+        "迷路 (向きの言い換えのヒント)",
+        "時計の文字盤の向きは、12時が up、3時が right、6時が down、9時が left です。"
+        "空・天井・頭の方は up、地面・床・足もとの方は down です。"
+        "お箸を持つ手の方は right、お茶碗を持つ手の方は left です。",
     ),
 }
 
@@ -151,6 +179,12 @@ def _load_agent_or_default(key: str) -> Agent:
 
     name, prompt = DEFAULT_AGENTS[key]
     return Agent(name=name, system_prompt=prompt, key=key)
+
+
+def load_prompt(key: str) -> str:
+    """key の system プロンプト (agents.json にあればそれ、無ければ DEFAULT_AGENTS の既定値)"""
+
+    return _load_agent_or_default(key).system_prompt
 
 
 def _create_router() -> Agent:

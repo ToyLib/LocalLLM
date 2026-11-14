@@ -14,33 +14,6 @@
 namespace
 {
 
-// 指示を命令に訳す係の system プロンプト
-// 盤面 (ロボットの位置) は見せず、言葉を命令に置き換えることだけをさせる
-// 向きの言葉は、断りが無ければ画面から見た向きにする (ロボットから見た右と取り違えないように)
-constexpr const char* TRANSLATOR_PROMPT =
-    "あなたは、ロボットへの日本語の指示を移動命令に変換する係です。"
-    "ロボットはマス目の上を動きます。"
-    "dir は画面から見た向きで、上は up、下は down、左は left、右は right です。"
-    "向きを表す言葉 (右・上・北・3時の方向など) は、特に断りが無ければ、すべて画面から見た向きです。"
-    "steps は進むマス数 (1〜5) です。数が書かれていなければ 1 にします。"
-    "「ぶつかるまで」「行けるところまで」「行けるだけ」「突き当たりまで」「ずっと」のように、"
-    "止まる場所まで進む指示なら until_blocked を true にします (steps は 1 にしておきます)。それ以外は false です。"
-    "「しばらく」「ちょっと」のようなあいまいな言い方は、あなたの判断でマス数を決めます。"
-    "ロボットから見た向きで言われたときは、dir に次の値を使います。向きの計算はしなくてよく、言葉をそのまま置き換えます。"
-    "まっすぐ・前へ・そのまま進む → forward、振り返って・後ろへ・来た方へ戻る・向いている方の反対へ → back、"
-    "時計回りに曲がって → turn_cw、反時計回りに曲がって → turn_ccw。"
-    "turn_cw と turn_ccw は、曲がってから、そのまま steps マス (until_blocked なら進めるところまで) 進む 1 つの命令です。"
-    "曲がった後の移動を forward に分けないでください。"
-    "指示に書かれた順に、命令を並べます。"
-    "移動と関係の無い指示なら、moves を空にします。"
-    "指示に無い移動を足さないでください。";
-
-// 向きの言葉を禁止するステージで足す説明 (小さいモデルでも言い換えが通じるように、よくある言い方の常識を添える)
-constexpr const char* HINT_PROMPT =
-    "時計の文字盤の向きは、12時が up、3時が right、6時が down、9時が left です。"
-    "空・天井・頭の方は up、地面・床・足もとの方は down です。"
-    "お箸を持つ手の方は right、お茶碗を持つ手の方は left です。";
-
 constexpr int TRANSLATOR_MAX_TOKENS = 512;
 
 // 1 回の指示で受け付ける命令の数
@@ -190,11 +163,13 @@ void Translate(
 {
     Agent agent;
     agent.name = "迷路";
-    agent.systemPrompt = TRANSLATOR_PROMPT;
+
+    // system プロンプトは設定 (agents.json の maze / maze_hint) から。無ければ既定値
+    agent.systemPrompt = LoadPrompt("maze");
 
     if (hints)
     {
-        agent.systemPrompt += HINT_PROMPT;
+        agent.systemPrompt += LoadPrompt("maze_hint");
     }
 
     agent.options.maxTokens = TRANSLATOR_MAX_TOKENS;

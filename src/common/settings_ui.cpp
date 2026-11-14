@@ -122,6 +122,8 @@ constexpr AgentEntry AGENT_ENTRIES[] = {
     {"rewriter", "口調の書き直し"},
     {"comparer", "違いのまとめ"},
     {"web_comparer", "Web 検索の違いのまとめ"},
+    {"maze", "迷路"},
+    {"maze_hint", "迷路のヒント"},
 };
 
 bool IsAnswerer(const std::string& key)
@@ -675,6 +677,16 @@ void DrawPromptTab(SettingsState& settings, float footerHeight)
         {
             ImGui::TextDisabled(
                 "Web でも調べた後、検索なしの回答との違いをローカルの LLM でまとめるときの指示です。");
+        }
+        else if (agent.key == "maze")
+        {
+            ImGui::TextDisabled(
+                "迷路で、日本語の指示を移動命令 (JSON) に訳す係の system プロンプトです。");
+        }
+        else if (agent.key == "maze_hint")
+        {
+            ImGui::TextDisabled(
+                "迷路のステージ 3 (向きの言葉禁止) で、迷路のプロンプトの後ろに足す説明です。");
         }
         else
         {
