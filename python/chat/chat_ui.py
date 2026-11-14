@@ -159,11 +159,18 @@ class ChatApp:
         # サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
         self._build_server_bar()
 
+        # 設定はどのタブからでも開けるように、タブの上の行の右端に置く
+        top_bar = ttk.Frame(root, padding=(8, 4, 8, 0))
+        top_bar.pack(side="top", fill="x")
+        ttk.Button(top_bar, text="設定", command=self._open_settings).pack(
+            side="right")
+
         # チャット画面は Notebook の 1 枚目のタブ。部品の親は chat_frame
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(side="top", fill="both", expand=True)
         self.chat_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.chat_frame, text="チャット")
+
 
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
@@ -217,9 +224,6 @@ class ChatApp:
         self.reload_button = ttk.Button(
             bar, text="再読込", command=lambda: rag.start_indexing(self.rag))
         self.reload_button.pack(side="left", padx=(12, 0))
-
-        ttk.Button(bar, text="設定", command=self._open_settings).pack(
-            side="right")
 
         self.rag_status = ttk.Label(bar)
         self.rag_status.pack(side="left", padx=(8, 0))

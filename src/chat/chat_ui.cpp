@@ -262,7 +262,7 @@ void DrawConfirmPopup(ChatState& state)
 }
 
 // RAG のオン/オフとインデックスの状態
-void DrawRagBar(ChatState& state, RagState& rag, SettingsState& settings)
+void DrawRagBar(ChatState& state, RagState& rag)
 {
     bool building;
     std::string status;
@@ -303,18 +303,6 @@ void DrawRagBar(ChatState& state, RagState& rag, SettingsState& settings)
 
     ImGui::SameLine();
     ImGui::TextDisabled("%s", status.c_str());
-
-    // 設定ボタンは右端
-    const float buttonWidth = ImGui::CalcTextSize("設定").x +
-        ImGui::GetStyle().FramePadding.x * 2.0f;
-    ImGui::SameLine(std::max(
-        ImGui::GetCursorPosX(),
-        ImGui::GetContentRegionMax().x - buttonWidth));
-
-    if (ImGui::SmallButton("設定"))
-    {
-        settings.requestOpen = true;
-    }
 }
 
 // llama-server が使えないときだけ、状態を 1 行ずつ出す
@@ -413,6 +401,23 @@ void DrawUI(
     // サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
     DrawServerBar(ActiveUiSettings(settings).colors);
 
+    // 設定ボタンはどのタブからでも開けるように、タブの行の右端に重ねる
+    {
+        const float buttonWidth = ImGui::CalcTextSize("設定").x +
+            style.FramePadding.x * 2.0f;
+        const ImVec2 tabsPos = ImGui::GetCursorPos();
+
+        ImGui::SetCursorPos(ImVec2(
+            ImGui::GetContentRegionMax().x - buttonWidth, tabsPos.y));
+
+        if (ImGui::SmallButton("設定"))
+        {
+            settings.requestOpen = true;
+        }
+
+        ImGui::SetCursorPos(tabsPos);
+    }
+
     // チャット・クイズ・迷路はタブで切り替える
     // (閉じているタブの状態も、ワーカースレッドで動き続ける)
     if (ImGui::BeginTabBar("tabs"))
@@ -426,7 +431,7 @@ void DrawUI(
     // チャットのタブの中身 (インデントは、タブを足す前のまま)
     if (ImGui::BeginTabItem("チャット", nullptr, chatFlags))
     {
-    DrawRagBar(state, rag, settings);
+    DrawRagBar(state, rag);
 
     // 会話表示 (高さは残りから入力欄などの分を引いたもの)
     ImGui::BeginChild(
