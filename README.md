@@ -224,6 +224,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャット画面の組み立て |
 | `src/quiz/quiz_ui.cpp` / `src/quiz/quiz_mode.cpp` | クイズタブ ([説明](doc/quiz.md)) |
 | `src/maze/maze_ui.cpp` / `src/maze/maze_mode.cpp` | 迷路タブ ([説明](doc/maze.md)) |
+| `src/common/widgets.cpp` / `src/common/widgets.h` | ImGui の薄いラッパー (スコープで閉じる Begin/End など) |
 | `src/common/ime.cpp` / `src/common/ime.h` | IME の変換中の文字列の表示 |
 | `src/common/font.cpp` / `src/common/font.h` | 日本語フォントの読み込み |
 | `src/common/llm_client.cpp` / `src/common/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |

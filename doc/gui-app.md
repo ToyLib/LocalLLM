@@ -14,6 +14,7 @@
 | [settings_ui.h](../src/common/settings_ui.h) / [settings_ui.cpp](../src/common/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
 | [config.h](../src/common/config.h) / [config.cpp](../src/common/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
 | [ime.h](../src/common/ime.h) / [ime.cpp](../src/common/ime.cpp) | IME の変換中の文字列の表示 |
+| [widgets.h](../src/common/widgets.h) / [widgets.cpp](../src/common/widgets.cpp) | ImGui の薄いラッパー (`ui::`)。Begin/End・Push/Pop の組をスコープで閉じるクラスと、折り返すテキスト・押せないことがあるボタン |
 | [font.h](../src/common/font.h) / [font.cpp](../src/common/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
 | [macos_window.h](../src/common/macos_window.h) / [macos_window.mm](../src/common/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
@@ -44,6 +45,34 @@ if (ImGui::Button("送信"))   // ボタンを描き、押されたフレーム�
 
 画面の状態 (会話の内容や入力中の文字列) はアプリ側の変数に持っておき、毎フレームそれをもとに UI を描きます。
 このため、データを書き換えれば次のフレームで画面に反映されます。
+
+### ImGui のラッパー (widgets.h)
+
+ImGui には `BeginDisabled` / `EndDisabled` や `PushID` / `PopID` のように、必ず組で呼ぶ関数が多くあります。
+閉じ忘れや、途中で `return` したときの閉じ漏れを防ぐため、`ui::` のクラスでスコープを抜けると閉じるようにしています。
+
+```cpp
+{
+    ui::Disabled disabled(busy);   // EndDisabled はスコープの終わりで呼ばれる
+    ImGui::InputText("##name", &name);
+}
+
+if (ui::Button("送信", available))  // 押せないときは薄く表示し、false を返す
+    Send();
+```
+
+| クラス・関数 | 包んでいるもの |
+| --- | --- |
+| `ui::Disabled` | `BeginDisabled` / `EndDisabled` |
+| `ui::Id` | `PushID` / `PopID` |
+| `ui::StyleColor` | `PushStyleColor` / `PopStyleColor` (3 つ目の引数が false なら何もしない) |
+| `ui::TextWrap` | `PushTextWrapPos` / `PopTextWrapPos` |
+| `ui::Child` / `ui::Group` | `BeginChild` / `EndChild`、`BeginGroup` / `EndGroup` |
+| `ui::WrappedText` / `WrappedDisabled` / `WrappedColored` | 窓の右端で折り返すテキスト |
+| `ui::Button` / `ui::SmallButton` | `enabled` が false なら押せないボタン |
+| `ui::ButtonWidth` | ラベルがちょうど収まるボタンの幅 |
+
+ウィジェットを、状態を持つクラスにはしていません。ImGui は毎フレーム描き直すので、状態はアプリ側の変数だけに持たせます。
 
 ## 全体の構成
 
