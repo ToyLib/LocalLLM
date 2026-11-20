@@ -1,11 +1,13 @@
 # GUI アプリとしての構成
 
 このドキュメントでは、チャット画面を表示する GUI アプリの部分を解説します。
-対象のファイルは `src/` 以下の次のファイルです。機能ごとに `common/` (共通)、`chat/`、`quiz/`、`maze/` のフォルダーに分けています (`main.cpp` だけ `src/` 直下)。Python 版 (`python/`) も同じ分け方です。
+対象のファイルは `src/` 以下の次のファイルです。機能ごとに `common/` (共通)、`chat/`、`quiz/`、`maze/` のフォルダーに分け、アプリの土台を `app/` に置いています (`main.cpp` だけ `src/` 直下)。Python 版 (`python/`) も同じ分け方です。
 
 | ファイル | 内容 |
 | --- | --- |
-| [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
+| [main.cpp](../src/main.cpp) | 入口 (`Application` を作って `Run` するだけ) |
+| [application.h](../src/app/application.h) / [application.cpp](../src/app/application.cpp) | アプリ本体 (`Application`)。状態を持ち、メインループと起動・終了の手順を担当 |
+| [renderer.h](../src/app/renderer.h) / [renderer.cpp](../src/app/renderer.cpp) | ウィンドウと描画の土台 (`Renderer`)。SDL のウィンドウとレンダラー、ImGui、フォント、IME |
 | [chat.h](../src/chat/chat.h) / [chat.cpp](../src/chat/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
 | [chat_ui.h](../src/chat/chat_ui.h) / [chat_ui.cpp](../src/chat/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`) |
 | [quiz_ui.h](../src/quiz/quiz_ui.h) / [quiz_ui.cpp](../src/quiz/quiz_ui.cpp)、[quiz_mode.h](../src/quiz/quiz_mode.h) / [quiz_mode.cpp](../src/quiz/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
@@ -46,11 +48,11 @@ if (ImGui::Button("送信"))   // ボタンを描き、押されたフレーム�
 ## 全体の構成
 
 ```
-main()                         … main.cpp
- ├ 初期化: curl / SDL / ウィンドウ / レンダラー / ImGui / フォント
+Application::Run()             … application.cpp (main.cpp の main() から呼ぶ)
+ ├ Init(): curl / ui.json / Renderer::Init (SDL・ウィンドウ・レンダラー・ImGui・フォント・IME) / サーバー管理 / RAG
  ├ メインループ
- │   ├ イベント処理 (ImGui に渡す・IME の変換中の文字列・終了)
- │   ├ ImGui の新しいフレームを開始
+ │   ├ ProcessEvents()   … Renderer::ProcessEvent (ImGui に渡す・IME の変換中の文字列・終了)
+ │   ├ Renderer::BeginFrame() … ImGui の新しいフレームを開始
  │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
  │   │   ├ DrawServerBar()   … サーバーの状態 (タブの外)
 │   │   ├ 「設定」ボタン    … タブの行の右端 (どのタブからでも開ける)
@@ -62,34 +64,40 @@ main()                         … main.cpp
  │   │   ├ タブ「クイズ」
  │   │   │   └ DrawQuizTab()     … 分野の選択・出題・結果 (quiz_ui.cpp、[quiz.md](quiz.md))
  │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)
- │   └ 描画して画面に表示
- └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
+ │   └ Renderer::EndFrame()   … 描画して画面に表示
+ └ Shutdown(): 受信中なら中断 → ワーカースレッドの終了待ち → ウィンドウを隠す → サーバーの停止 → curl の終了
+   (SDL と ImGui の後始末は Renderer のデストラクタ)
 
 SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドでルーター → 回答役 (RunAgent → AskLLM) を実行 (chat.cpp)
 AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッドで ChatGPT → 書き直し → 違いのまとめを実行 (chat.cpp)
 ```
 
-## 起動処理 (main.cpp の main の前半)
+## 起動処理 (Application::Init と Renderer::Init)
+
+`Application::Init` が 1・2 と 11 以降を、`Renderer::Init` が 3〜10 を行います。
 
 1. `curl_global_init()` で libcurl を初期化します。
-2. `SetImeHint()` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
-3. `SDL_Init(SDL_INIT_VIDEO)` で SDL を初期化します。
-4. `RegisterWakeEvent()` で独自のイベント番号を 1 つ確保します (`SDL_RegisterEvents`)。ワーカースレッドから UI を起こすのに使います (後述)。
+2. `config/ui.json` を読みます (`LoadConfigOrEmpty`)。読めない項目は `settings_ui.h` の `UiSettings` の既定値を使います。フォントは `Renderer::Init` に渡します。
+3. `SetImeHint()` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
+4. `SDL_Init(SDL_INIT_VIDEO)` で SDL を初期化します。
 5. ディスプレイの拡大率 (`SDL_GetDisplayContentScale`) を取得し、900×700 に拡大率を掛けた大きさでウィンドウを作ります。
    - `SDL_WINDOW_HIGH_PIXEL_DENSITY` で、Retina などの高解像度ディスプレイでもぼやけずに描きます。
    - `SDL_WINDOW_HIDDEN` で作成し、中央に移動してから表示するので、ウィンドウが一瞬別の場所に見えることはありません。
    - `SDL_WINDOW_TRANSPARENT` を付けて、ウィンドウの背景を透明にします。
 6. `SDL_CreateRenderer()` でレンダラーを作り、VSync を有効にします。
    - macOS では続けて `ApplyMacTitleBarStyle()` を呼びます。透明にしただけではタイトルバーだけが素通しで透けてしまうため、本文をタイトルバーの下まで広げ (`NSWindowStyleMaskFullSizeContentView`)、タイトルバーも ImGui の半透明の背景で塗って本文と一体にします。
-   - タイトルバーに中身が隠れないよう、毎フレーム `GetMacTitleBarHeight()` で高さを求め、`DrawUI` に `topInset` として渡します。背景はタイトルバーの下まで塗り、中身はその下から並べます。
+   - タイトルバーに中身が隠れないよう、毎フレーム `Renderer::TopInset()` (`GetMacTitleBarHeight()`) で高さを求め、`DrawUI` に `topInset` として渡します。背景はタイトルバーの下まで塗り、中身はその下から並べます。
 7. ImGui を初期化します。
    - `io.IniFilename = nullptr` で、ウィンドウ配置を保存する `imgui.ini` を作らないようにします。
    - キーボードでのフォーカス移動 (`NavEnableKeyboard`) を有効にします。
    - ダークテーマを使い、余白などの大きさとフォントを拡大率に合わせます (`ScaleAllSizes`、`FontScaleDpi`)。
-   - `config/ui.json` を読み (`LoadConfigOrEmpty`)、ウィンドウ背景の不透明度を `window_opacity` にします。読めない項目は `settings_ui.h` の `UiSettings` の既定値を使います。
 8. 日本語フォントを読み込みます (`LoadFont`。ファイルと大きさは `ui.json` の `font_file` / `font_size`)。
 9. ImGui の SDL3 用・SDL_Renderer 用のバックエンドを初期化します。
 10. `InstallImeHook()` で、IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
+11. `RegisterWakeEvent()` で独自のイベント番号を 1 つ確保します (`SDL_RegisterEvents`)。ワーカースレッドから UI を起こすのに使います (後述)。
+12. `ApplyUiSettings()` で背景の不透明度・色を ImGui に反映し、API キーの有無を調べ (`RefreshCloudStatus`)、サーバー管理 (`StartServerManager`) と RAG のインデックス作成 (`StartRagIndexing`) を始めます。
+
+どこかで失敗したらログに書いて `Run` が 1 を返します。途中まで作ったものは `Renderer` のデストラクタが片付けます。
 
 ## 日本語フォントの読み込み (font.cpp)
 
@@ -105,7 +113,7 @@ ImGui に入っている標準フォントには日本語の文字がないた�
 
 同梱フォントは、ビルド後に CMake が `Asset` フォルダーごと実行ファイルの隣にコピーします。
 
-## メインループと省電力
+## メインループと省電力 (Application::Run)
 
 ```cpp
 bool hasEvent = framesToRender > 0
@@ -312,7 +320,7 @@ RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を�
 | フォントファイル | `config/ui.json` の `font_file` |
 | OS フォントの候補 | `font.cpp` の `SYSTEM_FONT_PATHS` |
 | 背景の不透明度 | `config/ui.json` の `window_opacity` |
-| ウィンドウの初期サイズ | `main.cpp` の `SDL_CreateWindow` (900×700) |
+| ウィンドウの初期サイズ | `application.cpp` の `Renderer::Init` の引数 (900×700) |
 | 入力欄の高さ | `chat_ui.cpp` の `DrawUI` の `inputHeight` (4 行分) |
 | 色 (背景・文字・送信者名・エラーなど) | `config/ui.json` の `colors` (既定値は `settings_ui.h` の `UiColors`) |
 | 接続先や system プロンプト | `config/server.json`、`config/agents.json` ([llm-client.md](llm-client.md)、[agent.md](agent.md) を参照) |

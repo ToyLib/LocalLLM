@@ -216,7 +216,9 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 
 | ファイル | 内容 |
 | --- | --- |
-| `src/main.cpp` | SDL3 / Dear ImGui の初期化とメインループ |
+| `src/main.cpp` | 入口 (`Application` を動かすだけ) |
+| `src/app/application.cpp` / `src/app/application.h` | アプリ本体: 状態、メインループ、起動と終了の手順 |
+| `src/app/renderer.cpp` / `src/app/renderer.h` | SDL3 のウィンドウとレンダラー、Dear ImGui の初期化と描画 |
 | `src/chat/chat.cpp` / `src/chat/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
 | `src/common/agent.cpp` / `src/common/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
 | `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャット画面の組み立て |

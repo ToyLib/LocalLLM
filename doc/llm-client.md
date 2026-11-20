@@ -155,7 +155,7 @@ system メッセージは、回答役のエージェント (`src/common/agent.cp
 
 8. すべて問題なければ、回答の全文 (`context.answer`) を返します。
 
-`curl_global_init()` はプログラム全体で 1 回だけ呼ぶ必要があるため、`main()` の先頭で呼んでいます。
+`curl_global_init()` はプログラム全体で 1 回だけ呼ぶ必要があるため、`Application::Init()` の最初に呼んでいます (終了時は `Application::Shutdown()` で `curl_global_cleanup()`)。
 
 ## SSE の受信と解析
 
