@@ -231,7 +231,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/common/llm_client.cpp` / `src/common/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/common/rag.cpp` / `src/common/rag.h` | RAG のインデックス作成と検索 |
 | `src/common/server_manager.cpp` / `src/common/server_manager.h` | `llama-server` の起動・監視・停止 |
-| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [迷路](doc/maze.md) / [llama-server の自動起動](doc/managed-server.md)) |
+| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [クラス設計](doc/class-design.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [迷路](doc/maze.md) / [llama-server の自動起動](doc/managed-server.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `llama-release.json` | 同梱する `llama-server` の公式リリース (タグとハッシュ) |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |

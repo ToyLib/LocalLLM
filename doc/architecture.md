@@ -22,9 +22,9 @@
 
 | 部分 | C++ 版 | Python 版 | 説明 |
 | --- | --- | --- | --- |
-| アプリ本体 (タブと共有の状態、起動と終了) | `app/application.cpp` (`Application`) | `app/application.py` (`Application`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md#アプリ本体とタブ) |
-| ウィンドウと描画 | `app/renderer.cpp` (`Renderer`) | (Tk が受け持つ) | [gui-app.md](gui-app.md) |
-| タブの共通の形 | `common/tab.h` (`Tab` / `UiContext`) | `common/tab.py` (`Tab` / `UiContext`) | [gui-app.md](gui-app.md#タブ-tabh)、[python-app.md](python-app.md#アプリ本体とタブ) |
+| アプリ本体 (タブと共有の状態、起動と終了) | `app/application.cpp` (`Application`) | `app/application.py` (`Application`) | [class-design.md](class-design.md)、[gui-app.md](gui-app.md)、[python-app.md](python-app.md#アプリ本体とタブ) |
+| ウィンドウと描画 | `app/renderer.cpp` (`Renderer`) | (Tk が受け持つ) | [class-design.md](class-design.md)、[gui-app.md](gui-app.md) |
+| タブの共通の形 | `common/tab.h` (`Tab` / `UiContext`) | `common/tab.py` (`Tab` / `UiContext`) | [class-design.md](class-design.md)、[gui-app.md](gui-app.md#タブ-tabh)、[python-app.md](python-app.md#アプリ本体とタブ) |
 | 画面の部品のヘルパー | `common/widgets.h` (`ui::`) | `common/widgets.py` | [gui-app.md](gui-app.md#imgui-のラッパー-widgetsh)、[python-app.md](python-app.md#tk-のヘルパー-commonwidgetspy) |
 | タブ | `chat_ui.cpp` (`ChatTab`)、`quiz_ui.cpp` (`QuizTab`)、`maze_ui.cpp` (`MazeTab`) | `chat_ui.py` (`ChatTab`)、`quiz_ui.py` (`QuizTab`)、`maze_ui.py` (`MazeTab`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md)、[quiz.md](quiz.md)、[maze.md](maze.md) |
 | 設定画面 | `settings_ui.cpp` | `settings_ui.py` (`SettingsDialog`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md#設定画面-settings_uipy) |
