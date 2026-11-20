@@ -1,21 +1,30 @@
 #pragma once
 
 #include "chat/chat.h"
-#include "maze/maze_mode.h"
-#include "quiz/quiz_mode.h"
 #include "common/rag.h"
-#include "common/settings_ui.h"
+#include "common/tab.h"
 
 #include <string>
 
-// チャット画面全体を描く (毎フレーム呼ぶ)
-// topInset: 画面上端に重なっているタイトルバーの高さ (macOS)
-void DrawUI(
-    ChatState& state,
-    RagState& rag,
-    QuizState& quiz,
-    MazeState& maze,
-    SettingsState& settings,
-    std::string& input,
-    bool& focusInput,
-    float topInset);
+// チャットのタブ: 会話の状態と入力欄を持ち、資料 (RAG) は Application と共有する
+class ChatTab : public Tab
+{
+public:
+    explicit ChatTab(RagState& rag);
+
+    const char* Label() const override { return "チャット"; }
+    void Draw(const UiContext& context) override;
+
+    // API キーの有無を調べ直す
+    void OnSettingsSaved() override;
+
+    // 受信を中断して、ワーカースレッドの終了を待つ
+    void Shutdown() override;
+
+private:
+    ChatState mState;
+    RagState& mRag;
+
+    std::string mInput;
+    bool mFocusInput = true;
+};

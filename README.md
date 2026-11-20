@@ -221,7 +221,8 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/app/renderer.cpp` / `src/app/renderer.h` | SDL3 のウィンドウとレンダラー、Dear ImGui の初期化と描画 |
 | `src/chat/chat.cpp` / `src/chat/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
 | `src/common/agent.cpp` / `src/common/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
-| `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャット画面の組み立て |
+| `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャットのタブ (`ChatTab`) |
+| `src/common/tab.h` | タブ (チャット・クイズ・迷路) の共通の形 |
 | `src/quiz/quiz_ui.cpp` / `src/quiz/quiz_mode.cpp` | クイズタブ ([説明](doc/quiz.md)) |
 | `src/maze/maze_ui.cpp` / `src/maze/maze_mode.cpp` | 迷路タブ ([説明](doc/maze.md)) |
 | `src/common/widgets.cpp` / `src/common/widgets.h` | ImGui の薄いラッパー (スコープで閉じる Begin/End など) |

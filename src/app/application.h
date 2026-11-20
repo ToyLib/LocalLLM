@@ -1,15 +1,14 @@
 #pragma once
 
 #include "app/renderer.h"
-#include "chat/chat.h"
-#include "maze/maze_mode.h"
-#include "quiz/quiz_mode.h"
 #include "common/rag.h"
 #include "common/settings_ui.h"
+#include "common/tab.h"
 
-#include <string>
+#include <memory>
+#include <vector>
 
-// アプリ本体: 状態とバックグラウンドの仕事 (サーバー管理・RAG・ワーカー) を持ち、
+// アプリ本体: タブ (チャット・クイズ・迷路) と、タブが共有するもの (資料・設定) を持ち、
 // メインループを回す。ウィンドウと ImGui の細かいことは Renderer に任せる
 class Application
 {
@@ -31,20 +30,22 @@ private:
 
     void DrawFrame();
 
-    // 受信とインデックス作成を中断してスレッドを待ち、サーバーを止める
+    // 画面全体: サーバーの状態・設定ボタン・タブ・設定画面
+    void DrawMainWindow();
+
+    // タブのワーカーと資料のインデックス作成を止めて待ち、サーバーを止める
     void Shutdown();
 
     Renderer mRenderer;
 
-    ChatState mChat;
+    // タブが参照するので、タブより先に作り、後に壊す (メンバーの並び順)
     RagState mRag;
-    QuizState mQuiz;
-    MazeState mMaze;
     SettingsState mSettings;
 
-    // チャットの入力欄
-    std::string mInput;
-    bool mFocusInput = true;
+    std::vector<std::unique_ptr<Tab>> mTabs;
+
+    // 最初のフレームだけ、先頭のタブを選ぶ
+    bool mFirstFrame = true;
 
     // 入力後しばらくは毎フレーム描画し、それ以外はイベント待ちで省電力
     int mFramesToRender = 3;

@@ -1,7 +1,16 @@
 #pragma once
 
 #include "maze/maze_mode.h"
-#include "common/settings_ui.h"
+#include "common/tab.h"
 
-// 迷路タブの中身を描く (タブが開いているときに毎フレーム呼ぶ)
-void DrawMazeTab(MazeState& state, const UiColors& colors);
+// 迷路のタブ: 迷路の状態を持つ
+class MazeTab : public Tab
+{
+public:
+    const char* Label() const override { return "迷路"; }
+    void Draw(const UiContext& context) override;
+    void Shutdown() override;
+
+private:
+    MazeState mState;
+};

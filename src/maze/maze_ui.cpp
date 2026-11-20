@@ -425,8 +425,16 @@ void DrawLog(const MazeState& state, bool busy, const UiColors& colors)
 
 } // namespace
 
-void DrawMazeTab(MazeState& state, const UiColors& colors)
+void MazeTab::Shutdown()
 {
+    ShutdownMaze(mState);
+}
+
+void MazeTab::Draw(const UiContext& context)
+{
+    MazeState& state = mState;
+    const UiColors& colors = context.colors;
+
     TakeResult(state);
     Animate(state);
 

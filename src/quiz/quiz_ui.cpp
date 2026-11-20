@@ -655,8 +655,17 @@ void DrawResult(QuizState& state, RagState& rag, const ResultView& view, const U
 
 } // namespace
 
-void DrawQuizTab(QuizState& state, RagState& rag, const UiColors& colors)
+void QuizTab::Shutdown()
 {
+    ShutdownQuiz(mState);
+}
+
+void QuizTab::Draw(const UiContext& context)
+{
+    QuizState& state = mState;
+    RagState& rag = mRag;
+    const UiColors& colors = context.colors;
+
     QuizPhase phase;
     std::string error;
     PlayView play;
