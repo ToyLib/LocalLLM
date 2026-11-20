@@ -14,10 +14,14 @@ python3 python/main.py
 
 | Python 版 | C++ 版 | 内容 |
 | --- | --- | --- |
-| `main.py` | `main.cpp` | ログの設定をして `chat_ui.main()` を呼ぶだけ |
-| `chat_ui.py` | `chat_ui.cpp` (+ `main.cpp` のメインループ) | チャット画面 (`ChatApp`) |
-| `quiz_ui.py` / `quiz_mode.py` | `quiz_ui.cpp` / `quiz_mode.cpp` | クイズタブ ([quiz.md](quiz.md)) |
-| `maze_ui.py` / `maze_mode.py` | `maze_ui.cpp` / `maze_mode.cpp` | 迷路タブ ([maze.md](maze.md))。盤は `tk.Canvas` に描き、`after` で 1 コマずつ動かす |
+| `main.py` | `main.cpp` | ログの設定をして `app.application.main()` を呼ぶだけ |
+| `app/application.py` | `app/application.cpp` | アプリ本体 (`Application`)。ウィンドウ・フォントと色・資料 (`RagState`)・タブの一覧・サーバーの状態の行・設定ボタンを持ち、終了の順番を決める |
+| — | `app/renderer.cpp` | Tk がウィンドウと描画を受け持つので要らない |
+| `common/tab.py` | `common/tab.h` | タブの共通の形 (`Tab`) と、どのタブにも渡すもの (`UiContext`) |
+| `common/widgets.py` | `common/widgets.h` | 何度も出てくる Tk の書き方をまとめた小さなヘルパー |
+| `chat_ui.py` | `chat_ui.cpp` | チャットのタブ (`ChatTab`) |
+| `quiz_ui.py` / `quiz_mode.py` | `quiz_ui.cpp` / `quiz_mode.cpp` | クイズのタブ (`QuizTab`、[quiz.md](quiz.md)) |
+| `maze_ui.py` / `maze_mode.py` | `maze_ui.cpp` / `maze_mode.cpp` | 迷路のタブ (`MazeTab`、[maze.md](maze.md))。盤は `tk.Canvas` に描き、`after` で 1 コマずつ動かす |
 | `settings_ui.py` | `settings_ui.cpp` | 設定画面 (`SettingsDialog`) |
 | `chat.py` | `chat.cpp` | 会話の状態 (`ChatState` / `Message`) と、ワーカースレッドでの送受信 (`send_prompt` / `ask_cloud`) |
 | `agent.py` | `agent.cpp` | ルーター・回答役・ChatGPT・書き直し |
@@ -28,6 +32,40 @@ python3 python/main.py
 | — | `ime.cpp` / `font.cpp` / `macos_window.mm` | Tk が自分で扱うので要らない |
 
 関数名は C++ 版の `SendPrompt` → `send_prompt` のように、snake_case にしただけでそろえています。片方を直したら、もう片方の同じ名前の関数も直してください。
+
+## アプリ本体とタブ
+
+構成は C++ 版と同じです。`Application` がタブと、タブが共有するものを持ちます。チャット・クイズ・迷路は、どれも `Tab` を継承したクラスです。
+
+| C++ 版 | Python 版 | 内容 |
+| --- | --- | --- |
+| `Application` | `Application` | タブと共有の状態を持ち、起動と終了の手順を担当する |
+| `Application::Run` (メインループ) | `main()` の `root.mainloop()` | Tk が回すので、`Application` はループを持たない |
+| `Application::Shutdown` | `Application.shutdown` | タブの `shutdown` → 資料のインデックス作成の中断 → ウィンドウを隠す → サーバーを止める |
+| `DrawServerBar` | `Application._refresh_server_bar` | サーバーの状態の行 (どのタブでも見えるように、タブの外に置く) |
+| `RagState mRag` | `Application.rag` | チャットとクイズで共有するので `Application` が持ち、タブに渡す |
+| `SettingsState mSettings` | `Application.font_size` / `colors` | 設定画面で変える画面の設定 |
+| `Tab` | `Tab` (`ttk.Frame` の子クラス) | タブの共通の形 |
+| `Tab::Label` | `Tab.label` | タブに出す名前 |
+| `Tab::Draw` | — | Tk は部品が状態を持つので、毎フレーム描く関数は無い。各タブが `after` で自分の `_dirty` を見に行き、変わったときだけ部品を書き換える |
+| `Tab::OnSettingsSaved` | `Tab.on_settings_saved` | 設定を保存したあと (チャットは API キーの有無を調べ直す) |
+| `Tab::Shutdown` | `Tab.shutdown` | 終了するとき。通信の中断を頼むだけで、スレッドの終了は待たない |
+| — | `Tab.apply_colors` | 色が変わったときに部品に付け直す (ImGui は毎フレーム色を渡すので要らない) |
+| — | `Tab.wake` | 描き直しを頼む (C++ 版の `WakeUI` に当たる) |
+| `UiContext` | `UiContext` | どのタブにも渡すもの。C++ 版は色だけ、Python 版はフォント (`font` / `bold` / `small`) と色 (`colors()`) |
+| `ChatTab` / `QuizTab` / `MazeTab` | `ChatTab` / `QuizTab` / `MazeTab` | 各タブ |
+
+タブを足すときは、`Tab` を継承したクラスを作り、`Application.__init__` の `self._tabs` に足します。`Notebook` には並べた順に出ます。
+
+### Tk のヘルパー (common/widgets.py)
+
+C++ 版の `ui::` (ImGui の Begin/End・Push/Pop の組をスコープで閉じるラッパー) に当たります。Tk は部品が状態を持つので、ImGui のラッパーをそのまま移さず、このアプリで何度も出てくる書き方だけを関数にしています。
+
+| 関数 | 使い方 |
+| --- | --- |
+| `set_enabled(widget, enabled)` | ttk の部品を押せる・押せないにする (`state(["disabled"])` / `state(["!disabled"])`) |
+| `with editable(text):` | 読み取り専用の `tk.Text` を、`with` の中だけ書き換えられるようにする (抜けると読み取り専用に戻る) |
+| `scrolled_text(parent, **options)` | 縦のスクロールバー付きの `tk.Text` を `parent` に詰める |
 
 ## 設定ファイルの場所
 
@@ -48,15 +86,16 @@ Tk の部品は、作ったスレッド (UI スレッド) からしか触れま�
 ```
 ワーカースレッド
   state.lock を取って messages を書き換える
-  state.notify()  … = threading.Event の set (ChatApp._dirty)
+  state.notify()  … = threading.Event の set (ChatTab._dirty)
 
-UI スレッド (ChatApp._poll、30 ミリ秒ごとに root.after で呼ばれる)
+UI スレッド (ChatTab._poll、30 ミリ秒ごとに after で呼ばれる)
   _dirty が立っていたら下ろして _refresh()
     state.lock を取って、表示に使う値を _Rendered のタプルに写す (スナップショット)
     ロックを放してから、スナップショットで画面を描く
 ```
 
-- `ChatState` と `RagState` は、作るときに `notify` (再描画を頼む関数) を受け取ります。どちらにも `ChatApp._dirty.set` を渡しています。
+- `ChatState` と `RagState` は、作るときに `notify` (再描画を頼む関数) を受け取ります。`ChatState` には `ChatTab._dirty.set` を渡します。`RagState` とサーバーの管理には `Application._wake` を渡し、サーバーの状態の行と、資料の状態を出すチャットのタブ (`Tab.wake`) に描き直しを頼みます。
+- クイズと迷路も、同じように自分の `_dirty` を `after` で見に行きます (50 ミリ秒ごと)。
 - C++ 版と同じく、ロックを持ったまま画面を描かないよう、先に必要な値を写してからロックを放します。
 - 受信中は、何も届かなくても 0.5 秒ごとに描き直します (`STATUS_REFRESH_SECONDS`)。ChatGPT を待っている間の経過時間を進めるためです。
 
@@ -74,14 +113,17 @@ UI スレッド (ChatApp._poll、30 ミリ秒ごとに root.after で呼ばれ�
 - 中断は `CancelToken` で行います。`cancel()` は、フラグを立てるだけでなく**通信中のソケットを `shutdown` して**受信待ちを抜けさせます。C++ 版 (libcurl の進捗コールバックで 1 秒ごとに確認) より速く止まります。
 - ワーカースレッドとインデックス作成のスレッドは `daemon=True` です。ウィンドウを閉じるときは中断を頼むだけで、スレッドの終了は待ちません (C++ 版は終了を待ちます)。
 
-## 画面の組み立て (chat_ui.py)
+## 画面の組み立て (application.py と chat_ui.py)
 
-部品の並びは C++ 版と同じです。
+部品の並びは C++ 版と同じです。サーバーの状態の行・設定ボタン・タブ (`Notebook`) は `Application` が、タブの中身は各タブが作ります。
 
 ```
 ┌─────────────────────────────────────────┐
-│                                    [設定] │  top_bar (タブの上、どのタブからでも開ける)
+│ チャットのサーバー: ... [もう一度起動]      │  サーバーの状態の行 (使えないときだけ。Application)
+│                                    [設定] │  top_bar (タブの上、どのタブからでも開ける。Application)
 ├─────────────────────────────────────────┤
+│ [チャット] [クイズ] [迷路]                  │  Notebook (Application)
+├─────────────────────────────────────────┤  ↓ ここから ChatTab
 │ 資料 (RAG): ◉自動 ○常に ○使わない [再読込] 状態 │  _build_rag_bar
 ├─────────────────────────────────────────┤
 │ 会話の表示 (tk.Text、読み取り専用)          │  _build_messages
@@ -119,7 +161,7 @@ C++ 版と Python 版で、`ui.json` の別の項目を使います。
 | 色 | `colors` | `python_colors` (キーは同じ) |
 
 - 単位が違う (ピクセルとポイント) うえ、C++ 版は暗い背景、Python 版は OS の明るいテーマを前提に既定の色を決めているので、項目を分けています。
-- `python_colors` の `background` / `text` の既定値は、起動時に会話欄の今の色 (OS のテーマの色) を読んで決めます (`_to_hex`)。
+- `python_colors` の `background` / `text` の既定値は、起動時に `tk.Text` の今の色 (OS のテーマの色) を読んで決めます (`application.py` の `_theme_colors`)。
 - 正しくない値は、標準エラーに書いて既定値を使います。
 
 ## 設定画面 (settings_ui.py)
@@ -132,7 +174,7 @@ C++ 版と Python 版で、`ui.json` の別の項目を使います。
 - 「llama-server」タブでは、自動起動のオン・オフ、モデル、`llama-server` の場所を変えられます ([managed-server.md](managed-server.md))。
 - 下の「すべて既定に戻す」は、確認したうえで、ユーザーごとの設定を `config/` の内容で上書きし、画面の設定を読み直してから設定画面を開き直します。
 - 読めないファイルがあるときは、壊れたファイルを上書きしないように保存できなくします (C++ 版と同じ)。
-- 保存したら `on_saved` で `refresh_cloud_status` を呼び、「ChatGPT に聞き直す」ボタンを押せるかを調べ直します。
+- 保存したら `on_saved` で、すべてのタブの `on_settings_saved` とサーバーの設定の読み直しを呼びます (C++ 版と同じ)。チャットは `refresh_cloud_status` で、「ChatGPT に聞き直す」ボタンを押せるかを調べ直します。
 
 ## LLM との通信 (llm_client.py)
 

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-import tkinter.font as tkfont
 from tkinter import ttk
-from typing import Callable
 
 from common import config
 from common import llm_client
@@ -14,6 +12,8 @@ from quiz import quiz_mode
 from common import rag
 from common import server_manager
 from common.llm_client import CancelToken, Cancelled, LLMError
+from common.tab import Tab, UiContext
+from common.widgets import editable, scrolled_text, set_enabled
 from quiz.quiz_mode import CHOICE_COUNT, Category, QuizState
 
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
@@ -34,24 +34,20 @@ PROMPT_HELP = ("お題や出題の方針を自由に書きます (例: 「Git �
                "「資料を使う」にしたとき、お題が空なら資料からランダムに、書いてあればお題に近い資料から出題します。")
 
 
-class QuizTab(ttk.Frame):
+class QuizTab(Tab):
     """分野を選んで、4 択を 10 問解いて、点数を見る画面"""
 
-    def __init__(
-        self,
-        parent: tk.Misc,
-        font: tkfont.Font,
-        bold: tkfont.Font,
-        colors: Callable[[], dict[str, str]],
-        rag_state: rag.RagState,
-    ) -> None:
-        super().__init__(parent)
+    label = "クイズ"
 
-        self._font = font
-        self._bold = bold
-        self._colors = colors
+    def __init__(
+        self, parent: tk.Misc, context: UiContext, rag_state: rag.RagState,
+    ) -> None:
+        super().__init__(parent, context)
+
+        self._font = context.font
+        self._bold = context.bold
+        self._colors = context.colors
         self._rag = rag_state
-        self._dirty = threading.Event()
         self.state = QuizState(self._dirty.set)
 
         self._categories: list[Category] = []
@@ -83,7 +79,7 @@ class QuizTab(ttk.Frame):
         self.bind("<Configure>", self._on_resize)
 
         self._show_phase(quiz_mode.PHASE_SELECT)
-        # 色は ChatApp が apply_colors で付けたあとに、最初の描画をする
+        # 色は Application が apply_colors で付けたあとに、最初の描画をする
         self._dirty.set()
         self.after(POLL_INTERVAL_MS, self._poll)
 
@@ -245,18 +241,13 @@ class QuizTab(ttk.Frame):
 
         frame = ttk.Frame(self.result_frame)
         frame.pack(side="top", fill="both", expand=True, pady=(4, 0))
-        scroll = ttk.Scrollbar(frame, orient="vertical")
-        scroll.pack(side="right", fill="y")
-        self.review = tk.Text(
+        self.review = scrolled_text(
             frame, wrap="word", font=self._font, padx=8, pady=8, borderwidth=1,
-            relief="solid", state="disabled", cursor="arrow", height=8,
-            yscrollcommand=scroll.set)
-        scroll.configure(command=self.review.yview)
-        self.review.pack(side="left", fill="both", expand=True)
+            relief="solid", state="disabled", cursor="arrow", height=8)
         self.review.tag_configure("title", font=self._bold)
 
     def apply_colors(self) -> None:
-        """色を会話画面に合わせる"""
+        """色を Application が決めた色に合わせる"""
 
         colors = self._colors()
         self.review.configure(
@@ -373,12 +364,12 @@ class QuizTab(ttk.Frame):
 
         if allow:
             # 設定で許可されている: 両方オンにできるが、資料の一部が外に出るので警告する
-            self.rag_check.state(["!disabled"])
-            self.cloud_check.state(["!disabled"])
+            set_enabled(self.rag_check, True)
+            set_enabled(self.cloud_check, True)
         else:
             # 資料を外に送らない設定 (既定): どちらか一方だけ
-            self.rag_check.state(["disabled"] if self.edit_cloud.get() else ["!disabled"])
-            self.cloud_check.state(["disabled"] if self.edit_rag.get() else ["!disabled"])
+            set_enabled(self.rag_check, not self.edit_cloud.get())
+            set_enabled(self.cloud_check, not self.edit_rag.get())
 
         if allow and self.edit_rag.get() and self.edit_cloud.get():
             self.cloud_warning.pack(side="top", anchor="w", pady=(2, 0), after=self.cloud_check)
@@ -598,7 +589,7 @@ class QuizTab(ttk.Frame):
         colors = self._colors()
         selected = self._edit_index >= 0
         usable = selected and server_manager.is_chat_available() and not self._test_running
-        self.test_button.state(["!disabled"] if usable else ["disabled"])
+        set_enabled(self.test_button, usable)
 
         if self._test_running:
             note = "作っています…"
@@ -609,10 +600,10 @@ class QuizTab(ttk.Frame):
 
         self.edit_message.configure(text=note, foreground=colors["sub_text"])
         self.cloud_warning.configure(foreground=colors["error"])
-        self.test_output.configure(state="normal")
-        self.test_output.delete("1.0", "end")
-        self.test_output.insert("end", self._test_result)
-        self.test_output.configure(state="disabled")
+
+        with editable(self.test_output):
+            self.test_output.delete("1.0", "end")
+            self.test_output.insert("end", self._test_result)
 
     def _refresh(self) -> None:
         if self._editing:
@@ -682,7 +673,7 @@ class QuizTab(ttk.Frame):
 
         # ローカルの LLM に頼む分野は、サーバーの準備ができるまで始められない
         usable = category is not None and server_manager.is_chat_available()
-        self.start_button.state(["!disabled"] if usable else ["disabled"])
+        set_enabled(self.start_button, usable)
 
     def _refresh_play(
         self, total: int, index: int, question: quiz_mode.Question | None,
@@ -709,8 +700,8 @@ class QuizTab(ttk.Frame):
             self.verdict.configure(text="")
             self.explanation.configure(text="")
             self.play_status.configure(text="")
-            self.answer_button.state(["disabled"])
-            self.next_button.state(["disabled"])
+            set_enabled(self.answer_button, False)
+            set_enabled(self.next_button, False)
             return
 
         self.question_label.configure(text=question.text)
@@ -750,8 +741,8 @@ class QuizTab(ttk.Frame):
 
         can_answer = not answered and self._choice.get() >= 0
         can_next = answered and (ready_next or is_last)
-        self.answer_button.state(["!disabled"] if can_answer else ["disabled"])
-        self.next_button.state(["!disabled"] if can_next else ["disabled"])
+        set_enabled(self.answer_button, can_answer)
+        set_enabled(self.next_button, can_next)
 
     def _refresh_result(
         self, score: int, count: int, comment: str, pending: bool,
@@ -768,25 +759,23 @@ class QuizTab(ttk.Frame):
             return
 
         self._shown_review = signature
-        self.review.configure(state="normal")
-        self.review.delete("1.0", "end")
+        with editable(self.review):
+            self.review.delete("1.0", "end")
 
-        if not misses:
-            self.review.insert("end", "間違えた問題はありません。全問正解です！", "right")
+            if not misses:
+                self.review.insert("end", "間違えた問題はありません。全問正解です！", "right")
 
-        for i, q, a in misses:
-            self.review.insert("end", f"Q{i + 1}. {q.text}\n", "title")
-            self.review.insert(
-                "end", f"  あなたの答え: {a + 1}. {q.choices[a]}\n", "wrong")
-            self.review.insert(
-                "end", f"  正解: {q.answer + 1}. {q.choices[q.answer]}\n", "right")
+            for i, q, a in misses:
+                self.review.insert("end", f"Q{i + 1}. {q.text}\n", "title")
+                self.review.insert(
+                    "end", f"  あなたの答え: {a + 1}. {q.choices[a]}\n", "wrong")
+                self.review.insert(
+                    "end", f"  正解: {q.answer + 1}. {q.choices[q.answer]}\n", "right")
 
-            if q.explanation:
-                self.review.insert("end", f"  {q.explanation}\n", "sub")
+                if q.explanation:
+                    self.review.insert("end", f"  {q.explanation}\n", "sub")
 
-            if q.origin:
-                self.review.insert("end", f"  (出典: {q.origin})\n", "sub")
+                if q.origin:
+                    self.review.insert("end", f"  (出典: {q.origin})\n", "sub")
 
-            self.review.insert("end", "\n")
-
-        self.review.configure(state="disabled")
+                self.review.insert("end", "\n")

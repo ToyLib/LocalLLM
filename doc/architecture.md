@@ -6,7 +6,7 @@
 
 ```
 ┌──────────── アプリ (C++ 版 / Python 版) ────────────┐
-│ 画面 (chat_ui)  ⇄  会話の状態とワーカースレッド (chat)   │
+│ 画面 (Application + タブ) ⇄  会話の状態とワーカー (chat) │
 │                      │                              │
 │      エージェント (agent)        RAG (rag)            │
 │                      │              │               │
@@ -22,7 +22,12 @@
 
 | 部分 | C++ 版 | Python 版 | 説明 |
 | --- | --- | --- | --- |
-| 画面 | `app/application.cpp`、`app/renderer.cpp`、`chat_ui.cpp`、`quiz_ui.cpp`、`maze_ui.cpp`、`settings_ui.cpp` | `chat_ui.py`、`quiz_ui.py`、`maze_ui.py`、`settings_ui.py` | [gui-app.md](gui-app.md)、[python-app.md](python-app.md) |
+| アプリ本体 (タブと共有の状態、起動と終了) | `app/application.cpp` (`Application`) | `app/application.py` (`Application`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md#アプリ本体とタブ) |
+| ウィンドウと描画 | `app/renderer.cpp` (`Renderer`) | (Tk が受け持つ) | [gui-app.md](gui-app.md) |
+| タブの共通の形 | `common/tab.h` (`Tab` / `UiContext`) | `common/tab.py` (`Tab` / `UiContext`) | [gui-app.md](gui-app.md#タブ-tabh)、[python-app.md](python-app.md#アプリ本体とタブ) |
+| 画面の部品のヘルパー | `common/widgets.h` (`ui::`) | `common/widgets.py` | [gui-app.md](gui-app.md#imgui-のラッパー-widgetsh)、[python-app.md](python-app.md#tk-のヘルパー-commonwidgetspy) |
+| タブ | `chat_ui.cpp` (`ChatTab`)、`quiz_ui.cpp` (`QuizTab`)、`maze_ui.cpp` (`MazeTab`) | `chat_ui.py` (`ChatTab`)、`quiz_ui.py` (`QuizTab`)、`maze_ui.py` (`MazeTab`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md)、[quiz.md](quiz.md)、[maze.md](maze.md) |
+| 設定画面 | `settings_ui.cpp` | `settings_ui.py` (`SettingsDialog`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md#設定画面-settings_uipy) |
 | 会話の状態と送受信 | `chat.cpp` | `chat.py` | [gui-app.md](gui-app.md#会話の状態とスレッド-chatcpp) |
 | エージェント | `agent.cpp` | `agent.py` | [agent.md](agent.md) |
 | RAG | `rag.cpp` | `rag.py` | [rag.md](rag.md) |

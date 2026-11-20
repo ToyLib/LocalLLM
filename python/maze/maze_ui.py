@@ -4,17 +4,16 @@ C++ 版 (src/maze_ui.cpp) と同じ動き。説明は doc/maze.md を参照"""
 from __future__ import annotations
 
 import math
-import threading
 import time
 import tkinter as tk
-import tkinter.font as tkfont
 from collections import deque
 from dataclasses import dataclass, field
 from tkinter import ttk
-from typing import Callable
 
 from maze import maze_mode
 from common import server_manager
+from common.tab import Tab, UiContext
+from common.widgets import editable, scrolled_text, set_enabled
 from maze.maze_mode import GOAL, SIZE, START, Move
 
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
@@ -77,22 +76,17 @@ def _star_text(count: int) -> str:
     return "★" * count + "☆" * (3 - count)
 
 
-class MazeTab(ttk.Frame):
+class MazeTab(Tab):
     """日本語の指示でロボットを動かして、障害物を避けてゴールまで運ぶ画面"""
 
-    def __init__(
-        self,
-        parent: tk.Misc,
-        font: tkfont.Font,
-        bold: tkfont.Font,
-        colors: Callable[[], dict[str, str]],
-    ) -> None:
-        super().__init__(parent)
+    label = "迷路"
 
-        self._font = font
-        self._bold = bold
-        self._colors = colors
-        self._dirty = threading.Event()
+    def __init__(self, parent: tk.Misc, context: UiContext) -> None:
+        super().__init__(parent, context)
+
+        self._font = context.font
+        self._bold = context.bold
+        self._colors = context.colors
         self.state = maze_mode.MazeState(self._dirty.set)
 
         # ステージ (0 から) と、ステージごとの一番良かった★の数 (0 は未クリア)
@@ -182,21 +176,19 @@ class MazeTab(ttk.Frame):
         self.canvas = tk.Canvas(middle, highlightthickness=0, width=self._board_size, height=self._board_size)
         self.canvas.pack(side="left", anchor="n")
 
-        self.log_text = tk.Text(middle, wrap="word", font=self._font, padx=8, pady=6,
-                                state="disabled", relief="flat", highlightthickness=1)
-        scroll = ttk.Scrollbar(middle, orient="vertical", command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        self.log_text.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        log_frame = ttk.Frame(middle)
+        log_frame.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        self.log_text = scrolled_text(log_frame, wrap="word", font=self._font, padx=8, pady=6,
+                                      state="disabled", relief="flat", highlightthickness=1)
 
         self.log_text.tag_configure("user", font=self._bold)
         self.log_text.tag_configure("command", lmargin1=24, lmargin2=24)
         self.log_text.tag_configure("result", lmargin1=24, lmargin2=24)
 
-        # 色は、会話画面が色を決めたときに apply_colors で付ける
+        # 色は、Application が色を決めたときに apply_colors で付ける
 
     def apply_colors(self) -> None:
-        """色を会話画面に合わせる"""
+        """色を Application が決めた色に合わせる"""
 
         colors = self._colors()
         self.canvas.configure(background=colors["background"])
@@ -452,38 +444,37 @@ class MazeTab(ttk.Frame):
 
         usable = (not busy and not self._executing and not self._cleared
                   and server_manager.is_chat_available())
-        self.send_button.configure(state="normal" if usable else "disabled")
+        set_enabled(self.send_button, usable)
 
         self._render_log(busy)
         self._draw_board()
 
     def _render_log(self, busy: bool) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.delete("1.0", "end")
+        with editable(self.log_text):
+            self.log_text.delete("1.0", "end")
 
-        if not self._log:
-            self.log_text.insert(
-                "end", "指示を入力すると、LLM が命令 (JSON) に訳し、ロボットが動きます。\n", "sub")
+            if not self._log:
+                self.log_text.insert(
+                    "end", "指示を入力すると、LLM が命令 (JSON) に訳し、ロボットが動きます。\n", "sub")
 
-        for index, entry in enumerate(self._log):
-            self.log_text.insert("end", f"「{entry.text}」\n", "user")
+            for index, entry in enumerate(self._log):
+                self.log_text.insert("end", f"「{entry.text}」\n", "user")
 
-            for command in entry.commands:
-                self.log_text.insert("end", command + "\n", "command")
+                for command in entry.commands:
+                    self.log_text.insert("end", command + "\n", "command")
 
-            if index == len(self._log) - 1 and busy:
-                self.log_text.insert("end", "命令に訳しています…\n", ("result", "sub"))
-            elif entry.result:
-                self.log_text.insert("end", entry.result, ("result", "failed" if entry.failed else "ok"))
+                if index == len(self._log) - 1 and busy:
+                    self.log_text.insert("end", "命令に訳しています…\n", ("result", "sub"))
+                elif entry.result:
+                    self.log_text.insert("end", entry.result, ("result", "failed" if entry.failed else "ok"))
 
-                if entry.elapsed > 0:
-                    self.log_text.insert("end", f" ({entry.elapsed:.1f} 秒で訳しました)", ("result", "sub"))
+                    if entry.elapsed > 0:
+                        self.log_text.insert("end", f" ({entry.elapsed:.1f} 秒で訳しました)", ("result", "sub"))
+
+                    self.log_text.insert("end", "\n")
 
                 self.log_text.insert("end", "\n")
 
-            self.log_text.insert("end", "\n")
-
-        self.log_text.configure(state="disabled")
         self.log_text.see("end")
 
     def _draw_board(self) -> None:
