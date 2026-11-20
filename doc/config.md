@@ -149,6 +149,6 @@ macOS では、Finder から起動したアプリはシェルの環境変数を�
 | 書き直しの最大トークン数 (4096) | `agent.cpp` の `REWRITE_MAX_TOKENS` |
 | 違いのまとめの設定 (512 トークン、temperature 0、スキーマ、1 つの回答は 3,600 バイトまで) | `agent.cpp` の `CompareAnswers` / `COMPARE_ANSWER_BYTES` |
 | チャンクの大きさ・添える資料の数・類似度の下限 | `rag.cpp` の `MAX_CHUNK_CHARS` / `TOP_K` / `MIN_SCORE` |
-| ウィンドウの初期サイズ (900×700) | `main.cpp` / `chat_ui.py` |
+| ウィンドウの初期サイズ (900×700) | `app/application.cpp` / `app/application.py` |
 
 Python 版にも同じ名前の定数があります (`LLMOptions` の項目は `max_tokens` のように snake_case)。変えるときは両方そろえてください。

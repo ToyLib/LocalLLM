@@ -3,6 +3,7 @@
 #include "quiz/quiz_ui.h"
 
 #include "common/ime.h"
+#include "common/widgets.h"
 #include "common/llm_client.h"
 #include "common/server_manager.h"
 
@@ -37,27 +38,6 @@ constexpr const char* PROMPT_HELP =
     "お題や出題の方針を自由に書きます (例: 「Git のブランチとマージ。初心者向けに、コマンドの意味を中心に」)。"
     "問題の形式 (4 択・正解・解説) はアプリが決めます。"
     "「資料を使う」にしたとき、お題が空なら資料からランダムに、書いてあればお題に近い資料から出題します。";
-
-void WrappedText(const char* text)
-{
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextUnformatted(text);
-    ImGui::PopTextWrapPos();
-}
-
-void WrappedDisabled(const std::string& text)
-{
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", text.c_str());
-    ImGui::PopTextWrapPos();
-}
-
-void WrappedColored(const ImVec4& color, const std::string& text)
-{
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextColored(color, "%s", text.c_str());
-    ImGui::PopTextWrapPos();
-}
 
 std::string CategoryLabel(const QuizCategory& category)
 {
@@ -175,39 +155,30 @@ void SaveEditor(QuizState& state)
     CloseEditor(state);
 }
 
-void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
+// 分野の一覧と、追加・削除のボタン
+void DrawEditorList(QuizState& state, float footer)
 {
-    ImGui::TextUnformatted("自作の分野");
-    WrappedDisabled(PROMPT_HELP);
-    ImGui::Spacing();
-
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const float footer = ImGui::GetFrameHeight() + style.ItemSpacing.y;
-    ImGui::BeginChild("editor", ImVec2(0.0f, -footer));
+    ui::Group group;
 
     // 窓が狭くても右の欄が入るように、一覧の幅は窓の幅に合わせて抑える
     const float listWidth =
         std::min(ImGui::GetFontSize() * 12.0f, ImGui::GetContentRegionAvail().x * 0.3f);
 
-    ImGui::BeginGroup();
-    ImGui::BeginChild(
-        "list", ImVec2(listWidth, -footer), ImGuiChildFlags_Borders);
-
-    for (int i = 0; i < static_cast<int>(state.editItems.size()); ++i)
     {
-        ImGui::PushID(i);
-        const std::string& name = state.editItems[i].name;
+        ui::Child list("list", ImVec2(listWidth, -footer), ImGuiChildFlags_Borders);
 
-        if (ImGui::Selectable(name.empty() ? "(名前なし)" : name.c_str(), i == state.editIndex) &&
-            i != state.editIndex)
+        for (int i = 0; i < static_cast<int>(state.editItems.size()); ++i)
         {
-            SelectEditIndex(state, i);
+            ui::Id id(i);
+            const std::string& name = state.editItems[i].name;
+
+            if (ImGui::Selectable(name.empty() ? "(名前なし)" : name.c_str(), i == state.editIndex) &&
+                i != state.editIndex)
+            {
+                SelectEditIndex(state, i);
+            }
         }
-
-        ImGui::PopID();
     }
-
-    ImGui::EndChild();
 
     if (ImGui::Button("追加"))
     {
@@ -220,8 +191,7 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
     }
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(state.editIndex < 0);
-    if (ImGui::Button("削除"))
+    if (ui::Button("削除", state.editIndex >= 0))
     {
         state.editItems.erase(state.editItems.begin() + state.editIndex);
         SelectEditIndex(
@@ -229,107 +199,120 @@ void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
                        ? -1
                        : std::min(state.editIndex, static_cast<int>(state.editItems.size()) - 1));
     }
-    ImGui::EndDisabled();
-    ImGui::EndGroup();
+}
 
-    ImGui::SameLine();
-    ImGui::BeginGroup();
+// 選んでいる分野の編集欄とテスト出題
+void DrawEditorItem(QuizState& state, RagState& rag, const UiColors& colors)
+{
+    ui::Group group;
 
-    if (state.editIndex >= 0 && state.editIndex < static_cast<int>(state.editItems.size()))
+    if (state.editIndex < 0 || state.editIndex >= static_cast<int>(state.editItems.size()))
     {
-        QuizCategory& item = state.editItems[state.editIndex];
+        return;
+    }
 
-        ImGui::PushID(state.editIndex);
-        // 分野名は、欄の左に出す (右に出すと、欄の分だけはみ出す)
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("分野名:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-FLT_MIN);
+    QuizCategory& item = state.editItems[state.editIndex];
+    ui::Id id(state.editIndex);
 
-        // 追加した直後は、分野名の欄に入力できるようにして、仮の名前を選んでおく
-        ImGuiInputTextFlags nameFlags = ImGuiInputTextFlags_None;
+    // 分野名は、欄の左に出す (右に出すと、欄の分だけはみ出す)
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("分野名:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
 
-        if (state.editFocusName)
-        {
-            ImGui::SetKeyboardFocusHere();
-            nameFlags = ImGuiInputTextFlags_AutoSelectAll;
-            state.editFocusName = false;
-        }
+    // 追加した直後は、分野名の欄に入力できるようにして、仮の名前を選んでおく
+    ImGuiInputTextFlags nameFlags = ImGuiInputTextFlags_None;
 
-        ImGui::InputText("##name", &item.name, nameFlags);
-        ImGui::TextUnformatted("お題・出題の方針:");
-        ImGui::InputTextMultiline(
-            "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
+    if (state.editFocusName)
+    {
+        ImGui::SetKeyboardFocusHere();
+        nameFlags = ImGuiInputTextFlags_AutoSelectAll;
+        state.editFocusName = false;
+    }
 
-        // 設定で許可されていなければ (既定)、資料とクラウドはどちらか一方だけ
-        const bool allow = state.allowRagCloud;
+    ImGui::InputText("##name", &item.name, nameFlags);
+    ImGui::TextUnformatted("お題・出題の方針:");
+    ImGui::InputTextMultiline(
+        "##prompt", &item.guide, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8.0f));
 
-        ImGui::BeginDisabled(!allow && item.useCloud);
+    // 設定で許可されていなければ (既定)、資料とクラウドはどちらか一方だけ
+    const bool allow = state.allowRagCloud;
+
+    {
+        ui::Disabled disabled(!allow && item.useCloud);
         ImGui::Checkbox("資料 (rag/) を使う", &item.useRag);
-        ImGui::EndDisabled();
+    }
 
-        ImGui::BeginDisabled(!allow && item.useRag);
+    {
+        ui::Disabled disabled(!allow && item.useRag);
         ImGui::Checkbox(
             (LoadCloudSettings().name + " で出題する (お題と問題を外部のサービスに送ります。利用料がかかります)")
                 .c_str(),
             &item.useCloud);
-        ImGui::EndDisabled();
-
-        // 許可されているときは両方オンにできるが、資料の内容の一部が外に出るので警告する
-        if (allow && item.useRag && item.useCloud)
-        {
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextColored(colors.error, "%s", CLOUD_RAG_WARNING);
-            ImGui::PopTextWrapPos();
-        }
-
-        bool running;
-        std::string result;
-        {
-            std::lock_guard lock(state.mutex);
-            running = state.testRunning;
-            result = state.testResult;
-        }
-
-        ImGui::BeginDisabled(running || !IsChatServerAvailable());
-        if (ImGui::Button("テスト出題"))
-        {
-            const std::string reason = ValidateEdit(item, static_cast<size_t>(state.editIndex));
-
-            if (reason.empty())
-            {
-                QuizCategory test = item;
-                test.name = Strip(test.name);
-                test.guide = Strip(test.guide);
-                state.editMessage.clear();
-                StartQuizTest(state, test, rag);
-            }
-            else
-            {
-                state.editMessage = reason;
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-
-        if (running)
-        {
-            ImGui::TextDisabled("作っています…");
-        }
-        else if (!IsChatServerAvailable())
-        {
-            ImGui::TextDisabled("サーバーの準備ができるとテストできます");
-        }
-
-        ImGui::BeginChild("test", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
-        WrappedText(result.c_str());
-        ImGui::EndChild();
-        ImGui::PopID();
     }
 
-    ImGui::EndGroup();
-    ImGui::EndChild();
+    // 許可されているときは両方オンにできるが、資料の内容の一部が外に出るので警告する
+    if (allow && item.useRag && item.useCloud)
+    {
+        ui::WrappedColored(colors.error, CLOUD_RAG_WARNING);
+    }
+
+    bool running;
+    std::string result;
+    {
+        std::lock_guard lock(state.mutex);
+        running = state.testRunning;
+        result = state.testResult;
+    }
+
+    if (ui::Button("テスト出題", !running && IsChatServerAvailable()))
+    {
+        const std::string reason = ValidateEdit(item, static_cast<size_t>(state.editIndex));
+
+        if (reason.empty())
+        {
+            QuizCategory test = item;
+            test.name = Strip(test.name);
+            test.guide = Strip(test.guide);
+            state.editMessage.clear();
+            StartQuizTest(state, test, rag);
+        }
+        else
+        {
+            state.editMessage = reason;
+        }
+    }
+
+    ImGui::SameLine();
+
+    if (running)
+    {
+        ImGui::TextDisabled("作っています…");
+    }
+    else if (!IsChatServerAvailable())
+    {
+        ImGui::TextDisabled("サーバーの準備ができるとテストできます");
+    }
+
+    ui::Child test("test", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
+    ui::WrappedText(result);
+}
+
+void DrawEditor(QuizState& state, RagState& rag, const UiColors& colors)
+{
+    ImGui::TextUnformatted("自作の分野");
+    ui::WrappedDisabled(PROMPT_HELP);
+    ImGui::Spacing();
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float footer = ImGui::GetFrameHeight() + style.ItemSpacing.y;
+
+    {
+        ui::Child editor("editor", ImVec2(0.0f, -footer));
+        DrawEditorList(state, footer);
+        ImGui::SameLine();
+        DrawEditorItem(state, rag, colors);
+    }
 
     // 変換中 (未確定) の文字を、入力カーソルの位置に重ねて描く
     DrawComposition();
@@ -380,12 +363,12 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
         }
     }
 
-    WrappedDisabled(NOTICE);
+    ui::WrappedDisabled(NOTICE);
     ImGui::Spacing();
 
     if (state.categories.empty())
     {
-        WrappedColored(
+        ui::WrappedColored(
             colors.error, "分野がありません。config/quiz.json の categories を確認してください。");
         return;
     }
@@ -401,10 +384,9 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
     {
         for (int i = 0; i < static_cast<int>(state.categories.size()); ++i)
         {
-            ImGui::PushID(i);
+            ui::Id id(i);
             const bool clicked =
                 ImGui::Selectable(CategoryLabel(state.categories[i]).c_str(), i == state.selectedCategory);
-            ImGui::PopID();
 
             if (clicked)
             {
@@ -418,13 +400,11 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
     ImGui::SameLine();
 
     // サーバーの準備ができるまでは始められない
-    ImGui::BeginDisabled(!IsChatServerAvailable());
-    if (ImGui::Button("開始"))
+    if (ui::Button("開始", IsChatServerAvailable()))
     {
         state.choice = -1;
         StartQuiz(state, selected, rag);
     }
-    ImGui::EndDisabled();
 
     ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
     if (ImGui::Button("分野を編集…"))
@@ -450,7 +430,7 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
                 " で出題します (お題と問題を外部のサービスに送ります)。";
     }
 
-    WrappedDisabled(note);
+    ui::WrappedDisabled(note);
 
     std::string shown = error.empty() ? state.customError : error;
 
@@ -464,7 +444,7 @@ void DrawSelect(QuizState& state, RagState& rag, const std::string& error, const
     if (!shown.empty())
     {
         ImGui::Spacing();
-        WrappedColored(colors.error, shown);
+        ui::WrappedColored(colors.error, shown);
     }
 }
 
@@ -511,21 +491,23 @@ void DrawPlay(QuizState& state, const PlayView& view, const UiColors& colors)
         }
 
         const QuizQuestion& question = view.question;
-        WrappedText(question.text.c_str());
+        ui::WrappedText(question.text);
         ImGui::Spacing();
 
         for (int i = 0; i < QUIZ_CHOICE_COUNT; ++i)
         {
-            ImGui::PushID(i);
+            ui::Id id(i);
 
             const bool selected = view.answered ? view.chosen == i : state.choice == i;
 
-            ImGui::BeginDisabled(view.answered);
-            if (ImGui::RadioButton("##choice", selected))
             {
-                state.choice = i;
+                ui::Disabled disabled(view.answered);
+
+                if (ImGui::RadioButton("##choice", selected))
+                {
+                    state.choice = i;
+                }
             }
-            ImGui::EndDisabled();
 
             ImGui::SameLine();
 
@@ -533,46 +515,34 @@ void DrawPlay(QuizState& state, const PlayView& view, const UiColors& colors)
             const bool useColor = view.answered && (i == question.answer || i == view.chosen);
             const ImVec4 color = i == question.answer ? colors.ai : colors.error;
 
-            if (useColor)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-            }
-
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::Text("%d. %s", i + 1, question.choices[i].c_str());
-            ImGui::PopTextWrapPos();
-
-            if (useColor)
-            {
-                ImGui::PopStyleColor();
+                ui::StyleColor style(ImGuiCol_Text, color, useColor);
+                ui::TextWrap wrap;
+                ImGui::Text("%d. %s", i + 1, question.choices[i].c_str());
             }
 
             if (!view.answered && ImGui::IsItemClicked())
             {
                 state.choice = i;
             }
-
-            ImGui::PopID();
         }
     }
 
     ImGui::Spacing();
 
     const bool canAnswer = view.hasQuestion && !view.answered && state.choice >= 0;
-    ImGui::BeginDisabled(!canAnswer);
-    if (ImGui::Button("回答する"))
+    if (ui::Button("回答する", canAnswer))
     {
         AnswerQuiz(state, state.choice);
     }
-    ImGui::EndDisabled();
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(!(view.answered && (view.readyNext || view.isLast)));
-    if (ImGui::Button(view.isLast ? "結果を見る" : "次の問題へ"))
+    if (ui::Button(
+            view.isLast ? "結果を見る" : "次の問題へ",
+            view.answered && (view.readyNext || view.isLast)))
     {
         NextQuestion(state);
     }
-    ImGui::EndDisabled();
 
     ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
     if (ImGui::Button("やめる"))
@@ -596,16 +566,16 @@ void DrawPlay(QuizState& state, const PlayView& view, const UiColors& colors)
                 colors.error, "× 不正解です。正解は %d. です", view.question.answer + 1);
         }
 
-        WrappedText(view.question.explanation.c_str());
+        ui::WrappedText(view.question.explanation);
 
         if (!view.question.origin.empty())
         {
-            WrappedDisabled("(出典: " + view.question.origin + ")");
+            ui::WrappedDisabled("(出典: " + view.question.origin + ")");
         }
 
         if (!view.readyNext && !view.isLast)
         {
-            WrappedDisabled("次の問題を準備中…");
+            ui::WrappedDisabled("次の問題を準備中…");
         }
     }
 }
@@ -626,46 +596,48 @@ void DrawResult(QuizState& state, RagState& rag, const ResultView& view, const U
     const int percent =
         view.count > 0 ? static_cast<int>(100.0f * view.score / view.count + 0.5f) : 0;
     ImGui::Text("%d / %d 問正解 (%d%%)", view.score, view.count, percent);
-    WrappedText((view.comment + (view.pending ? "…" : "")).c_str());
+    ui::WrappedText(view.comment + (view.pending ? "…" : ""));
     ImGui::Spacing();
     ImGui::TextUnformatted("間違えた問題");
 
     const ImGuiStyle& style = ImGui::GetStyle();
-    ImGui::BeginChild(
-        "review", ImVec2(0.0f, -(ImGui::GetFrameHeight() + style.ItemSpacing.y)),
-        ImGuiChildFlags_Borders);
 
-    if (view.missIndexes.empty())
     {
-        ImGui::TextColored(colors.ai, "間違えた問題はありません。全問正解です！");
-    }
+        ui::Child review(
+            "review", ImVec2(0.0f, -(ImGui::GetFrameHeight() + style.ItemSpacing.y)),
+            ImGuiChildFlags_Borders);
 
-    for (const int i : view.missIndexes)
-    {
-        const QuizQuestion& q = view.questions[i];
-        const int chosen = view.answers[i];
-
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::Text("Q%d. %s", i + 1, q.text.c_str());
-        ImGui::TextColored(colors.error, "  あなたの答え: %d. %s", chosen + 1, q.choices[chosen].c_str());
-        ImGui::TextColored(colors.ai, "  正解: %d. %s", q.answer + 1, q.choices[q.answer].c_str());
-
-        if (!q.explanation.empty())
+        if (view.missIndexes.empty())
         {
-            ImGui::TextDisabled("  %s", q.explanation.c_str());
+            ImGui::TextColored(colors.ai, "間違えた問題はありません。全問正解です！");
         }
 
-        if (!q.origin.empty())
+        for (const int i : view.missIndexes)
         {
-            ImGui::TextDisabled("  (出典: %s)", q.origin.c_str());
+            const QuizQuestion& q = view.questions[i];
+            const int chosen = view.answers[i];
+
+            {
+                ui::TextWrap wrap;
+                ImGui::Text("Q%d. %s", i + 1, q.text.c_str());
+                ImGui::TextColored(colors.error, "  あなたの答え: %d. %s", chosen + 1, q.choices[chosen].c_str());
+                ImGui::TextColored(colors.ai, "  正解: %d. %s", q.answer + 1, q.choices[q.answer].c_str());
+
+                if (!q.explanation.empty())
+                {
+                    ImGui::TextDisabled("  %s", q.explanation.c_str());
+                }
+
+                if (!q.origin.empty())
+                {
+                    ImGui::TextDisabled("  (出典: %s)", q.origin.c_str());
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
         }
-
-        ImGui::PopTextWrapPos();
-        ImGui::Spacing();
-        ImGui::Separator();
     }
-
-    ImGui::EndChild();
 
     if (ImGui::Button("もう一度"))
     {
@@ -683,8 +655,17 @@ void DrawResult(QuizState& state, RagState& rag, const ResultView& view, const U
 
 } // namespace
 
-void DrawQuizTab(QuizState& state, RagState& rag, const UiColors& colors)
+void QuizTab::Shutdown()
 {
+    ShutdownQuiz(mState);
+}
+
+void QuizTab::Draw(const UiContext& context)
+{
+    QuizState& state = mState;
+    RagState& rag = mRag;
+    const UiColors& colors = context.colors;
+
     QuizPhase phase;
     std::string error;
     PlayView play;

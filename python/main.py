@@ -5,7 +5,7 @@
 
 import logging
 
-from chat.chat_ui import main
+from app.application import main
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")

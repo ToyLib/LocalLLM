@@ -1,47 +1,27 @@
-"""チャット画面の組み立て (Tk)"""
+"""チャットタブの画面 (Tk)"""
 
 from __future__ import annotations
 
-import sys
-import threading
 import time
 import tkinter as tk
-import tkinter.font as tkfont
 import webbrowser
 from tkinter import messagebox, ttk
 from typing import NamedTuple
 
-from common import config
 from common import rag
 from common import server_manager
 from chat.chat import (
     STAGE_LOCAL, STAGE_WEB, ChatState, RagMode, ask_cloud, can_ask_cloud,
     format_status, next_stage, refresh_cloud_status, send_prompt)
 from common.llm_client import Citation
-from maze.maze_ui import MazeTab
-from quiz.quiz_ui import QuizTab
-from common.server_manager import ServerStatus, ServerView
-from common.settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
-
-# 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
-# (font_size は C++ 版のピクセル数なので別にしている)
-DEFAULT_FONT_SIZE = 14
+from common.tab import Tab, UiContext
+from common.widgets import editable, scrolled_text, set_enabled
 
 # ワーカースレッドからの更新を見に行く間隔 (ミリ秒)
 POLL_INTERVAL_MS = 30
 
 # 受信中に、経過時間の表示を進めるために描き直す間隔 (秒)
 STATUS_REFRESH_SECONDS = 0.5
-
-# 色の既定値。config/ui.json の python_colors で変えられる
-# (背景と文字の既定は OS のテーマの色で、起動時に会話欄から読む)
-DEFAULT_COLORS = {
-    "user": "#4A90E2",
-    "ai": "#3FA34D",
-    "sub_text": "#888888",
-    "error": "#E05555",
-}
-
 
 
 class _Rendered(NamedTuple):
@@ -77,59 +57,22 @@ class _Rendered(NamedTuple):
     has_cloud_key: bool = False
 
 
-def _font_size(ui: dict) -> int:
-    """config/ui.json の python_font_size (無い・正しくないときは既定値)"""
+class ChatTab(Tab):
+    """ローカルの LLM と話す画面 (資料の行・会話の表示・入力欄)"""
 
-    size = ui.get("python_font_size", DEFAULT_FONT_SIZE)
+    label = "チャット"
 
-    if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
-        print("python_font_size が正しくありません (既定値を使います)",
-              file=sys.stderr)
-        return DEFAULT_FONT_SIZE
+    def __init__(
+        self, parent: tk.Misc, context: UiContext, rag_state: rag.RagState,
+    ) -> None:
+        super().__init__(parent, context)
 
-    return round(size)
-
-
-def _colors(ui: dict, defaults: dict[str, str]) -> dict[str, str]:
-    """config/ui.json の python_colors (無い・正しくない色は既定値)"""
-
-    colors = dict(defaults)
-    configured = ui.get("python_colors", {})
-
-    if not isinstance(configured, dict):
-        print("python_colors が正しくありません (既定値を使います)",
-              file=sys.stderr)
-        return colors
-
-    for key, _label in COLOR_ENTRIES:
-        if key not in configured:
-            continue
-
-        if is_color(configured[key]):
-            colors[key] = configured[key]
-        else:
-            print(f"python_colors の {key} は \"#RRGGBB\" で書いてください "
-                  "(既定値を使います)", file=sys.stderr)
-
-    return colors
-
-
-def _to_hex(widget: tk.Misc, color: str) -> str:
-    """Tk の色 (名前や OS のテーマの色も) を "#RRGGBB" にする"""
-
-    r, g, b = widget.winfo_rgb(color)
-    return f"#{r >> 8:02X}{g >> 8:02X}{b >> 8:02X}"
-
-
-class ChatApp:
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-
-        # ワーカースレッドから立てて、UIスレッドで見に行く
-        self._dirty = threading.Event()
+        self.font = context.font
+        self.bold = context.bold
+        self.small = context.small
 
         self.state = ChatState(self._dirty.set)
-        self.rag = rag.RagState(self._dirty.set)
+        self.rag = rag_state
 
         self._rendered: list[_Rendered] = []
         self._busy: bool | None = None
@@ -143,70 +86,22 @@ class ChatApp:
 
         refresh_cloud_status(self.state)
 
-        root.title("Local LLM Chat")
-        root.geometry("900x700")
-        root.minsize(480, 360)
-        root.protocol("WM_DELETE_WINDOW", self._close)
-
-        ui = config.load_or_empty("ui.json")
-
-        base = tkfont.nametofont("TkDefaultFont").actual()["family"]
-        self.font = tkfont.Font(family=base)
-        self.bold = tkfont.Font(family=base, weight="bold")
-        self.small = tkfont.Font(family=base)
-        self._apply_font_size(_font_size(ui))
-
-        # サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
-        self._build_server_bar()
-
-        # 設定はどのタブからでも開けるように、タブの上の行の右端に置く
-        top_bar = ttk.Frame(root, padding=(8, 4, 8, 0))
-        top_bar.pack(side="top", fill="x")
-        ttk.Button(top_bar, text="設定", command=self._open_settings).pack(
-            side="right")
-
-        # チャット画面は Notebook の 1 枚目のタブ。部品の親は chat_frame
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(side="top", fill="both", expand=True)
-        self.chat_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.chat_frame, text="チャット")
-
-
         # 入力欄は会話表示より先に下から詰める
         # (ウィンドウが狭いときに、入力欄やボタンではなく会話表示が縮むように)
         self._build_rag_bar()
         self._build_input()
         self._build_messages()
 
-        self.default_colors = {
-            "background": _to_hex(self.text, self.text.cget("background")),
-            "text": _to_hex(self.text, self.text.cget("foreground")),
-            **DEFAULT_COLORS,
-        }
-
-        # クイズは 2 枚目のタブ (チャットとは状態を共有しない。資料は rag を使う)
-        self.quiz_tab = QuizTab(
-            self.notebook, self.font, self.bold, lambda: self.colors, self.rag)
-        self.notebook.add(self.quiz_tab, text="クイズ")
-
-        # 迷路は 3 枚目のタブ (LLM で日本語の指示を移動命令に訳す)
-        self.maze_tab = MazeTab(self.notebook, self.font, self.bold, lambda: self.colors)
-        self.notebook.add(self.maze_tab, text="迷路")
-        self._apply_colors(_colors(ui, self.default_colors))
-
-        # server.json の managed がオンなら llama-server を起動する
-        server_manager.start(self._dirty.set)
-
-        rag.start_indexing(self.rag)
+        # 色は Application が apply_colors で付けたあとに、最初の描画をする
         self._dirty.set()
-        self._poll()
+        self.after(POLL_INTERVAL_MS, self._poll)
 
     # --- 画面の部品 ---
 
     def _build_rag_bar(self) -> None:
         """RAG のオン/オフとインデックスの状態"""
 
-        bar = ttk.Frame(self.chat_frame, padding=(8, 6))
+        bar = ttk.Frame(self, padding=(8, 6))
         bar.pack(side="top", fill="x")
 
         # 資料を添えるか (自動ならルーターが質問ごとに判断する)
@@ -228,35 +123,17 @@ class ChatApp:
         self.rag_status = ttk.Label(bar)
         self.rag_status.pack(side="left", padx=(8, 0))
 
-    def _build_server_bar(self) -> None:
-        """llama-server が使えないときだけ出す状態の行"""
-
-        self.server_bar = ttk.Frame(self.root, padding=(8, 0))
-        self.server_bar.pack(side="top", fill="x")
-        self.server_bar.columnconfigure(0, weight=1)
-
-        self.server_lines = [
-            ttk.Label(self.server_bar, wraplength=860) for _ in range(2)]
-        self.server_retry = ttk.Button(
-            self.server_bar, text="もう一度起動", command=server_manager.retry)
-
     def _build_messages(self) -> None:
         """会話表示"""
 
-        frame = ttk.Frame(self.chat_frame, padding=(8, 0))
+        frame = ttk.Frame(self, padding=(8, 0))
         frame.pack(side="top", fill="both", expand=True)
 
-        self.text = tk.Text(
+        self.text = scrolled_text(
             frame, wrap="char", font=self.font, padx=8, pady=8,
             borderwidth=1, relief="solid", state="disabled", cursor="arrow")
-        scrollbar = ttk.Scrollbar(
-            frame, orient="vertical", command=self.text.yview)
-        self.text.configure(yscrollcommand=scrollbar.set)
 
-        scrollbar.pack(side="right", fill="y")
-        self.text.pack(side="left", fill="both", expand=True)
-
-        # 色は _apply_colors で付ける
+        # 色は apply_colors で付ける
         self.text.tag_configure("user", font=self.bold)
         self.text.tag_configure("ai", font=self.bold)
         self.text.tag_configure(
@@ -282,7 +159,7 @@ class ChatApp:
                 clickable, "<Leave>", lambda _e: self.text.configure(cursor="arrow"))
 
         # 右クリックでコピー (macOS は Button-2 と Control+クリック)
-        self.menu = tk.Menu(self.root, tearoff=False)
+        self.menu = tk.Menu(self, tearoff=False)
         self.menu.add_command(label="コピー", command=self._copy_message)
         self._menu_index = -1
 
@@ -291,9 +168,9 @@ class ChatApp:
 
     def _build_input(self) -> None:
         self.error_label = ttk.Label(
-            self.chat_frame, padding=(8, 4, 8, 0), wraplength=860)
+            self, padding=(8, 4, 8, 0), wraplength=860)
 
-        frame = ttk.Frame(self.chat_frame, padding=8)
+        frame = ttk.Frame(self, padding=8)
         frame.pack(side="bottom", fill="x")
 
         # エラーは入力欄のすぐ上
@@ -321,18 +198,10 @@ class ChatApp:
 
     # --- 操作 ---
 
-    def _apply_font_size(self, size: int) -> None:
-        """文字の大きさを変える (フォントを使っている所はすべて描き直される)"""
+    def apply_colors(self) -> None:
+        """色を Application が決めた色に合わせる"""
 
-        self.font_size = size
-        self.font.configure(size=size)
-        self.bold.configure(size=size)
-        self.small.configure(size=max(size - 3, 1))
-
-    def _apply_colors(self, colors: dict[str, str]) -> None:
-        """色を変える"""
-
-        self.colors = dict(colors)
+        colors = self._context.colors()
 
         for widget in (self.text, self.input):
             widget.configure(
@@ -350,31 +219,12 @@ class ChatApp:
 
         self.rag_status.configure(foreground=colors["sub_text"])
         self.error_label.configure(foreground=colors["error"])
-        self.quiz_tab.apply_colors()
-        self.maze_tab.apply_colors()
 
-    def _open_settings(self) -> None:
-        SettingsDialog(
-            self.root, self.font, self.font_size, self._apply_font_size,
-            self.colors, self.default_colors, self._apply_colors,
-            self._on_settings_reset, self._on_settings_saved)
-
-    def _on_settings_saved(self) -> None:
-        """保存したら、API キーの有無とサーバーの設定を読み直す"""
+    def on_settings_saved(self) -> None:
+        """保存したら、API キーの有無を読み直す"""
 
         refresh_cloud_status(self.state)
-        server_manager.reload()
         self._dirty.set()
-
-    def _on_settings_reset(self) -> None:
-        """設定を既定値に戻したあと、画面の設定を読み直して設定画面を開き直す"""
-
-        refresh_cloud_status(self.state)
-        server_manager.reload()
-        ui = config.load_or_empty("ui.json")
-        self._apply_font_size(_font_size(ui))
-        self._apply_colors(_colors(ui, self.default_colors))
-        self._open_settings()
 
     def _on_rag_mode(self) -> None:
         self.state.rag_mode = RagMode(self.rag_mode.get())
@@ -418,7 +268,7 @@ class ChatApp:
                 "資料を送る確認",
                 f"資料 (rag/) の内容が {self.state.cloud_name} に送られます。送りますか？\n"
                 "(ほかの、資料を使ったやりとりは送りません)",
-                default="no", parent=self.root):
+                default="no", parent=self.winfo_toplevel()):
             return
 
         ask_cloud(self.state, web_search)
@@ -470,20 +320,12 @@ class ChatApp:
                 return
             content = self.state.messages[self._menu_index].content
 
-        self.root.clipboard_clear()
-        self.root.clipboard_append(content)
+        self.clipboard_clear()
+        self.clipboard_append(content)
 
-    def _close(self) -> None:
+    def shutdown(self) -> None:
         # 通信中なら止める (ワーカーはデーモンスレッドなので待たない)
         self.state.cancel.cancel()
-        self.rag.cancel.cancel()
-        self.quiz_tab.shutdown()
-        self.maze_tab.shutdown()
-
-        # サーバーの停止に数秒かかることがあるので、先にウィンドウを閉じる
-        self.root.withdraw()
-        server_manager.stop()
-        self.root.destroy()
 
     # --- 描画 ---
 
@@ -499,7 +341,7 @@ class ChatApp:
             self._dirty.clear()
             self._last_refresh = now
             self._refresh()
-        self.root.after(POLL_INTERVAL_MS, self._poll)
+        self.after(POLL_INTERVAL_MS, self._poll)
 
     def _refresh(self) -> None:
         with self.state.lock:
@@ -540,9 +382,8 @@ class ChatApp:
             building = self.rag.building
             status = self.rag.status
 
-        self._refresh_server_bar()
         self.rag_status.configure(text=status)
-        self.reload_button.state(["disabled" if building else "!disabled"])
+        set_enabled(self.reload_button, not building)
         self.error_label.configure(text=f"Error: {error}" if error else "")
 
         if busy != self._busy:
@@ -551,11 +392,9 @@ class ChatApp:
                 self.send_button.configure(text="中断", command=self._cancel)
             else:
                 self.send_button.configure(text="送信", command=self._send)
-            self.clear_button.state(["disabled" if busy else "!disabled"])
+            set_enabled(self.clear_button, not busy)
 
-        self.send_button.state([
-            "disabled" if not busy and not server_manager.is_chat_available()
-            else "!disabled"])
+        set_enabled(self.send_button, busy or server_manager.is_chat_available())
 
         if restored:
             self.input.delete("1.0", "end")
@@ -563,40 +402,6 @@ class ChatApp:
             self.input.focus_set()
 
         self._render_messages(snapshot)
-
-    def _refresh_server_bar(self) -> None:
-        """読み込み中と失敗のときだけ、サーバーの状態を出す"""
-
-        view = server_manager.view()
-        items: tuple[tuple[str, ServerView], ...] = (
-            ("チャットのサーバー", view.chat), ("埋め込みのサーバー", view.embed))
-        failed = False
-
-        for row, (label, (name, server)) in enumerate(zip(self.server_lines, items)):
-            if not view.enabled or server.status not in (
-                    ServerStatus.STARTING, ServerStatus.FAILED):
-                label.grid_remove()
-                continue
-
-            if server.status == ServerStatus.FAILED:
-                failed = True
-                text = f"{name}: {server.detail}"
-
-                if server.log_tail:
-                    text += "\n" + server.log_tail
-
-                label.configure(text=text, foreground=self.colors["error"])
-            else:
-                label.configure(
-                    text=f"{name}: {server.status.value} ({server.detail})",
-                    foreground=self.colors["sub_text"])
-
-            label.grid(row=row, column=0, sticky="w")
-
-        if failed:
-            self.server_retry.grid(row=2, column=0, sticky="w", pady=(2, 0))
-        else:
-            self.server_retry.grid_remove()
 
     def _render_messages(self, snapshot: list[_Rendered]) -> None:
         # 変わった最初のメッセージから下だけを描き直す
@@ -612,22 +417,20 @@ class ChatApp:
         # 一番下までスクロールしていたら追従する
         at_bottom = self.text.yview()[1] >= 0.999
 
-        self.text.configure(state="normal")
+        with editable(self.text):
+            start = f"msg{first}.start" if first < len(self._rendered) else "end-1c"
+            # "end" まで消すと Tk は末尾の改行を残すために手前の改行を消すので、
+            # 末尾の改行の手前まで消す
+            self.text.delete(start, "end-1c")
 
-        start = f"msg{first}.start" if first < len(self._rendered) else "end-1c"
-        # "end" まで消すと Tk は末尾の改行を残すために手前の改行を消すので、
-        # 末尾の改行の手前まで消す
-        self.text.delete(start, "end-1c")
+            # 埋め込んだボタンは、描き直すたびに作り直す
+            if self._cloud_button is not None:
+                self._cloud_button.destroy()
+                self._cloud_button = None
 
-        # 埋め込んだボタンは、描き直すたびに作り直す
-        if self._cloud_button is not None:
-            self._cloud_button.destroy()
-            self._cloud_button = None
+            for i in range(first, len(snapshot)):
+                self._insert_message(i, snapshot[i])
 
-        for i in range(first, len(snapshot)):
-            self._insert_message(i, snapshot[i])
-
-        self.text.configure(state="disabled")
         self._rendered = snapshot
 
         if at_bottom:
@@ -726,14 +529,3 @@ class ChatApp:
             hint = ""
 
         self.text.insert("end", hint + "\n", ("note", tag))
-
-
-def main() -> None:
-    root = tk.Tk()
-    ChatApp(root)
-
-    try:
-        root.mainloop()
-    finally:
-        # Ctrl+C などでも、起動したサーバーを残さない
-        server_manager.stop()

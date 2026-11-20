@@ -139,5 +139,5 @@ struct SettingsState
 // 画面を描くのに使う設定 (設定画面を開いている間は、見ながら調整できるように編集中の値)
 const UiSettings& ActiveUiSettings(const SettingsState& settings);
 
-// 設定画面 (モーダル) を描く。DrawUI の中から毎フレーム呼ぶ
+// 設定画面 (モーダル) を描く。Application::DrawMainWindow から毎フレーム呼ぶ
 void DrawSettings(SettingsState& settings);

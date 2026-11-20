@@ -4,6 +4,7 @@
 
 #include "chat/chat.h"
 #include "common/ime.h"
+#include "common/widgets.h"
 #include "common/server_manager.h"
 
 #include <imgui.h>
@@ -375,30 +376,27 @@ void DrawLog(const MazeState& state, bool busy, const UiColors& colors)
 {
     if (state.log.empty())
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.subText);
-        ImGui::TextWrapped("指示を入力すると、LLM が命令 (JSON) に訳し、ロボットが動きます。");
-        ImGui::PopStyleColor();
+        ui::WrappedColored(colors.subText, "指示を入力すると、LLM が命令 (JSON) に訳し、ロボットが動きます。");
         return;
     }
 
     for (size_t i = 0; i < state.log.size(); ++i)
     {
         const MazeLogEntry& entry = state.log[i];
-        ImGui::PushID(static_cast<int>(i));
+        ui::Id id(static_cast<int>(i));
 
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.user);
-        ImGui::TextWrapped("「%s」", entry.text.c_str());
-        ImGui::PopStyleColor();
+        ui::WrappedColored(colors.user, "「" + entry.text + "」");
 
         ImGui::Indent();
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.subText);
 
-        for (const std::string& command : entry.commands)
         {
-            ImGui::TextUnformatted(command.c_str());
-        }
+            ui::StyleColor color(ImGuiCol_Text, colors.subText);
 
-        ImGui::PopStyleColor();
+            for (const std::string& command : entry.commands)
+            {
+                ImGui::TextUnformatted(command.c_str());
+            }
+        }
 
         const bool last = i + 1 == state.log.size();
 
@@ -411,9 +409,7 @@ void DrawLog(const MazeState& state, bool busy, const UiColors& colors)
             char seconds[32];
             std::snprintf(seconds, sizeof(seconds), " (%.1f 秒で訳しました)", entry.elapsedMs / 1000.0);
 
-            ImGui::PushStyleColor(ImGuiCol_Text, entry.failed ? colors.error : colors.ai);
-            ImGui::TextWrapped("%s", entry.result.c_str());
-            ImGui::PopStyleColor();
+            ui::WrappedColored(entry.failed ? colors.error : colors.ai, entry.result);
 
             if (entry.elapsedMs > 0)
             {
@@ -424,14 +420,21 @@ void DrawLog(const MazeState& state, bool busy, const UiColors& colors)
 
         ImGui::Unindent();
         ImGui::Spacing();
-        ImGui::PopID();
     }
 }
 
 } // namespace
 
-void DrawMazeTab(MazeState& state, const UiColors& colors)
+void MazeTab::Shutdown()
 {
+    ShutdownMaze(mState);
+}
+
+void MazeTab::Draw(const UiContext& context)
+{
+    MazeState& state = mState;
+    const UiColors& colors = context.colors;
+
     TakeResult(state);
     Animate(state);
 
@@ -471,19 +474,12 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
 
         const bool selected = i == state.stage;
 
-        if (selected)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-        }
+        ui::StyleColor active(
+            ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive), selected);
 
         if (ImGui::Button(label.c_str()) && !selected)
         {
             SelectMazeStage(state, i);
-        }
-
-        if (selected)
-        {
-            ImGui::PopStyleColor();
         }
     }
 
@@ -491,9 +487,11 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
     if (state.cleared && state.stage + 1 < MAZE_STAGE_COUNT)
     {
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.ai);
-        const bool next = ImGui::Button("次のステージへ");
-        ImGui::PopStyleColor();
+        bool next;
+        {
+            ui::StyleColor color(ImGuiCol_Text, colors.ai);
+            next = ImGui::Button("次のステージへ");
+        }
 
         if (next)
         {
@@ -502,9 +500,9 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
     }
 
     // ルールと、いまの回数
-    ImGui::PushStyleColor(ImGuiCol_Text, state.stage == 0 ? colors.subText : colors.user);
-    ImGui::TextWrapped("S から G まで、障害物を避けて運ぼう。%s", stage.rule);
-    ImGui::PopStyleColor();
+    ui::WrappedColored(
+        state.stage == 0 ? colors.subText : colors.user,
+        std::string("S から G まで、障害物を避けて運ぼう。") + stage.rule);
 
     ImGui::Text("指示: %d 回", state.talks);
     ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.5f);
@@ -529,24 +527,24 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
     static size_t shownCount = 0;
     static bool shownBusy = false;
 
-    ImGui::BeginChild("maze_log", ImVec2(0.0f, boardSize), ImGuiChildFlags_Borders);
-    DrawLog(state, busy, colors);
-
-    if (shownCount != state.log.size() || shownBusy != busy)
     {
-        ImGui::SetScrollHereY(1.0f);
-        shownCount = state.log.size();
-        shownBusy = busy;
-    }
+        ui::Child log("maze_log", ImVec2(0.0f, boardSize), ImGuiChildFlags_Borders);
+        DrawLog(state, busy, colors);
 
-    ImGui::EndChild();
+        if (shownCount != state.log.size() || shownBusy != busy)
+        {
+            ImGui::SetScrollHereY(1.0f);
+            shownCount = state.log.size();
+            shownBusy = busy;
+        }
+    }
 
     // 入力欄 (Enter で動かす)
     const bool running = busy || state.executing || state.cleared;
     const bool available = IsChatServerAvailable();
-    const float sendWidth = ImGui::CalcTextSize("動かす").x + style.FramePadding.x * 2.0f;
-    const float resetWidth = ImGui::CalcTextSize("やり直す").x + ImGui::CalcTextSize("新しい迷路").x +
-        style.FramePadding.x * 4.0f + style.ItemSpacing.x;
+    const float sendWidth = ui::ButtonWidth("動かす");
+    const float resetWidth =
+        ui::ButtonWidth("やり直す") + ui::ButtonWidth("新しい迷路") + style.ItemSpacing.x;
 
     if (state.focusInput)
     {
@@ -560,9 +558,7 @@ void DrawMazeTab(MazeState& state, const UiColors& colors)
         ImGuiInputTextFlags_EnterReturnsTrue);
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(running || !available);
-    const bool clicked = ImGui::Button("動かす");
-    ImGui::EndDisabled();
+    const bool clicked = ui::Button("動かす", !running && available);
 
     ImGui::SameLine();
     if (ImGui::Button("やり直す"))

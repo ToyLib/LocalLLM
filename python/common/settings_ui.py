@@ -20,6 +20,7 @@ from common import server_manager
 from common.agent import DEFAULT_AGENTS
 from common.llm_client import CloudSettings
 from common.server_manager import ManagerView, ServerView
+from common.widgets import scrolled_text, set_enabled
 
 ERROR_COLOR = "#e05555"
 NOTE_COLOR = "#888888"
@@ -256,8 +257,7 @@ class SettingsDialog:
         save_button = ttk.Button(footer, text="保存", command=self._save)
         save_button.pack(side="right", padx=(0, 6))
 
-        if self.load_error:
-            save_button.state(["disabled"])
+        set_enabled(save_button, not self.load_error)
 
         # LOCALLLM_CONFIG_DIR を指定しているときは、そのフォルダが既定値なので戻せない
         # (読めないファイルがあるときも、既定値に戻せば直せる)
@@ -419,14 +419,9 @@ class SettingsDialog:
             box = ttk.Frame(page)
             box.pack(side="top", fill="both", expand=True)
 
-            text = tk.Text(
+            text = scrolled_text(
                 box, wrap="char", font=self.font, padx=6, pady=6,
                 borderwidth=1, relief="solid", undo=True, height=8)
-            scrollbar = ttk.Scrollbar(
-                box, orient="vertical", command=text.yview)
-            text.configure(yscrollcommand=scrollbar.set)
-            scrollbar.pack(side="right", fill="y")
-            text.pack(side="left", fill="both", expand=True)
             text.insert("1.0", prompt_to_text(prompt))
             text.edit_reset()
 
@@ -699,7 +694,7 @@ class SettingsDialog:
     def _toggle_delete_key(self) -> None:
         self.delete_api_key = not self.delete_api_key
         self.api_key.set("")
-        self.api_key_entry.state(["disabled" if self.delete_api_key else "!disabled"])
+        set_enabled(self.api_key_entry, not self.delete_api_key)
         self.delete_button.configure(
             text="削除をやめる" if self.delete_api_key else "秘密ファイルから削除")
         self._update_key_hint()

@@ -2,10 +2,9 @@
 
 #include "chat/chat_ui.h"
 
-#include "quiz/quiz_ui.h"
-#include "maze/maze_ui.h"
 #include "common/ime.h"
 #include "common/server_manager.h"
+#include "common/widgets.h"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -44,9 +43,7 @@ MessageAction DrawAskCloudButton(const ChatState& state, const Message& message)
     const bool enabled = state.hasCloudKey && CanAskCloud(state) &&
                          (!message.usedRag || state.allowRag);
 
-    ImGui::BeginDisabled(!enabled);
-    const bool pressed = ImGui::SmallButton(label.c_str());
-    ImGui::EndDisabled();
+    const bool pressed = ui::SmallButton(label.c_str(), enabled);
 
     if (!state.hasCloudKey)
     {
@@ -91,7 +88,7 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
         const auto& message = state.messages[i];
         const bool isUser = message.role == "user";
 
-        ImGui::PushID(static_cast<int>(i));
+        ui::Id id(static_cast<int>(i));
 
         // AI の回答には、答えたエージェントの名前を出す
         const char* name = isUser ? "You"
@@ -104,9 +101,7 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
             ImGui::TextDisabled(
                 "%s (%s)", name,
                 message.stage == AnswerStage::Local ? "ローカルの回答" : "Web 検索なしの回答");
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextDisabled("%s", message.content.c_str());
-            ImGui::PopTextWrapPos();
+            ui::WrappedDisabled(message.content);
         }
         else
         {
@@ -116,9 +111,7 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
 
             if (!message.status.empty())
             {
-                ImGui::PushTextWrapPos(0.0f);
-                ImGui::TextDisabled("%s", FormatStatus(message).c_str());
-                ImGui::PopTextWrapPos();
+                ui::WrappedDisabled(FormatStatus(message));
             }
 
             if (message.content.empty() && state.busy)
@@ -166,7 +159,7 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
         // 聞き直す前の回答との違いのまとめ
         if (!message.compareVerdict.empty() && !message.superseded)
         {
-            ImGui::PushTextWrapPos(0.0f);
+            ui::TextWrap wrap;
             ImGui::TextDisabled(
                 "%sとの違い (ローカルの LLM による目安):",
                 message.stage == AnswerStage::Web ? "Web 検索なしの回答" : "聞き直す前の回答");
@@ -186,15 +179,11 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
                 ImGui::Bullet();
                 ImGui::TextDisabled("%s", point.c_str());
             }
-
-            ImGui::PopTextWrapPos();
         }
 
         if (!message.note.empty())
         {
-            ImGui::PushTextWrapPos(0.0f);
-            ImGui::TextDisabled("%s", message.note.c_str());
-            ImGui::PopTextWrapPos();
+            ui::WrappedDisabled(message.note);
         }
 
         if (ImGui::BeginPopupContextItem("copy"))
@@ -216,8 +205,6 @@ MessageAction DrawMessages(ChatState& state, const UiColors& colors)
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-
-        ImGui::PopID();
     }
 
     if (atBottom)
@@ -294,84 +281,37 @@ void DrawRagBar(ChatState& state, RagState& rag)
     }
 
     ImGui::SameLine();
-    ImGui::BeginDisabled(building);
-    if (ImGui::SmallButton("再読込"))
+    if (ui::SmallButton("再読込", !building))
     {
         StartRagIndexing(rag);
     }
-    ImGui::EndDisabled();
 
     ImGui::SameLine();
     ImGui::TextDisabled("%s", status.c_str());
 }
 
-// llama-server が使えないときだけ、状態を 1 行ずつ出す
-void DrawServerLine(const char* name, const ServerView& view, const UiColors& colors, bool& retry)
-{
-    if (view.status == ServerStatus::Starting)
-    {
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled(
-            "%s: %s (%s)", name, ServerStatusText(view.status), view.detail.c_str());
-        ImGui::PopTextWrapPos();
-    }
-    else if (view.status == ServerStatus::Failed)
-    {
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(colors.error, "%s: %s", name, view.detail.c_str());
-        ImGui::PopTextWrapPos();
-
-        if (!view.logTail.empty())
-        {
-            ImGui::SetItemTooltip("%s", view.logTail.c_str());
-        }
-
-        ImGui::PushID(name);
-        retry |= ImGui::SmallButton("もう一度起動");
-        ImGui::PopID();
-    }
-}
-
-void DrawServerBar(const UiColors& colors)
-{
-    const ServerManagerView view = GetServerManagerView();
-
-    if (!view.enabled)
-    {
-        return;
-    }
-
-    bool retry = false;
-    DrawServerLine("チャットのサーバー", view.chat, colors, retry);
-    DrawServerLine("埋め込みのサーバー", view.embed, colors, retry);
-
-    if (retry)
-    {
-        RetryServers();
-    }
-}
-
 } // namespace
 
-void DrawUI(
-    ChatState& state,
-    RagState& rag,
-    QuizState& quiz,
-    MazeState& maze,
-    SettingsState& settings,
-    std::string& input,
-    bool& focusInput,
-    float topInset)
+ChatTab::ChatTab(RagState& rag)
+    : mRag(rag)
 {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
+    RefreshCloudStatus(mState);
+}
 
-    ImGui::Begin(
-        "Chat", nullptr,
-        ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoSavedSettings);
+void ChatTab::OnSettingsSaved()
+{
+    RefreshCloudStatus(mState);
+}
+
+void ChatTab::Shutdown()
+{
+    mState.cancel = true;
+    JoinWorker(mState);
+}
+
+void ChatTab::Draw(const UiContext& context)
+{
+    ChatState& state = mState;
 
     bool busy;
     std::string error;
@@ -380,11 +320,12 @@ void DrawUI(
         busy = state.busy;
         error = state.error;
 
+        // 送れなかった質問を入力欄に戻す
         if (!state.restoredPrompt.empty())
         {
-            input = std::move(state.restoredPrompt);
+            mInput = std::move(state.restoredPrompt);
             state.restoredPrompt.clear();
-            focusInput = true;
+            mFocusInput = true;
         }
     }
 
@@ -395,52 +336,17 @@ void DrawUI(
     const float errorHeight =
         error.empty() ? 0.0f : lineHeight + style.ItemSpacing.y;
 
-    // 背景はタイトルバーの下まで塗り、中身はその下から並べる
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topInset);
-
-    // サーバーの状態はどのタブでも見えるように、タブの外 (上) に置く
-    DrawServerBar(ActiveUiSettings(settings).colors);
-
-    // 設定ボタンはどのタブからでも開けるように、タブの行の右端に重ねる
-    {
-        const float buttonWidth = ImGui::CalcTextSize("設定").x +
-            style.FramePadding.x * 2.0f;
-        const ImVec2 tabsPos = ImGui::GetCursorPos();
-
-        ImGui::SetCursorPos(ImVec2(
-            ImGui::GetContentRegionMax().x - buttonWidth, tabsPos.y));
-
-        if (ImGui::SmallButton("設定"))
-        {
-            settings.requestOpen = true;
-        }
-
-        ImGui::SetCursorPos(tabsPos);
-    }
-
-    // チャット・クイズ・迷路はタブで切り替える
-    // (閉じているタブの状態も、ワーカースレッドで動き続ける)
-    if (ImGui::BeginTabBar("tabs"))
-    {
-    // 最初のフレームだけ、チャットのタブを選ぶ
-    static bool firstFrame = true;
-    const ImGuiTabItemFlags chatFlags =
-        firstFrame ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
-    firstFrame = false;
-
-    // チャットのタブの中身 (インデントは、タブを足す前のまま)
-    if (ImGui::BeginTabItem("チャット", nullptr, chatFlags))
-    {
-    DrawRagBar(state, rag);
+    DrawRagBar(state, mRag);
 
     // 会話表示 (高さは残りから入力欄などの分を引いたもの)
-    ImGui::BeginChild(
-        "messages",
-        ImVec2(0.0f, -(inputHeight + errorHeight + style.ItemSpacing.y)),
-        ImGuiChildFlags_Borders);
-    const MessageAction action =
-        DrawMessages(state, ActiveUiSettings(settings).colors);
-    ImGui::EndChild();
+    MessageAction action;
+    {
+        ui::Child messages(
+            "messages",
+            ImVec2(0.0f, -(inputHeight + errorHeight + style.ItemSpacing.y)),
+            ImGuiChildFlags_Borders);
+        action = DrawMessages(state, context.colors);
+    }
 
     if (action == MessageAction::AskCloud)
     {
@@ -459,106 +365,68 @@ void DrawUI(
 
     if (!error.empty())
     {
-        ImGui::TextColored(
-            ActiveUiSettings(settings).colors.error, "Error: %s", error.c_str());
+        ImGui::TextColored(context.colors.error, "Error: %s", error.c_str());
     }
 
     // 入力欄 (Enterで送信 / Shift+Enterで改行)
     const float buttonWidth = ImGui::CalcTextSize("クリア").x * 2.5f;
 
-    if (focusInput)
+    if (mFocusInput)
     {
         ImGui::SetKeyboardFocusHere();
-        focusInput = false;
+        mFocusInput = false;
     }
 
     const bool entered = ImGui::InputTextMultiline(
-        "##input", &input,
+        "##input", &mInput,
         ImVec2(-(buttonWidth + style.ItemSpacing.x), inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue |
         ImGuiInputTextFlags_CtrlEnterForNewLine |
         ImGuiInputTextFlags_WordWrap);
 
     ImGui::SameLine();
-    ImGui::BeginGroup();
-
-    const ImVec2 buttonSize(
-        buttonWidth, (inputHeight - style.ItemSpacing.y) / 2.0f);
 
     bool send = false;
-
-    if (busy)
     {
-        if (ImGui::Button("中断", buttonSize))
+        ui::Group buttons;
+
+        const ImVec2 buttonSize(
+            buttonWidth, (inputHeight - style.ItemSpacing.y) / 2.0f);
+
+        if (busy)
         {
-            state.cancel = true;
+            if (ImGui::Button("中断", buttonSize))
+            {
+                state.cancel = true;
+            }
+        }
+        else
+        {
+            // サーバーの準備ができるまでは送らない (入力は残す)
+            const bool available = IsChatServerAvailable();
+            send = (ui::Button("送信", available, buttonSize) || entered) && available;
+        }
+
+        if (ui::Button("クリア", !busy, buttonSize))
+        {
+            std::lock_guard lock(state.mutex);
+            state.messages.clear();
+            state.error.clear();
+            mFocusInput = true;
         }
     }
-    else
-    {
-        // サーバーの準備ができるまでは送らない (入力は残す)
-        const bool available = IsChatServerAvailable();
-
-        ImGui::BeginDisabled(!available);
-        send = ImGui::Button("送信", buttonSize);
-        ImGui::EndDisabled();
-
-        send = (send || entered) && available;
-    }
-
-    ImGui::BeginDisabled(busy);
-    if (ImGui::Button("クリア", buttonSize))
-    {
-        std::lock_guard lock(state.mutex);
-        state.messages.clear();
-        state.error.clear();
-        focusInput = true;
-    }
-    ImGui::EndDisabled();
-
-    ImGui::EndGroup();
 
     DrawComposition();
 
     if (entered)
     {
-        focusInput = true;
+        mFocusInput = true;
     }
 
-    if (send && input.find_first_not_of(" \t\r\n") != std::string::npos)
+    if (send && mInput.find_first_not_of(" \t\r\n") != std::string::npos)
     {
-        SendPrompt(state, rag, input);
-        input.clear();
-        focusInput = true;
+        SendPrompt(state, mRag, mInput);
+        mInput.clear();
+        mFocusInput = true;
     }
-
-    ImGui::EndTabItem();
-    }
-
-    if (ImGui::BeginTabItem("クイズ"))
-    {
-        DrawQuizTab(quiz, rag, ActiveUiSettings(settings).colors);
-        ImGui::EndTabItem();
-    }
-
-    if (ImGui::BeginTabItem("迷路"))
-    {
-        DrawMazeTab(maze, ActiveUiSettings(settings).colors);
-        ImGui::EndTabItem();
-    }
-
-    ImGui::EndTabBar();
-    }
-
-    DrawSettings(settings);
-
-    // 設定を保存したら、API キーの有無とサーバーの設定を読み直す
-    if (settings.saved)
-    {
-        settings.saved = false;
-        RefreshCloudStatus(state);
-        ReloadServerManager();
-    }
-
-    ImGui::End();
 }

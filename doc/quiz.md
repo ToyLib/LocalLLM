@@ -82,7 +82,7 @@
 
 - `quiz_mode.py` (C++ 版は `quiz_mode.cpp`) は画面を知らない。`QuizState` (ロックで守った状態と、画面を起こす `notify`) を、ワーカースレッドが書き、UI スレッドが読む。
 - 開始・やめるたびに `session` を増やし、古いワーカーが新しい回に書き込まないようにしている (中断用のトークンも回ごとに作る)。
-- `quiz_ui.py` の `QuizTab` は、自分で `after` を回して描画する。チャット画面の `_poll` / `_refresh` とは独立している。
+- `quiz_ui.py` の `QuizTab` は `Tab` の子クラスで、自分で `after` を回して描画する。チャットのタブの `_poll` / `_refresh` とは独立している。
 - 小さなモデルでも崩れないよう、出力は `llama-server` の JSON スキーマで形を制限している ([agent.md](agent.md) のルーターと同じ仕組み)。
 
 ## C++ 版との違い

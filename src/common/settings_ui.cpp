@@ -7,6 +7,7 @@
 #include "chat/chat.h"
 #include "common/llm_client.h"
 #include "common/server_manager.h"
+#include "common/widgets.h"
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -304,8 +305,7 @@ void DrawTemplatePicker(SettingsState& settings, AgentSettings& agent)
     agent.templateIndex = std::clamp(
         agent.templateIndex, 0, static_cast<int>(settings.templates.size()) - 1);
 
-    const float buttonWidth = ImGui::CalcTextSize("このテンプレートにする").x +
-        ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float buttonWidth = ui::ButtonWidth("このテンプレートにする");
 
     ImGui::SetNextItemWidth(std::max(
         ImGui::GetContentRegionAvail().x * 0.4f,
@@ -738,7 +738,7 @@ void DrawChatModelPicker(SettingsState& settings)
 
 void DrawServerStatusLine(const char* name, const ServerView& view)
 {
-    ImGui::PushTextWrapPos(0.0f);
+    ui::TextWrap wrap;
 
     if (view.detail.empty())
     {
@@ -748,8 +748,6 @@ void DrawServerStatusLine(const char* name, const ServerView& view)
     {
         ImGui::Text("%s: %s (%s)", name, ServerStatusText(view.status), view.detail.c_str());
     }
-
-    ImGui::PopTextWrapPos();
 }
 
 void DrawManagedServer(SettingsState& settings)
@@ -767,32 +765,32 @@ void DrawManagedServer(SettingsState& settings)
         }
     }
 
-    ImGui::BeginDisabled(!settings.managedEnabled);
-
-    DrawChatModelPicker(settings);
-    ImGui::InputText("チャットのモデル", &settings.managedChatModel);
-    ImGui::InputText("埋め込みのモデル (空なら起動しない)", &settings.managedEmbedModel);
-
-    ImGui::InputTextWithHint(
-        "llama-server の場所", "空なら自動で探す", &settings.managedServerPath);
-    ImGui::SameLine();
-
-    if (ImGui::SmallButton("参照..."))
     {
-        SDL_ShowOpenFileDialog(
-            OnServerPathPicked, nullptr, nullptr, nullptr, 0, nullptr, false);
-    }
+        ui::Disabled disabled(!settings.managedEnabled);
 
-    // めったに変えない項目は畳んでおく
-    if (ImGui::TreeNode("詳細"))
-    {
-        ImGui::InputInt("チャットのコンテキスト", &settings.managedContext, 0);
-        ImGui::InputInt("埋め込みのコンテキスト", &settings.managedEmbedContext, 0);
-        ImGui::InputInt("GPU に載せる層の数", &settings.managedGpuLayers, 0);
-        ImGui::TreePop();
-    }
+        DrawChatModelPicker(settings);
+        ImGui::InputText("チャットのモデル", &settings.managedChatModel);
+        ImGui::InputText("埋め込みのモデル (空なら起動しない)", &settings.managedEmbedModel);
 
-    ImGui::EndDisabled();
+        ImGui::InputTextWithHint(
+            "llama-server の場所", "空なら自動で探す", &settings.managedServerPath);
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("参照..."))
+        {
+            SDL_ShowOpenFileDialog(
+                OnServerPathPicked, nullptr, nullptr, nullptr, 0, nullptr, false);
+        }
+
+        // めったに変えない項目は畳んでおく
+        if (ImGui::TreeNode("詳細"))
+        {
+            ImGui::InputInt("チャットのコンテキスト", &settings.managedContext, 0);
+            ImGui::InputInt("埋め込みのコンテキスト", &settings.managedEmbedContext, 0);
+            ImGui::InputInt("GPU に載せる層の数", &settings.managedGpuLayers, 0);
+            ImGui::TreePop();
+        }
+    }
 
     const ServerManagerView view = GetServerManagerView();
 
@@ -839,10 +837,11 @@ void DrawCloudTab(SettingsState& settings)
     UpdateKeyStatus(settings);
     ImGui::Text("API キー: %s", settings.keyStatus.c_str());
 
-    ImGui::BeginDisabled(settings.deleteApiKey);
-    ImGui::InputText(
-        "新しい API キー", &settings.apiKeyInput, ImGuiInputTextFlags_Password);
-    ImGui::EndDisabled();
+    {
+        ui::Disabled disabled(settings.deleteApiKey);
+        ImGui::InputText(
+            "新しい API キー", &settings.apiKeyInput, ImGuiInputTextFlags_Password);
+    }
 
     ImGui::SameLine();
 
@@ -873,16 +872,15 @@ void DrawCloudTab(SettingsState& settings)
 
     ImGui::SeparatorText("Web 検索");
     ImGui::Checkbox("聞き直した後に「Web でも調べて比べる」を出す", &settings.cloudWebSearch);
-    ImGui::BeginDisabled(!settings.cloudWebSearch);
-    ImGui::InputText("Web 検索のモデル", &settings.cloudSearchModel);
-    ImGui::EndDisabled();
+    {
+        ui::Disabled disabled(!settings.cloudWebSearch);
+        ImGui::InputText("Web 検索のモデル", &settings.cloudSearchModel);
+    }
     ImGui::TextDisabled("押すたびに検索の料金がかかります。資料 (rag/) を使った回答では出しません。");
 
     ImGui::SeparatorText("資料 (rag/)");
     ImGui::Checkbox("資料 (rag/) の内容を送ってよい", &settings.cloudAllowRag);
-    ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", "オンにすると、資料を使った回答も ChatGPT に聞き直せます (送る前に確認します)。クイズの自作の分野でも、「資料を使う」と「ChatGPT で出題する」を同時に選べます (警告を出します)。オフ (既定) なら、資料は外に出ません。");
-    ImGui::PopTextWrapPos();
+    ui::WrappedDisabled("オンにすると、資料を使った回答も ChatGPT に聞き直せます (送る前に確認します)。クイズの自作の分野でも、「資料を使う」と「ChatGPT で出題する」を同時に選べます (警告を出します)。オフ (既定) なら、資料は外に出ません。");
 }
 
 } // namespace
@@ -1032,9 +1030,8 @@ namespace
 template <typename Draw>
 void DrawScrollableTab(const char* id, float footerHeight, Draw draw)
 {
-    ImGui::BeginChild(id, ImVec2(0.0f, -footerHeight));
+    ui::Child child(id, ImVec2(0.0f, -footerHeight));
     draw();
-    ImGui::EndChild();
 }
 
 } // namespace
@@ -1057,10 +1054,11 @@ void DrawSettings(SettingsState& settings)
         ImGuiCond_Appearing);
 
     // 背景の不透明度を見ながら調整できるように、後ろは暗くしすぎない
-    ImGui::PushStyleColor(
-        ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.15f));
-    const bool open = ImGui::BeginPopupModal(POPUP_NAME);
-    ImGui::PopStyleColor();
+    bool open;
+    {
+        ui::StyleColor dim(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.15f));
+        open = ImGui::BeginPopupModal(POPUP_NAME);
+    }
 
     if (!open)
     {
@@ -1078,9 +1076,7 @@ void DrawSettings(SettingsState& settings)
 
     if (!settings.loadError.empty())
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-        ImGui::TextWrapped("%s", settings.loadError.c_str());
-        ImGui::PopStyleColor();
+        ui::WrappedColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), settings.loadError);
     }
 
     if (ImGui::BeginTabBar("settings"))
@@ -1126,8 +1122,7 @@ void DrawSettings(SettingsState& settings)
 
     const float buttonWidth = ImGui::CalcTextSize("キャンセル").x * 1.6f;
 
-    ImGui::BeginDisabled(!settings.loadError.empty());
-    if (ImGui::Button("保存", ImVec2(buttonWidth, 0.0f)) &&
+    if (ui::Button("保存", settings.loadError.empty(), ImVec2(buttonWidth, 0.0f)) &&
         SaveSettings(settings))
     {
         settings.current = settings.ui;
@@ -1135,7 +1130,6 @@ void DrawSettings(SettingsState& settings)
         settings.saved = true;
         ImGui::CloseCurrentPopup();
     }
-    ImGui::EndDisabled();
 
     ImGui::SameLine();
 
@@ -1153,8 +1147,7 @@ void DrawSettings(SettingsState& settings)
     if (CanResetConfig())
     {
         const char* resetLabel = "すべて既定に戻す";
-        const float resetWidth =
-            ImGui::CalcTextSize(resetLabel).x + style.FramePadding.x * 2.0f;
+        const float resetWidth = ui::ButtonWidth(resetLabel);
         ImGui::SameLine(ImGui::GetWindowWidth() - style.WindowPadding.x - resetWidth);
 
         if (ImGui::Button(resetLabel))

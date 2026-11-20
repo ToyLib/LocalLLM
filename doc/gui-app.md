@@ -1,17 +1,21 @@
 # GUI アプリとしての構成
 
 このドキュメントでは、チャット画面を表示する GUI アプリの部分を解説します。
-対象のファイルは `src/` 以下の次のファイルです。機能ごとに `common/` (共通)、`chat/`、`quiz/`、`maze/` のフォルダーに分けています (`main.cpp` だけ `src/` 直下)。Python 版 (`python/`) も同じ分け方です。
+対象のファイルは `src/` 以下の次のファイルです。機能ごとに `common/` (共通)、`chat/`、`quiz/`、`maze/` のフォルダーに分け、アプリの土台を `app/` に置いています (`main.cpp` だけ `src/` 直下)。Python 版 (`python/`) も同じ分け方です。
 
 | ファイル | 内容 |
 | --- | --- |
-| [main.cpp](../src/main.cpp) | SDL / ImGui の初期化、メインループ、後始末 |
+| [main.cpp](../src/main.cpp) | 入口 (`Application` を作って `Run` するだけ) |
+| [application.h](../src/app/application.h) / [application.cpp](../src/app/application.cpp) | アプリ本体 (`Application`)。状態を持ち、メインループと起動・終了の手順を担当 |
+| [renderer.h](../src/app/renderer.h) / [renderer.cpp](../src/app/renderer.cpp) | ウィンドウと描画の土台 (`Renderer`)。SDL のウィンドウとレンダラー、ImGui、フォント、IME |
 | [chat.h](../src/chat/chat.h) / [chat.cpp](../src/chat/chat.cpp) | 会話の状態 (`ChatState`)、ワーカースレッドでの送受信 (`SendPrompt`)、UI を起こすイベント (`WakeUI`) |
-| [chat_ui.h](../src/chat/chat_ui.h) / [chat_ui.cpp](../src/chat/chat_ui.cpp) | 画面の組み立て (`DrawUI`、`DrawMessages`、`DrawRagBar`) |
+| [tab.h](../src/common/tab.h) | タブの共通の形 (`Tab`) と、どのタブにも渡すもの (`UiContext`) |
+| [chat_ui.h](../src/chat/chat_ui.h) / [chat_ui.cpp](../src/chat/chat_ui.cpp) | チャットのタブ (`ChatTab`。`DrawMessages`、`DrawRagBar`) |
 | [quiz_ui.h](../src/quiz/quiz_ui.h) / [quiz_ui.cpp](../src/quiz/quiz_ui.cpp)、[quiz_mode.h](../src/quiz/quiz_mode.h) / [quiz_mode.cpp](../src/quiz/quiz_mode.cpp) | クイズタブ ([quiz.md](quiz.md)) |
 | [settings_ui.h](../src/common/settings_ui.h) / [settings_ui.cpp](../src/common/settings_ui.cpp) | 設定画面 (`DrawSettings`) と画面の設定 (`UiSettings`) |
 | [config.h](../src/common/config.h) / [config.cpp](../src/common/config.cpp) | 設定ファイルの読み書き、API キーと秘密ファイル |
 | [ime.h](../src/common/ime.h) / [ime.cpp](../src/common/ime.cpp) | IME の変換中の文字列の表示 |
+| [widgets.h](../src/common/widgets.h) / [widgets.cpp](../src/common/widgets.cpp) | ImGui の薄いラッパー (`ui::`)。Begin/End・Push/Pop の組をスコープで閉じるクラスと、折り返すテキスト・押せないことがあるボタン |
 | [font.h](../src/common/font.h) / [font.cpp](../src/common/font.cpp) | 日本語フォントの読み込み (`LoadFont`) |
 | [macos_window.h](../src/common/macos_window.h) / [macos_window.mm](../src/common/macos_window.mm) | macOS のタイトルバーの設定 (macOS のみ) |
 
@@ -43,53 +47,103 @@ if (ImGui::Button("送信"))   // ボタンを描き、押されたフレーム�
 画面の状態 (会話の内容や入力中の文字列) はアプリ側の変数に持っておき、毎フレームそれをもとに UI を描きます。
 このため、データを書き換えれば次のフレームで画面に反映されます。
 
+### ImGui のラッパー (widgets.h)
+
+ImGui には `BeginDisabled` / `EndDisabled` や `PushID` / `PopID` のように、必ず組で呼ぶ関数が多くあります。
+閉じ忘れや、途中で `return` したときの閉じ漏れを防ぐため、`ui::` のクラスでスコープを抜けると閉じるようにしています。
+
+```cpp
+{
+    ui::Disabled disabled(busy);   // EndDisabled はスコープの終わりで呼ばれる
+    ImGui::InputText("##name", &name);
+}
+
+if (ui::Button("送信", available))  // 押せないときは薄く表示し、false を返す
+    Send();
+```
+
+| クラス・関数 | 包んでいるもの |
+| --- | --- |
+| `ui::Disabled` | `BeginDisabled` / `EndDisabled` |
+| `ui::Id` | `PushID` / `PopID` |
+| `ui::StyleColor` | `PushStyleColor` / `PopStyleColor` (3 つ目の引数が false なら何もしない) |
+| `ui::TextWrap` | `PushTextWrapPos` / `PopTextWrapPos` |
+| `ui::Child` / `ui::Group` | `BeginChild` / `EndChild`、`BeginGroup` / `EndGroup` |
+| `ui::WrappedText` / `WrappedDisabled` / `WrappedColored` | 窓の右端で折り返すテキスト |
+| `ui::Button` / `ui::SmallButton` | `enabled` が false なら押せないボタン |
+| `ui::ButtonWidth` | ラベルがちょうど収まるボタンの幅 |
+
+ウィジェットを、状態を持つクラスにはしていません。ImGui は毎フレーム描き直すので、状態はアプリ側の変数だけに持たせます。
+
 ## 全体の構成
 
 ```
-main()                         … main.cpp
- ├ 初期化: curl / SDL / ウィンドウ / レンダラー / ImGui / フォント
+Application::Run()             … application.cpp (main.cpp の main() から呼ぶ)
+ ├ Init(): curl / ui.json / Renderer::Init (SDL・ウィンドウ・レンダラー・ImGui・フォント・IME) / サーバー管理 / RAG
  ├ メインループ
- │   ├ イベント処理 (ImGui に渡す・IME の変換中の文字列・終了)
- │   ├ ImGui の新しいフレームを開始
- │   ├ DrawUI()          … 画面全体を組み立てる (chat_ui.cpp)
+ │   ├ ProcessEvents()   … Renderer::ProcessEvent (ImGui に渡す・IME の変換中の文字列・終了)
+ │   ├ Renderer::BeginFrame() … ImGui の新しいフレームを開始
+ │   ├ DrawMainWindow()  … 画面全体を組み立てる (application.cpp)
  │   │   ├ DrawServerBar()   … サーバーの状態 (タブの外)
-│   │   ├ 「設定」ボタン    … タブの行の右端 (どのタブからでも開ける)
- │   │   ├ タブ「チャット」
+ │   │   ├ 「設定」ボタン    … タブの行の右端 (どのタブからでも開ける)
+ │   │   ├ mTabs の各タブの Draw(context) … 選ばれているタブだけ
+ │   │   ├ ChatTab::Draw()   … タブ「チャット」(chat_ui.cpp)
  │   │   │   ├ DrawRagBar()      … 資料 (RAG) の選択・再読込・インデックスの状態
  │   │   │   ├ DrawMessages()    … 会話の一覧と「ChatGPT に聞き直す」ボタン
  │   │   │   ├ 入力欄・送信/中断・クリアのボタン
  │   │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
- │   │   ├ タブ「クイズ」
- │   │   │   └ DrawQuizTab()     … 分野の選択・出題・結果 (quiz_ui.cpp、[quiz.md](quiz.md))
- │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)
- │   └ 描画して画面に表示
- └ 後始末: 受信中なら中断 → ワーカースレッドの終了待ち → 各ライブラリの終了
+ │   │   ├ QuizTab::Draw()   … タブ「クイズ」: 分野の選択・出題・結果 (quiz_ui.cpp、[quiz.md](quiz.md))
+ │   │   ├ MazeTab::Draw()   … タブ「迷路」(maze_ui.cpp、[maze.md](maze.md))
+ │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)。保存したら各タブの OnSettingsSaved()
+ │   └ Renderer::EndFrame()   … 描画して画面に表示
+ └ Shutdown(): 各タブの Shutdown() (受信中なら中断・ワーカースレッドの終了待ち) → RAG の終了待ち → ウィンドウを隠す → サーバーの停止 → curl の終了
+   (SDL と ImGui の後始末は Renderer のデストラクタ)
 
 SendPrompt()  … 送信ボタンで呼ばれ、ワーカースレッドでルーター → 回答役 (RunAgent → AskLLM) を実行 (chat.cpp)
 AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッドで ChatGPT → 書き直し → 違いのまとめを実行 (chat.cpp)
 ```
 
-## 起動処理 (main.cpp の main の前半)
+### タブ (tab.h)
+
+チャット・クイズ・迷路は、どれも `Tab` を継承したクラスです。`Application` が `std::vector<std::unique_ptr<Tab>>` で持ち、並べた順にタブを出します。
+
+| メソッド | 呼ばれるとき |
+| --- | --- |
+| `Label()` | タブに出す名前 |
+| `Draw(const UiContext&)` | タブが選ばれているとき、毎フレーム |
+| `OnSettingsSaved()` | 設定画面で保存したあと (チャットは API キーの有無を調べ直す) |
+| `Shutdown()` | 終了するとき (ワーカースレッドを止めて待つ) |
+
+各タブは自分の状態 (`ChatState`、`QuizState`、`MazeState`) を持ちます。資料 (`RagState`) はチャットとクイズで共有するので `Application` が持ち、タブには参照で渡します。
+`UiContext` は、どのタブにも渡す画面の色 (設定画面を開いている間は編集中の色) です。
+タブを足すときは、`Tab` を継承したクラスを作り、`Application::Init` で `mTabs` に足します。
+
+## 起動処理 (Application::Init と Renderer::Init)
+
+`Application::Init` が 1・2 と 11 以降を、`Renderer::Init` が 3〜10 を行います。
 
 1. `curl_global_init()` で libcurl を初期化します。
-2. `SetImeHint()` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
-3. `SDL_Init(SDL_INIT_VIDEO)` で SDL を初期化します。
-4. `RegisterWakeEvent()` で独自のイベント番号を 1 つ確保します (`SDL_RegisterEvents`)。ワーカースレッドから UI を起こすのに使います (後述)。
+2. `config/ui.json` を読みます (`LoadConfigOrEmpty`)。読めない項目は `settings_ui.h` の `UiSettings` の既定値を使います。フォントは `Renderer::Init` に渡します。
+3. `SetImeHint()` で、IME の変換中の文字列はアプリが描くことを SDL に伝えます (後述)。
+4. `SDL_Init(SDL_INIT_VIDEO)` で SDL を初期化します。
 5. ディスプレイの拡大率 (`SDL_GetDisplayContentScale`) を取得し、900×700 に拡大率を掛けた大きさでウィンドウを作ります。
    - `SDL_WINDOW_HIGH_PIXEL_DENSITY` で、Retina などの高解像度ディスプレイでもぼやけずに描きます。
    - `SDL_WINDOW_HIDDEN` で作成し、中央に移動してから表示するので、ウィンドウが一瞬別の場所に見えることはありません。
    - `SDL_WINDOW_TRANSPARENT` を付けて、ウィンドウの背景を透明にします。
 6. `SDL_CreateRenderer()` でレンダラーを作り、VSync を有効にします。
    - macOS では続けて `ApplyMacTitleBarStyle()` を呼びます。透明にしただけではタイトルバーだけが素通しで透けてしまうため、本文をタイトルバーの下まで広げ (`NSWindowStyleMaskFullSizeContentView`)、タイトルバーも ImGui の半透明の背景で塗って本文と一体にします。
-   - タイトルバーに中身が隠れないよう、毎フレーム `GetMacTitleBarHeight()` で高さを求め、`DrawUI` に `topInset` として渡します。背景はタイトルバーの下まで塗り、中身はその下から並べます。
+   - タイトルバーに中身が隠れないよう、毎フレーム `Renderer::TopInset()` (`GetMacTitleBarHeight()`) で高さを求め、`DrawMainWindow` がその分だけ下から並べます。背景はタイトルバーの下まで塗り、中身はその下から並べます。
 7. ImGui を初期化します。
    - `io.IniFilename = nullptr` で、ウィンドウ配置を保存する `imgui.ini` を作らないようにします。
    - キーボードでのフォーカス移動 (`NavEnableKeyboard`) を有効にします。
    - ダークテーマを使い、余白などの大きさとフォントを拡大率に合わせます (`ScaleAllSizes`、`FontScaleDpi`)。
-   - `config/ui.json` を読み (`LoadConfigOrEmpty`)、ウィンドウ背景の不透明度を `window_opacity` にします。読めない項目は `settings_ui.h` の `UiSettings` の既定値を使います。
 8. 日本語フォントを読み込みます (`LoadFont`。ファイルと大きさは `ui.json` の `font_file` / `font_size`)。
 9. ImGui の SDL3 用・SDL_Renderer 用のバックエンドを初期化します。
 10. `InstallImeHook()` で、IME のカーソル位置を受け取るため、バックエンドの `Platform_SetImeDataFn` を `SetImeData` で包みます (後述)。
+11. `RegisterWakeEvent()` で独自のイベント番号を 1 つ確保します (`SDL_RegisterEvents`)。ワーカースレッドから UI を起こすのに使います (後述)。
+12. `ApplyUiSettings()` で背景の不透明度・色を ImGui に反映し、API キーの有無を調べ (`RefreshCloudStatus`)、サーバー管理 (`StartServerManager`) と RAG のインデックス作成 (`StartRagIndexing`) を始めます。
+
+どこかで失敗したらログに書いて `Run` が 1 を返します。途中まで作ったものは `Renderer` のデストラクタが片付けます。
 
 ## 日本語フォントの読み込み (font.cpp)
 
@@ -105,7 +159,7 @@ ImGui に入っている標準フォントには日本語の文字がないた�
 
 同梱フォントは、ビルド後に CMake が `Asset` フォルダーごと実行ファイルの隣にコピーします。
 
-## メインループと省電力
+## メインループと省電力 (Application::Run)
 
 ```cpp
 bool hasEvent = framesToRender > 0
@@ -187,7 +241,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 | エラー (接続できない、HTTP エラーなど) | 質問と空の回答を取り除き、質問を入力欄に戻す | 入力欄の上に赤字で表示 |
 
 質問を入力欄に戻すのは、サーバーを起動し忘れたときなどに、同じ質問を打ち直さずに再送信できるようにするためです。
-戻された質問は、次のフレームで `DrawUI` が入力欄に入れます (`restoredPrompt`)。
+戻された質問は、次のフレームで `ChatTab::Draw` が入力欄に入れます (`restoredPrompt`)。
 
 最後に `busy = false` にし、`WakeUI()` で画面を更新します。
 
@@ -196,7 +250,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 ウィンドウを閉じたときに受信中であれば、`cancel = true` にしてからワーカースレッドの終了を待ちます。
 `AskLLM()` は遅くとも 1 秒ほどで中断に気づくので、終了が長く待たされることはありません。
 
-## 画面の組み立て (chat_ui.cpp)
+## チャットのタブ (chat_ui.cpp)
 
 ```
 ┌────────────────────────────────────────────┐
@@ -218,7 +272,7 @@ UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるた�
 └──────────────────────────────────┴─────────┘
 ```
 
-- ImGui のウィンドウ "Chat" を、OS のウィンドウいっぱいの大きさで、枠やタイトルなしで表示します (`NoDecoration`、`NoMove`)。OS のウィンドウの大きさを変えると、画面全体が追従します。
+- ImGui のウィンドウ "Chat" を、OS のウィンドウいっぱいの大きさで、枠やタイトルなしで表示します (`NoDecoration`、`NoMove`。`Application::DrawMainWindow`)。OS のウィンドウの大きさを変えると、画面全体が追従します。
 - 最初にロックを取り、`busy` と `error` をローカル変数にコピーします。ロックを持ったまま UI 全体を描くと、その間ワーカースレッドが回答を書き込めなくなるためです。
 - 入力欄とエラー表示の高さを先に計算し、残りの高さを会話の表示に使います。`BeginChild` に負の高さを渡すと「残りからその分を引いた高さ」という意味になります。
 - ボタンの幅は「クリア」の文字幅の 2.5 倍にしています。入力欄の幅は、ウィンドウの幅からボタンの幅を引いた残りです。
@@ -312,7 +366,7 @@ RAG の行の右端の「設定」ボタンで `SettingsState::requestOpen` を�
 | フォントファイル | `config/ui.json` の `font_file` |
 | OS フォントの候補 | `font.cpp` の `SYSTEM_FONT_PATHS` |
 | 背景の不透明度 | `config/ui.json` の `window_opacity` |
-| ウィンドウの初期サイズ | `main.cpp` の `SDL_CreateWindow` (900×700) |
-| 入力欄の高さ | `chat_ui.cpp` の `DrawUI` の `inputHeight` (4 行分) |
+| ウィンドウの初期サイズ | `application.cpp` の `Renderer::Init` の引数 (900×700) |
+| 入力欄の高さ | `chat_ui.cpp` の `ChatTab::Draw` の `inputHeight` (4 行分) |
 | 色 (背景・文字・送信者名・エラーなど) | `config/ui.json` の `colors` (既定値は `settings_ui.h` の `UiColors`) |
 | 接続先や system プロンプト | `config/server.json`、`config/agents.json` ([llm-client.md](llm-client.md)、[agent.md](agent.md) を参照) |
