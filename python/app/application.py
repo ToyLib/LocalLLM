@@ -21,6 +21,7 @@ from common.settings_ui import COLOR_ENTRIES, SettingsDialog, is_color
 from common.tab import Tab, UiContext
 from maze.maze_ui import MazeTab
 from quiz.quiz_ui import QuizTab
+from sandbox.sandbox_ui import SandboxTab
 
 # 文字の大きさ (ポイント)。config/ui.json の python_font_size で変えられる
 # (font_size は C++ 版のピクセル数なので別にしている)
@@ -146,6 +147,7 @@ class Application:
             self._chat,
             QuizTab(self.notebook, context, self.rag),
             MazeTab(self.notebook, context),
+            SandboxTab(self.notebook, context),
         ]
 
         for tab in self._tabs:
