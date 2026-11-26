@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-// アプリ本体: タブ (チャット・クイズ・迷路) と、タブが共有するもの (資料・設定) を持ち、
+// アプリ本体: タブ (チャット・クイズ・迷路・箱庭) と、タブが共有するもの (資料・設定) を持ち、
 // メインループを回す。ウィンドウと ImGui の細かいことは Renderer に任せる
 class Application
 {
@@ -49,6 +49,7 @@ private:
 
     // 入力後しばらくは毎フレーム描画し、それ以外はイベント待ちで省電力
     int mFramesToRender = 3;
+    bool mTabAnimating = false;
 
     bool mCurlInitialized = false;
     bool mShutDown = false;

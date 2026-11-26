@@ -80,6 +80,7 @@ add_executable(LocalLLM
     src/quiz/quiz_ui.cpp
     src/maze/maze_mode.cpp
     src/maze/maze_ui.cpp
+    src/sandbox/sandbox_ui.cpp
     src/common/config.cpp
     src/common/font.cpp
     src/common/ime.cpp

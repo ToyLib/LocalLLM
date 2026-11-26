@@ -4,6 +4,7 @@
 #include "chat/chat_ui.h"
 #include "maze/maze_ui.h"
 #include "quiz/quiz_ui.h"
+#include "sandbox/sandbox_ui.h"
 #include "common/config.h"
 #include "common/server_manager.h"
 #include "common/widgets.h"
@@ -121,6 +122,7 @@ bool Application::Init()
     mTabs.push_back(std::make_unique<ChatTab>(mRag));
     mTabs.push_back(std::make_unique<QuizTab>(mRag));
     mTabs.push_back(std::make_unique<MazeTab>());
+    mTabs.push_back(std::make_unique<SandboxTab>());
 
     // server.json の managed がオンなら llama-server を起動する
     StartServerManager();
@@ -137,7 +139,7 @@ bool Application::ProcessEvents()
 
     bool hasEvent = mFramesToRender > 0
         ? SDL_PollEvent(&event)
-        : SDL_WaitEventTimeout(&event, 500);
+        : SDL_WaitEventTimeout(&event, mTabAnimating ? 16 : 500);
 
     bool running = true;
 
@@ -198,7 +200,9 @@ void Application::DrawMainWindow()
         ImGui::SetCursorPos(tabsPos);
     }
 
-    // チャット・クイズ・迷路はタブで切り替える
+    mTabAnimating = false;
+
+    // 各モードはタブで切り替える
     // (閉じているタブの状態も、ワーカースレッドで動き続ける)
     if (ImGui::BeginTabBar("tabs"))
     {
@@ -211,6 +215,7 @@ void Application::DrawMainWindow()
             if (ImGui::BeginTabItem(mTabs[i]->Label(), nullptr, flags))
             {
                 mTabs[i]->Draw(context);
+                mTabAnimating = mTabs[i]->IsAnimating();
                 ImGui::EndTabItem();
             }
         }

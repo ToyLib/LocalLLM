@@ -9,7 +9,7 @@ struct UiContext
     const UiColors& colors;
 };
 
-// メインウィンドウのタブ (チャット・クイズ・迷路) の共通の形
+// メインウィンドウのタブ (チャット・クイズ・迷路・箱庭) の共通の形
 // Application が持ち、選ばれているタブの Draw を毎フレーム呼ぶ
 // 閉じているタブの仕事も、ワーカースレッドで動き続ける
 class Tab
@@ -22,6 +22,9 @@ public:
 
     // タブの中身を描く (タブが選ばれているときだけ、毎フレーム呼ぶ)
     virtual void Draw(const UiContext& context) = 0;
+
+    // 表示中にアニメーション用のフレームを続けて描く
+    virtual bool IsAnimating() const { return false; }
 
     // 設定画面で保存したあとに呼ぶ (設定を読み直す)
     virtual void OnSettingsSaved() {}
