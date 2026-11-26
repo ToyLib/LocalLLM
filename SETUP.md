@@ -55,7 +55,8 @@ LocalLLM/
 │   ├── ui.json
 │   ├── server.json
 │   ├── agents.json
-│   └── personas.json
+│   ├── personas.json
+│   └── quiz.json
 ├── scripts/
 │   ├── clean-model-cache.sh       (ダウンロードしたモデルの削除、Linux / macOS)
 │   ├── clean-model-cache.bat
@@ -87,21 +88,21 @@ LocalLLM/
 │   ├── chatgpt-plan.md   (ChatGPT 連携の設計メモ)
 │   ├── managed-server.md (llama-server の自動起動)
 │   ├── managed-server-plan.md (自動起動の設計メモ)
-│   └── python-app.md     (Python 版)
+│   ├── class-design.md   (クラス設計)
+│   ├── python-app.md     (Python 版)
+│   ├── quiz.md           (クイズ)
+│   ├── quiz-plan.md      (クイズの設計メモ)
+│   ├── maze.md           (迷路)
+│   └── sandbox.md        (箱庭)
 ├── src/
 │   ├── main.cpp
-│   ├── chat.h / chat.cpp
-│   ├── chat_ui.h / chat_ui.cpp
-│   ├── settings_ui.h / settings_ui.cpp
-│   ├── agent.h / agent.cpp
-│   ├── rag.h / rag.cpp
-│   ├── config.h / config.cpp
-│   ├── llm_client.h / llm_client.cpp
-│   ├── server_manager.h / server_manager.cpp
-│   ├── ime.h / ime.cpp
-│   ├── font.h / font.cpp
-│   └── macos_window.h / macos_window.mm   (macOS のみ)
-├── python/                 (Python + Tk 版。ビルド不要)
+│   ├── app/        (Application と Renderer)
+│   ├── chat/       (チャット)
+│   ├── quiz/       (クイズ)
+│   ├── maze/       (迷路)
+│   ├── sandbox/    (箱庭)
+│   └── common/     (タブの基底クラス、設定、通信、RAG、サーバー管理など)
+├── python/         (Python + Tk 版。app/、各タブのフォルダー、common/)
 └── .vscode/
     ├── settings.json
     ├── tasks.json
@@ -113,7 +114,10 @@ LocalLLM/
 
 | ファイル | 役割 |
 |---|---|
-| src/main.cpp | SDL3 + ImGui の初期化、イベント処理、メインループ |
+| src/main.cpp | `Application::Run` を呼ぶ入口 |
+| src/app/application.cpp | タブの登録、イベント処理、メインループ、起動と終了 |
+| src/app/renderer.cpp | SDL3 と ImGui の初期化、ウィンドウ、フレームの描画 |
+| src/quiz/ / src/maze/ / src/sandbox/ | クイズ・迷路・箱庭のタブ |
 | src/chat/chat.h/.cpp | 会話の状態、ワーカースレッド管理、ChatGPT への聞き直し |
 | src/chat/chat_ui.h/.cpp | チャット画面 |
 | src/common/settings_ui.h/.cpp | 設定画面 |
@@ -401,6 +405,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 6. 受信中に「中断」を押し、途中で止まることを確認する。
 7. 画面上部に `6 ファイル / 54 チャンク` のように RAG のインデックスの状態が出ることを確認し、「ミケのおやつは 1 日何本まで？」のように資料についての質問をする ([doc/rag.md](doc/rag.md))。
 8. 設定画面で別のモデルを選んで保存し、比較する。
+9. 「箱庭」タブで「吹雪の夜」を押し、雪・灯台・船が動くことを確認する。「雪だけ止めて」と送信すると、夜のまま雪が止まる ([doc/sandbox.md](doc/sandbox.md))。
 
 ## 9. 注意事項
 

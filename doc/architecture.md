@@ -26,7 +26,7 @@
 | ウィンドウと描画 | `app/renderer.cpp` (`Renderer`) | (Tk が受け持つ) | [class-design.md](class-design.md)、[gui-app.md](gui-app.md) |
 | タブの共通の形 | `common/tab.h` (`Tab` / `UiContext`) | `common/tab.py` (`Tab` / `UiContext`) | [class-design.md](class-design.md)、[gui-app.md](gui-app.md#タブ-tabh)、[python-app.md](python-app.md#アプリ本体とタブ) |
 | 画面の部品のヘルパー | `common/widgets.h` (`ui::`) | `common/widgets.py` | [gui-app.md](gui-app.md#imgui-のラッパー-widgetsh)、[python-app.md](python-app.md#tk-のヘルパー-commonwidgetspy) |
-| タブ | `chat_ui.cpp` (`ChatTab`)、`quiz_ui.cpp` (`QuizTab`)、`maze_ui.cpp` (`MazeTab`) | `chat_ui.py` (`ChatTab`)、`quiz_ui.py` (`QuizTab`)、`maze_ui.py` (`MazeTab`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md)、[quiz.md](quiz.md)、[maze.md](maze.md) |
+| タブ | `chat_ui.cpp` (`ChatTab`)、`quiz_ui.cpp` (`QuizTab`)、`maze_ui.cpp` (`MazeTab`)、`sandbox_ui.cpp` (`SandboxTab`) | `chat_ui.py` (`ChatTab`)、`quiz_ui.py` (`QuizTab`)、`maze_ui.py` (`MazeTab`)、`sandbox_ui.py` (`SandboxTab`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md)、[quiz.md](quiz.md)、[maze.md](maze.md)、[sandbox.md](sandbox.md) |
 | 設定画面 | `settings_ui.cpp` | `settings_ui.py` (`SettingsDialog`) | [gui-app.md](gui-app.md)、[python-app.md](python-app.md#設定画面-settings_uipy) |
 | 会話の状態と送受信 | `chat.cpp` | `chat.py` | [gui-app.md](gui-app.md#会話の状態とスレッド-chatcpp) |
 | エージェント | `agent.cpp` | `agent.py` | [agent.md](agent.md) |
@@ -87,10 +87,11 @@
 | --- | --- | --- |
 | UI スレッド | 画面を描く、ボタンの処理 | `ChatState` / `RagState` をロックして読む |
 | 会話のワーカースレッド (1 本) | ルーター・検索・回答・聞き直し | `ChatState` の `messages` に書く |
+| 箱庭の指示を処理するワーカー | チャット用サーバーで指示を 1 つのコマンドに分類 | C++ 版は future、Python 版はキューで UI に結果を返す |
 | インデックス作成のスレッド | `rag/` の読み込みと埋め込み | `RagState` のチャンクと状態に書く |
 | サーバー管理のスレッド | `llama-server` の起動・監視・停止 | 状態をロックして公開する |
 
-ワーカースレッドは書き換えたあと UI を起こします (C++ 版は SDL のイベント、Python 版は `threading.Event` を UI スレッドが 30 ミリ秒ごとに見る)。中断は `cancel` のフラグで、どの段階でも止められます。
+会話のワーカーは書き換えたあと UI に更新を知らせます (C++ 版は SDL のイベント、Python 版は `threading.Event` を UI スレッドが 30 ミリ秒ごとに見る)。中断は `cancel` のフラグで、どの段階でも止められます。
 
 ## データの行き先
 

@@ -36,6 +36,7 @@ classDiagram
         <<abstract>>
         +Label() const char*
         +Draw(UiContext)
+        +IsAnimating() bool
         +OnSettingsSaved()
         +Shutdown()
     }
@@ -60,12 +61,13 @@ classDiagram
     }
 
     Application *-- Renderer
-    Application *-- "3" Tab
+    Application *-- "4" Tab
     Application *-- RagState
     Application *-- SettingsState
     Tab <|-- ChatTab
     Tab <|-- QuizTab
     Tab <|-- MazeTab
+    Tab <|-- SandboxTab
     Tab ..> UiContext : Draw に渡される
     ChatTab --> RagState : 参照
     QuizTab --> RagState : 参照
@@ -88,7 +90,7 @@ int main(int, char**)
 | `Application` | [app/application.h](../src/app/application.h) | 状態の持ち主。起動と終了の順番、イベント待ちのループ、画面全体の枠 (サーバーの状態・設定ボタン・タブバー・設定画面) | SDL と ImGui の初期化の細かいこと、各タブの中身 |
 | `Renderer` | [app/renderer.h](../src/app/renderer.h) | SDL のウィンドウとレンダラー、ImGui のコンテキストとバックエンド、フォント、IME のフック。1 フレームの始まりと終わり | 画面に何を描くか (チャットもタブも知らない) |
 | `Tab` | [common/tab.h](../src/common/tab.h) | タブの共通の形 (名前・描く・設定の読み直し・終了) | — |
-| `ChatTab` / `QuizTab` / `MazeTab` | [chat_ui.h](../src/chat/chat_ui.h) / [quiz_ui.h](../src/quiz/quiz_ui.h) / [maze_ui.h](../src/maze/maze_ui.h) | 自分の状態を持ち、タブの中身を描く。自分のワーカースレッドを止める | ほかのタブ、ウィンドウ、メインループ |
+| `ChatTab` / `QuizTab` / `MazeTab` / `SandboxTab` | [chat_ui.h](../src/chat/chat_ui.h) / [quiz_ui.h](../src/quiz/quiz_ui.h) / [maze_ui.h](../src/maze/maze_ui.h) / [sandbox_ui.h](../src/sandbox/sandbox_ui.h) | 自分の状態を持ち、タブの中身を描く。自分のワーカースレッドを止める | ほかのタブ、ウィンドウ、メインループ |
 | `UiContext` | [common/tab.h](../src/common/tab.h) | どのタブにも渡すもの (今は画面の色だけ) | — |
 | `ui::` のクラスと関数 | [common/widgets.h](../src/common/widgets.h) | ImGui の組で呼ぶ関数を、スコープで閉じるようにする | アプリのこと (ImGui だけに依存する) |
 
@@ -114,7 +116,7 @@ Application::Init
   ui.json を読む
   Renderer::Init      … SDL・ウィンドウ・レンダラー・ImGui・フォント・IME
   RegisterWakeEvent / ApplyUiSettings
-  タブを作る           … ChatTab (API キーの有無を調べる)・QuizTab・MazeTab
+  タブを作る           … ChatTab (API キーの有無を調べる)・QuizTab・MazeTab・SandboxTab
   StartServerManager / StartRagIndexing
 
 Application::Shutdown (Run の最後と、デストラクタから。2 回目は何もしない)
@@ -145,7 +147,7 @@ Application::Run
   Renderer::EndFrame
 ```
 
-イベントが無い間は `SDL_WaitEventTimeout` で眠る省電力の仕組みは、`Application` が持ちます ([gui-app.md](gui-app.md#メインループと省電力-applicationrun))。
+イベントが無い間は `Application` が `SDL_WaitEventTimeout` で待ちます。選択中のタブの `IsAnimating()` が true の間は、待ち時間の上限を 500 ミリ秒から 16 ミリ秒に短縮します ([gui-app.md](gui-app.md#メインループと省電力-applicationrun))。
 
 ## ImGui のラッパー (ui::)
 

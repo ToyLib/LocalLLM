@@ -1,6 +1,6 @@
 # Python 版 (Tk) の構成
 
-`python/` には、C++ 版と同じ機能を Python + Tk で作ったクライアントがあります。
+`python/` には、Python + Tk で作ったクライアントがあります。
 標準ライブラリだけで動き、ビルドは要りません。動かし方は README の「Python 版」を参照してください。
 
 ```bash
@@ -22,6 +22,7 @@ python3 python/main.py
 | `chat_ui.py` | `chat_ui.cpp` | チャットのタブ (`ChatTab`) |
 | `quiz_ui.py` / `quiz_mode.py` | `quiz_ui.cpp` / `quiz_mode.cpp` | クイズのタブ (`QuizTab`、[quiz.md](quiz.md)) |
 | `maze_ui.py` / `maze_mode.py` | `maze_ui.cpp` / `maze_mode.cpp` | 迷路のタブ (`MazeTab`、[maze.md](maze.md))。盤は `tk.Canvas` に描き、`after` で 1 コマずつ動かす |
+| `sandbox/sandbox_ui.py` / `sandbox/sandbox_mode.py` / `sandbox/sandbox_scene.py` | `sandbox_ui.cpp` | 箱庭タブの操作、指示の解釈と港の状態、Canvas への描画 ([sandbox.md](sandbox.md)) |
 | `settings_ui.py` | `settings_ui.cpp` | 設定画面 (`SettingsDialog`) |
 | `chat.py` | `chat.cpp` | 会話の状態 (`ChatState` / `Message`) と、ワーカースレッドでの送受信 (`send_prompt` / `ask_cloud`) |
 | `agent.py` | `agent.cpp` | ルーター・回答役・ChatGPT・書き直し |
@@ -35,7 +36,7 @@ python3 python/main.py
 
 ## アプリ本体とタブ
 
-構成は C++ 版と同じです。`Application` がタブと、タブが共有するものを持ちます。チャット・クイズ・迷路は、どれも `Tab` を継承したクラスです。
+構成は C++ 版と同じです。`Application` がタブと、タブが共有するものを持ちます。チャット・クイズ・迷路・箱庭は、どれも `Tab` を継承したクラスです。
 
 | C++ 版 | Python 版 | 内容 |
 | --- | --- | --- |
@@ -47,13 +48,13 @@ python3 python/main.py
 | `SettingsState mSettings` | `Application.font_size` / `colors` | 設定画面で変える画面の設定 |
 | `Tab` | `Tab` (`ttk.Frame` の子クラス) | タブの共通の形 |
 | `Tab::Label` | `Tab.label` | タブに出す名前 |
-| `Tab::Draw` | — | Tk は部品が状態を持つので、毎フレーム描く関数は無い。各タブが `after` で自分の `_dirty` を見に行き、変わったときだけ部品を書き換える |
+| `Tab::Draw` | — | Tk は部品が状態を持つので、毎フレーム描く関数は無い。各タブが `after` で自分の `_dirty` を見に行き、必要に応じて部品を書き換える。箱庭は表示中に風景が動いている間も Canvas を描き直す |
 | `Tab::OnSettingsSaved` | `Tab.on_settings_saved` | 設定を保存したあと (チャットは API キーの有無を調べ直す) |
 | `Tab::Shutdown` | `Tab.shutdown` | 終了するとき。通信の中断を頼むだけで、スレッドの終了は待たない |
 | — | `Tab.apply_colors` | 色が変わったときに部品に付け直す (ImGui は毎フレーム色を渡すので要らない) |
 | — | `Tab.wake` | 描き直しを頼む (C++ 版の `WakeUI` に当たる) |
 | `UiContext` | `UiContext` | どのタブにも渡すもの。C++ 版は色だけ、Python 版はフォント (`font` / `bold` / `small`) と色 (`colors()`) |
-| `ChatTab` / `QuizTab` / `MazeTab` | `ChatTab` / `QuizTab` / `MazeTab` | 各タブ |
+| `ChatTab` / `QuizTab` / `MazeTab` / `SandboxTab` | `ChatTab` / `QuizTab` / `MazeTab` / `SandboxTab` | 各タブ |
 
 タブを足すときは、`Tab` を継承したクラスを作り、`Application.__init__` の `self._tabs` に足します。`Notebook` には並べた順に出ます。
 
@@ -96,6 +97,7 @@ UI スレッド (ChatTab._poll、30 ミリ秒ごとに after で呼ばれる)
 
 - `ChatState` と `RagState` は、作るときに `notify` (再描画を頼む関数) を受け取ります。`ChatState` には `ChatTab._dirty.set` を渡します。`RagState` とサーバーの管理には `Application._wake` を渡し、サーバーの状態の行と、資料の状態を出すチャットのタブ (`Tab.wake`) に描き直しを頼みます。
 - クイズと迷路も、同じように自分の `_dirty` を `after` で見に行きます (50 ミリ秒ごと)。
+- 箱庭は 33 ミリ秒ごとに結果のキューを確認します。風景のアニメーションは Canvas が表示されている間だけ進めます。
 - C++ 版と同じく、ロックを持ったまま画面を描かないよう、先に必要な値を写してからロックを放します。
 - 受信中は、何も届かなくても 0.5 秒ごとに描き直します (`STATUS_REFRESH_SECONDS`)。ChatGPT を待っている間の経過時間を進めるためです。
 
@@ -122,7 +124,7 @@ UI スレッド (ChatTab._poll、30 ミリ秒ごとに after で呼ばれる)
 │ チャットのサーバー: ... [もう一度起動]      │  サーバーの状態の行 (使えないときだけ。Application)
 │                                    [設定] │  top_bar (タブの上、どのタブからでも開ける。Application)
 ├─────────────────────────────────────────┤
-│ [チャット] [クイズ] [迷路]                  │  Notebook (Application)
+│ [チャット] [クイズ] [迷路] [箱庭]           │  Notebook (Application)
 ├─────────────────────────────────────────┤  ↓ ここから ChatTab
 │ 資料 (RAG): ◉自動 ○常に ○使わない [再読込] 状態 │  _build_rag_bar
 ├─────────────────────────────────────────┤

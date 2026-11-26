@@ -1,7 +1,7 @@
 # LocalLLM
 
-ローカルで動かしている LLM と会話するための、C++20 製のチャットクライアントです。
-画面は SDL3 + Dear ImGui で作っています。
+ローカルで動かしている LLM と会話するための、チャットクライアントです。
+C++20 版 (SDL3 + Dear ImGui) と [Python 版](#python-版) (Tk) があり、どちらもチャット・クイズ・迷路・箱庭のタブを備えています。
 
 OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリーミング (SSE) で問い合わせるので、
 [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` などと組み合わせて使えます。
@@ -20,6 +20,7 @@ OpenAI 互換の Chat Completions API (`/v1/chat/completions`) にストリー�
 - 設定でオンにすると、聞き直した後に Web 検索でも聞き直して、検索の有無による回答の違いを比べられる ([説明](doc/chatgpt.md#web-でも調べて比べる))
 - 「クイズ」タブで、分野 (プログラミング・IT パスポート・一般常識・`rag/` の資料) を選んで 10 問の 4 択に挑戦し、点数とねぎらいのメッセージを見られる ([説明](doc/quiz.md))
 - 「迷路」タブで、日本語の指示 (「右に3つ、上に2つ」など) を LLM が移動命令の JSON に訳し、6×6 のマス目のロボットを障害物を避けてゴールまで運ぶ (少ない指示ほど高評価) ([説明](doc/maze.md))
+- 「箱庭」タブで、港町の時刻・天気・明かり・船の動きを日本語で指示できる。「昼の港」「吹雪の夜」のボタンは LLM の接続なしでも使える ([説明](doc/sandbox.md))
 - 回答役の人格をテンプレート (侍・悟空風・バカボンのパパ風・大阪のおばちゃん・執事・猫など) から選び、設定画面で好みに直せる
 
 ## 必要なもの
@@ -140,7 +141,7 @@ cmake --build build --parallel
 | ChatGPT の接続先・モデル | `config/server.json` の `cloud` ([説明](doc/chatgpt.md)) |
 | ChatGPT の API キー | 環境変数か、ユーザーごとの秘密ファイル (設定ファイルには書かない。[説明](doc/chatgpt.md#api-キーの登録)。何が送られるかは [doc/privacy.md](doc/privacy.md)) |
 | 人格のテンプレート | `config/personas.json` (設定画面で選ぶ候補。[説明](doc/agent.md)) |
-| 最大トークン数 | `src/common/llm_client.cpp` の `max_tokens` |
+| 最大トークン数 | `src/common/llm_client.h` の `LLMOptions::maxTokens` (Python 版は `python/common/llm_client.py` の `LLMOptions.max_tokens`) |
 | RAG の文書フォルダ | 環境変数 `LOCALLLM_RAG_DIR` (既定は実行ファイルの隣の `rag/`) |
 | 背景の不透明度 | `config/ui.json` の `window_opacity` (0〜1、既定 0.85) |
 | フォントファイル | `config/ui.json` の `font_file` (相対パスは実行ファイルのフォルダーから。既定は同梱の `Asset/MPLUSRounded1c-Bold.ttf`)。環境変数 `LOCALLLM_FONT` があればそちらを優先 |
@@ -179,14 +180,14 @@ C++ 版は暗い背景、Python 版は OS の明るいテーマを前提に既�
 
 ## Python 版
 
-`python/` に、同じ機能を Python + Tk で作ったクライアントがあります (標準ライブラリだけで動き、ビルドは不要)。
+`python/` に、Python + Tk で作ったクライアントがあります (標準ライブラリだけで動き、ビルドは不要)。
 Python 3.10 以上と、Tk が使える Python が必要です (macOS の Homebrew なら `brew install python-tk`、Ubuntu なら `sudo apt install python3-tk`)。
 
 ```bash
 python3 python/main.py
 ```
 
-- 操作と設定は C++ 版と同じです。フォントサイズと色は `ui.json` の `python_font_size` と `python_colors` です。
+- チャットなどの基本操作は C++ 版と共通です。フォントサイズと色は `ui.json` の `python_font_size` と `python_colors` です。
 - 設定は C++ 版と同じ、ユーザーごとのフォルダーの `config/` を読み書きします ([設定](#設定) の表)。環境変数 `LOCALLLM_CONFIG_DIR` を指定したときは、コピーせずにそのフォルダーを直接読み書きします。
 - RAG の文書はリポジトリの `rag/` をそのまま読みます (環境変数 `LOCALLLM_RAG_DIR` で変更可)。インデックスは `python/rag-index.json` に保存します (形式は C++ 版と同じ)。
 - フォントは OS の標準フォントを使います。背景の半透明には対応していません。
@@ -199,6 +200,7 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `python/chat/chat_ui.py` | Tk のチャット画面 (`chat_ui.cpp`) |
 | `python/quiz/quiz_ui.py` / `python/quiz/quiz_mode.py` | クイズタブ (`quiz_ui.cpp` / `quiz_mode.cpp`) |
 | `python/maze/maze_ui.py` / `python/maze/maze_mode.py` | 迷路タブ (`maze_ui.cpp` / `maze_mode.cpp`) |
+| `python/sandbox/` | 箱庭タブの UI・港の状態・描画 (`sandbox_ui.cpp`) |
 | `python/chat/chat.py` | 会話の状態と、ワーカースレッドでの送受信 (`chat.cpp`) |
 | `python/common/agent.py` | ルーター / アシスタント / 汎用の回答役 (`agent.cpp`) |
 | `python/common/config.py` | `config/` の設定ファイルの読み込み (`config.cpp`) |
@@ -222,16 +224,17 @@ C++ 版との違いと、Tk で作るときの工夫は [doc/python-app.md](doc/
 | `src/chat/chat.cpp` / `src/chat/chat.h` | 会話の状態と、ワーカースレッドでの送受信 |
 | `src/common/agent.cpp` / `src/common/agent.h` | 役割ごとの LLM の呼び出し (ルーター / 回答役) |
 | `src/chat/chat_ui.cpp` / `src/chat/chat_ui.h` | チャットのタブ (`ChatTab`) |
-| `src/common/tab.h` | タブ (チャット・クイズ・迷路) の共通の形 |
+| `src/common/tab.h` | タブ (チャット・クイズ・迷路・箱庭) の共通の形 |
 | `src/quiz/quiz_ui.cpp` / `src/quiz/quiz_mode.cpp` | クイズタブ ([説明](doc/quiz.md)) |
 | `src/maze/maze_ui.cpp` / `src/maze/maze_mode.cpp` | 迷路タブ ([説明](doc/maze.md)) |
+| `src/sandbox/sandbox_ui.cpp` / `src/sandbox/sandbox_ui.h` | 箱庭タブ ([説明](doc/sandbox.md)) |
 | `src/common/widgets.cpp` / `src/common/widgets.h` | ImGui の薄いラッパー (スコープで閉じる Begin/End など) |
 | `src/common/ime.cpp` / `src/common/ime.h` | IME の変換中の文字列の表示 |
 | `src/common/font.cpp` / `src/common/font.h` | 日本語フォントの読み込み |
 | `src/common/llm_client.cpp` / `src/common/llm_client.h` | API へのストリーミング送信と SSE の解析、埋め込みの取得 |
 | `src/common/rag.cpp` / `src/common/rag.h` | RAG のインデックス作成と検索 |
 | `src/common/server_manager.cpp` / `src/common/server_manager.h` | `llama-server` の起動・監視・停止 |
-| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [クラス設計](doc/class-design.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [迷路](doc/maze.md) / [llama-server の自動起動](doc/managed-server.md)) |
+| `doc/` | コードの解説 ([全体の構成](doc/architecture.md) / [クラス設計](doc/class-design.md) / [設定ファイル](doc/config.md) / [データの行き先](doc/privacy.md) / [LLM との通信](doc/llm-client.md) / [GUI アプリ](doc/gui-app.md) / [RAG](doc/rag.md) / [エージェント](doc/agent.md) / [ChatGPT に聞き直す](doc/chatgpt.md) / [Python 版](doc/python-app.md) / [クイズ](doc/quiz.md) / [迷路](doc/maze.md) / [箱庭](doc/sandbox.md) / [llama-server の自動起動](doc/managed-server.md)) |
 | `CMakeLists.txt` | ビルド設定 |
 | `llama-release.json` | 同梱する `llama-server` の公式リリース (タグとハッシュ) |
 | `CMakePresets.json` | ビルド設定のプリセット (Linux / macOS: Unix Makefiles、Windows: Visual Studio) |

@@ -148,6 +148,7 @@ macOS では、Finder から起動したアプリはシェルの環境変数を�
 | ルーターの設定 (256 トークン、temperature 0、スキーマ) | `agent.cpp` の `CreateRouter` |
 | 書き直しの最大トークン数 (4096) | `agent.cpp` の `REWRITE_MAX_TOKENS` |
 | 違いのまとめの設定 (512 トークン、temperature 0、スキーマ、1 つの回答は 3,600 バイトまで) | `agent.cpp` の `CompareAnswers` / `COMPARE_ANSWER_BYTES` |
+| 箱庭の指示を分類するプロンプトと JSON スキーマ (256 トークン、temperature 0) | `src/sandbox/sandbox_ui.cpp` の `SandboxTab::Interpret` / `python/sandbox/sandbox_mode.py` の `interpret` ([sandbox.md](sandbox.md)) |
 | チャンクの大きさ・添える資料の数・類似度の下限 | `rag.cpp` の `MAX_CHUNK_CHARS` / `TOP_K` / `MIN_SCORE` |
 | ウィンドウの初期サイズ (900×700) | `app/application.cpp` / `app/application.py` |
 

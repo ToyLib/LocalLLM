@@ -94,6 +94,7 @@ Application::Run()             … application.cpp (main.cpp の main() から�
  │   │   │   └ DrawComposition() … IME の変換中の文字列 (ime.cpp)
  │   │   ├ QuizTab::Draw()   … タブ「クイズ」: 分野の選択・出題・結果 (quiz_ui.cpp、[quiz.md](quiz.md))
  │   │   ├ MazeTab::Draw()   … タブ「迷路」(maze_ui.cpp、[maze.md](maze.md))
+ │   │   ├ SandboxTab::Draw() … タブ「箱庭」(sandbox_ui.cpp、[sandbox.md](sandbox.md))
  │   │   └ DrawSettings()    … 設定画面 (モーダル、settings_ui.cpp)。保存したら各タブの OnSettingsSaved()
  │   └ Renderer::EndFrame()   … 描画して画面に表示
  └ Shutdown(): 各タブの Shutdown() (受信中なら中断・ワーカースレッドの終了待ち) → RAG の終了待ち → ウィンドウを隠す → サーバーの停止 → curl の終了
@@ -105,16 +106,17 @@ AskCloud()    … 聞き直しボタンで呼ばれ、ワーカースレッド�
 
 ### タブ (tab.h)
 
-チャット・クイズ・迷路は、どれも `Tab` を継承したクラスです。`Application` が `std::vector<std::unique_ptr<Tab>>` で持ち、並べた順にタブを出します。
+チャット・クイズ・迷路・箱庭は、どれも `Tab` を継承したクラスです。`Application` が `std::vector<std::unique_ptr<Tab>>` で持ち、並べた順にタブを出します。
 
 | メソッド | 呼ばれるとき |
 | --- | --- |
 | `Label()` | タブに出す名前 |
 | `Draw(const UiContext&)` | タブが選ばれているとき、毎フレーム |
+| `IsAnimating()` | 選択中のタブを描いた直後 (アニメーション中なら次のイベント待ちを短くする) |
 | `OnSettingsSaved()` | 設定画面で保存したあと (チャットは API キーの有無を調べ直す) |
 | `Shutdown()` | 終了するとき (ワーカースレッドを止めて待つ) |
 
-各タブは自分の状態 (`ChatState`、`QuizState`、`MazeState`) を持ちます。資料 (`RagState`) はチャットとクイズで共有するので `Application` が持ち、タブには参照で渡します。
+各タブは自分の状態 (`ChatState`、`QuizState`、`MazeState`、箱庭の風景と通信の状態) を持ちます。資料 (`RagState`) はチャットとクイズで共有するので `Application` が持ち、タブには参照で渡します。
 `UiContext` は、どのタブにも渡す画面の色 (設定画面を開いている間は編集中の色) です。
 タブを足すときは、`Tab` を継承したクラスを作り、`Application::Init` で `mTabs` に足します。
 
@@ -162,16 +164,16 @@ ImGui に入っている標準フォントには日本語の文字がないた�
 ## メインループと省電力 (Application::Run)
 
 ```cpp
-bool hasEvent = framesToRender > 0
+bool hasEvent = mFramesToRender > 0
     ? SDL_PollEvent(&event)            // 待たずに確認
-    : SDL_WaitEventTimeout(&event, 500); // イベントが来るまで最大 0.5 秒待つ
+    : SDL_WaitEventTimeout(&event, mTabAnimating ? 16 : 500);
 ```
 
 ゲームのように毎フレーム描き続けると、何もしていなくても CPU や GPU を使い続けます。
-このアプリでは、イベント (キー入力、マウス移動、受信など) があったら `framesToRender = 3` にして数フレームだけ描き、その後は `SDL_WaitEventTimeout` でイベントが来るまで眠ります。
+このアプリでは、イベント (キー入力、マウス移動、受信など) があったら `mFramesToRender = 3` にして数フレームだけ描き、その後は `SDL_WaitEventTimeout` でイベントが来るまで眠ります。
 
 数フレーム続けて描くのは、ImGui ではボタンを押した結果などが次のフレームで画面に反映されることがあるためです。
-0.5 秒のタイムアウトは、入力欄のカーソルの点滅などを止めないための保険です。
+通常は最大 500 ミリ秒待ちます。選択中の箱庭タブでアニメーションが動いている間は、`IsAnimating()` が true になり、待ち時間の上限を 16 ミリ秒に短縮します。
 
 ウィンドウが最小化されているときは描画を省き、10 ミリ秒待ってから次のループに進みます。
 
@@ -228,7 +230,7 @@ UI スレッドとワーカースレッドで共有するデータを 1 つの�
 
 UI スレッドは `SDL_WaitEventTimeout` で眠っていることがあるため、ワーカースレッドがデータを書き換えただけでは、すぐに画面に反映されません。
 そこで、起動時に確保した独自のイベント (`g_wakeEvent`) を `SDL_PushEvent` で送ります。`SDL_PushEvent` はほかのスレッドから呼んでも安全です。
-イベントを受け取った UI スレッドは目を覚まし、`framesToRender = 3` にして画面を描き直します。
+イベントを受け取った UI スレッドは目を覚まし、`mFramesToRender = 3` にして画面を描き直します。
 
 ### エラーと中断の扱い
 
