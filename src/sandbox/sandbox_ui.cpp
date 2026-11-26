@@ -1,10 +1,19 @@
 #include "sandbox/sandbox_ui.h"
 
+#include "common/agent.h"
+#include "common/ime.h"
+#include "common/server_manager.h"
+#include "common/widgets.h"
+
 #include <imgui.h>
+#include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <functional>
 #include <initializer_list>
+#include <stdexcept>
 
 namespace
 {
@@ -170,16 +179,153 @@ void DrawHarbor(const Scene& s, float night, float time)
 }
 } // namespace
 
-void SandboxTab::Draw(const UiContext&)
+SandboxTab::~SandboxTab()
 {
-    if (ImGui::Button("昼の港"))
+    Shutdown();
+}
+
+void SandboxTab::Shutdown()
+{
+    mCancel = true;
+    if (mRequest.valid())
     {
-        mNight = false;
+        mRequest.wait();
+    }
+}
+
+SandboxTab::Preset SandboxTab::Interpret(
+    const std::string& instruction, const std::atomic<bool>& cancel)
+{
+    Agent agent;
+    agent.name = "箱庭";
+    agent.systemPrompt = R"(あなたは港町の風景を切り替える指示を分類します。JSONのpresetを1つ返してください。
+day: 晴れた昼の港全体への切り替え。例「昼の港に戻して」「明るい昼にして」
+blizzard_night: 吹雪の夜の港全体への切り替え。例「吹雪の夜にして」「雪が荒れ狂う夜の港を見せて」
+unsupported: 上の2つに当てはまらない指示。例「船だけ止めて」「雪だけ止めて」「雨にして」「灯台を消して」
+条件を追加されたり、どちらの風景か判断できなかったりした場合も unsupported を選んでください。)";
+    agent.options.maxTokens = 256;
+    agent.options.temperature = 0.0f;
+    agent.options.disableThinking = true;
+    agent.options.schema = {
+        {"type", "object"},
+        {"properties", {{"preset", {
+            {"type", "string"}, {"enum", json::array({"day", "blizzard_night", "unsupported"})}
+        }}}},
+        {"required", json::array({"preset"})},
+        {"additionalProperties", false}
+    };
+
+    const json result = RunAgentJson(
+        agent, json::array({{{"role", "user"}, {"content", instruction}}}), cancel);
+    if (result.is_object() && result.size() == 1)
+    {
+        const auto value = result.find("preset");
+        if (value != result.end())
+        {
+            if (*value == "day")
+            {
+                return Preset::Day;
+            }
+            if (*value == "blizzard_night")
+            {
+                return Preset::BlizzardNight;
+            }
+            if (*value == "unsupported")
+            {
+                return Preset::Unsupported;
+            }
+        }
+    }
+    throw std::runtime_error("風景の指定を読み取れませんでした");
+}
+
+void SandboxTab::ApplyPreset(Preset preset)
+{
+    if (preset == Preset::Unsupported)
+    {
+        mError = "「昼の港に戻して」か「吹雪の夜にして」と指示してください。";
+        return;
+    }
+
+    mNight = preset == Preset::BlizzardNight;
+    mError.clear();
+}
+
+void SandboxTab::TakeResult()
+{
+    if (!mRequest.valid() || mRequest.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+        return;
+    }
+
+    try
+    {
+        const Preset preset = mRequest.get();
+        ApplyPreset(preset);
+        if (preset != Preset::Unsupported)
+        {
+            mInput.clear();
+        }
+    }
+    catch (const std::exception& error)
+    {
+        mError = std::string("風景を切り替えられませんでした。") + error.what();
+    }
+}
+
+void SandboxTab::Draw(const UiContext& context)
+{
+    TakeResult();
+    const bool busy = mRequest.valid();
+    const bool serverAvailable = IsChatServerAvailable();
+
+    if (ui::Button("昼の港", !busy))
+    {
+        ApplyPreset(Preset::Day);
     }
     ImGui::SameLine();
-    if (ImGui::Button("吹雪の夜"))
+    if (ui::Button("吹雪の夜", !busy))
     {
-        mNight = true;
+        ApplyPreset(Preset::BlizzardNight);
+    }
+
+    ImGui::SetNextItemWidth(-(ui::ButtonWidth("指示する") + ImGui::GetStyle().ItemSpacing.x));
+    const bool entered = ImGui::InputTextWithHint("##sandbox_input", "例：吹雪の夜にして",
+        &mInput, ImGuiInputTextFlags_EnterReturnsTrue | (busy ? ImGuiInputTextFlags_ReadOnly : 0));
+    ImGui::SameLine();
+    const bool hasText = mInput.find_first_not_of(" \t\r\n") != std::string::npos;
+    const bool canSend = !busy && serverAvailable && hasText;
+    const bool clicked = ui::Button("指示する", canSend);
+    DrawComposition();
+
+    if ((clicked || entered) && canSend)
+    {
+        mError.clear();
+        try
+        {
+            mRequest = std::async(std::launch::async, Interpret, mInput, std::cref(mCancel));
+        }
+        catch (const std::exception& error)
+        {
+            mError = std::string("指示を送信できませんでした。") + error.what();
+        }
+    }
+
+    if (mRequest.valid())
+    {
+        ImGui::TextDisabled("ローカルLLMが指示を読み取っています…");
+    }
+    else if (!mError.empty())
+    {
+        ui::WrappedColored(context.colors.error, mError);
+    }
+    else if (!serverAvailable)
+    {
+        ImGui::TextDisabled("ローカルLLMに接続できません。ボタンで切り替えられます。");
+    }
+    else
+    {
+        ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
     }
 
     const float elapsed = std::min(ImGui::GetIO().DeltaTime, 0.05f);
